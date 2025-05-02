@@ -33,45 +33,6 @@ graph TD
     end
 
     subgraph "Infrastructure (Docker Network)"
-        C[Caddy Reverse Proxy <br/> (HTTPS, Headers, Routing)]
-
-        subgraph "Frontend"
-            FE_Nginx[Nginx <br/> (Serves Static React Build)]
-        end
-
-        subgraph "Backend"
-            API[FastAPI <br/> (API Logic, Auth, WebSockets)]
-            W[Celery Worker <br/> (Runs Script, Publishes Logs)]
-            DB[(PostgreSQL <br/> Users, Jobs, Config)]
-            R{{Redis <br/> Celery Broker/Backend, Pub/Sub}}
-            Script(sub_downloader.py)
-        end
-    end
-
-    B -- HTTPS Request --> C
-    C -- Proxy Pass / --> FE_Nginx
-    C -- Proxy Pass /api, /ws --> API
-
-    API -- Read/Write --> DB
-    API -- Enqueue Task --> R
-    API -- Subscribe Logs --> R
-    API -- Publish Logs --> B
-
-    W -- Read/Write --> DB
-    W -- Consume Task --> R
-    W -- Execute --> Script
-    Script -- stdout/stderr --> W
-    W -- Publish Logs --> R
-
-    FE_Nginx -- Serves JS/CSS/HTML --> B
-
-
-graph TD
-    subgraph "User Browser"
-        B[React SPA]
-    end
-
-    subgraph "Infrastructure (Docker Network)"
         C[Caddy Reverse Proxy - HTTPS, Headers, Routing]
 
         subgraph "Frontend"
