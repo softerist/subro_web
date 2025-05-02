@@ -1,0 +1,97 @@
+{
+	"name": "Subtitle Downloader Dev Environment",
+	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+	// "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bullseye"
+	// Use Docker Compose file instead to spin up the whole stack
+	"dockerComposeFile": [
+		"../infra/docker/docker-compose.yml",
+		"../infra/docker/docker-compose.override.yml"
+	],
+
+	// The 'service' property specifies the service entrypoint for compiling and launching the container.
+	// It typically should be the service where your source code lives, e.g., the API or frontend service.
+	"service": "api", // Or 'frontend', depending on primary focus
+
+	// The 'workspaceFolder' property specifies the path VS Code should open by default inside the container.
+	"workspaceFolder": "/app",
+
+	// Configure tool-specific properties.
+	"customizations": {
+		// Configure properties specific to VS Code.
+		"vscode": {
+			// Set *default* container specific settings.json values on container create.
+			"settings": {
+				// Python specific settings
+				"python.defaultInterpreterPath": "/app/.venv/bin/python", // Path inside the container
+				"python.linting.enabled": true,
+				"python.linting.pylintEnabled": false, // Disable pylint if using Ruff
+				"python.linting.flake8Enabled": false, // Disable flake8 if using Ruff
+				"python.linting.ruffEnabled": true,
+				"python.formatting.provider": "none", // Let ruff handle formatting
+				"python.testing.pytestArgs": [
+					"tests"
+				],
+				"python.testing.unittestEnabled": false,
+				"python.testing.pytestEnabled": true,
+				// Editor settings for Python
+				"[python]": {
+					"editor.defaultFormatter": "charliermarsh.ruff",
+					"editor.formatOnSave": true,
+					"editor.codeActionsOnSave": {
+						"source.organizeImports": "explicit"
+					}
+				},
+				// TypeScript/JavaScript specific settings
+				"eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"],
+				"eslint.workingDirectories": ["./frontend"], // Specify frontend directory for ESLint
+				"editor.formatOnSave": true,
+				"[typescript]": {
+					"editor.defaultFormatter": "esbenp.prettier-vscode"
+				},
+				"[typescriptreact]": {
+					"editor.defaultFormatter": "esbenp.prettier-vscode"
+				},
+				"[javascript]": {
+					"editor.defaultFormatter": "esbenp.prettier-vscode"
+				},
+				"[json]": {
+					"editor.defaultFormatter": "esbenp.prettier-vscode"
+				},
+				// General settings
+				"files.eol": "\n",
+				"terminal.integrated.defaultProfile.linux": "bash" // Or zsh if preferred
+			},
+
+			// Add the IDs of extensions you want installed when the container is created.
+			"extensions": [
+				// Core
+				"ms-vscode-remote.remote-containers",
+				"ms-azuretools.vscode-docker",
+				"github.vscode-pull-request-github",
+				// Python
+				"ms-python.python",
+				"ms-python.vscode-pylance", // Enhanced language server
+				"charliermarsh.ruff", // Ruff extension
+				// Frontend
+				"dbaeumer.vscode-eslint",
+				"esbenp.prettier-vscode",
+				"bradlc.vscode-tailwindcss", // Tailwind CSS IntelliSense
+				// Other useful extensions
+				"editorconfig.editorconfig",
+				"eamodio.gitlens", // Git superpowers
+				"redhat.vscode-yaml", // YAML support
+				"bierner.markdown-mermaid", // Mermaid diagrams in Markdown
+				"yzhang.markdown-all-in-one" // Markdown editing tools
+			]
+		}
+	},
+
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	// "forwardPorts": [8000, 5173, 5432, 6379], // Forward ports if needed, Caddy proxy often sufficient
+
+	// Use 'postCreateCommand' to run commands after the container is created.
+	"postCreateCommand": "sudo chown -R vscode /app && poetry install && cd frontend && npm install && cd .. && pre-commit install && pre-commit install --hook-type commit-msg",
+
+	// Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
+	"remoteUser": "vscode" // Runs as the default 'vscode' user inside the container
+}

@@ -1,0 +1,66 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: FastAPI (Attach)",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": 5678 // Default debugpy port
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}/backend",
+                    "remoteRoot": "/app"
+                }
+            ],
+            "justMyCode": true // Set to false to debug into libraries
+        },
+        {
+            "name": "Python: FastAPI (Uvicorn)",
+            "type": "python", // Use Python extension debugger
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "app.main:app",
+                "--host", "0.0.0.0",
+                "--port", "8000",
+                "--reload", // Enable reload for development debugging
+                "--log-level", "debug"
+            ],
+            "jinja": true,
+            "cwd": "${workspaceFolder}/backend", // Ensure correct working directory
+            "envFile": "${workspaceFolder}/.env",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Frontend: Attach to Chrome",
+            "port": 9222, // Default Chrome debug port
+            "request": "attach",
+            "type": "chrome",
+            "url": "http://localhost:5173", // Match Vite dev server URL
+            "webRoot": "${workspaceFolder}/frontend"
+        },
+        {
+             "name": "Frontend: Launch Chrome against localhost",
+             "type": "chrome",
+             "request": "launch",
+             "url": "http://localhost:5173", // Or https://localhost if using Caddy proxy
+             "webRoot": "${workspaceFolder}/frontend",
+             "sourceMapPathOverrides": {
+                 "webpack:///./src/*": "${webRoot}/src/*" // Adjust if Vite uses different mapping
+             }
+        }
+    ]
+}
+// Note: For "Python: FastAPI (Attach)", you might need to modify the Dockerfile/command
+// to start uvicorn with debugpy: python -m debugpy --listen 0.0.0.0:5678 -m uvicorn ...

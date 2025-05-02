@@ -1,0 +1,55 @@
+# .pre-commit-config.yaml
+repos:
+  # General hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-added-large-files
+
+  # Python Backend Hooks
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 'v0.4.4'
+    hooks:
+      - id: ruff # Linter
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format # Formatter
+
+  # Conventional Commits Hook (using commitizen locally is often preferred)
+  # This hook *checks* messages, doesn't help *write* them
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.2.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  # Frontend Hooks (add more as needed: stylelint, etc.)
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: 'v9.0.0-rc.0' # Or use a specific stable version
+    hooks:
+    -   id: eslint
+        files: \.[jt]sx?$ # *.js, *.jsx, *.ts, *.tsx
+        types: [file]
+        args: [--fix]
+        additional_dependencies:
+          - eslint@8 # Match your project's ESLint version
+          - typescript@5 # Match your project's TypeScript version
+          - eslint-config-prettier@9
+          - eslint-plugin-react-hooks@4
+          - eslint-plugin-react-refresh@0
+          - "@typescript-eslint/eslint-plugin@7"
+          - "@typescript-eslint/parser@7"
+          # Add any other ESLint plugins/configs used
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: 'v4.0.0-alpha.8' # Use latest compatible version
+    hooks:
+      - id: prettier
+        files: \.(js|jsx|ts|tsx|json|css|md|yaml|yml)$ # Adjust file types as needed
+        args: [--write] # Format files in place
+        additional_dependencies:
+          - prettier@3 # Match your project's Prettier version
+          - prettier-plugin-tailwindcss@0.5 # If using Tailwind plugin
