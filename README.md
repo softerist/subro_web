@@ -41,8 +41,8 @@ A secure, role-based web application to trigger a local subtitle downloader scri
 
 2.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/your-repo.git
-    cd your-repo
+    git clone https://github.com/softerist/subro_web.git
+    cd subro_web
     ```
 
 3.  **Setup Environment:**
