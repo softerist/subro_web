@@ -156,27 +156,26 @@ async def test_refresh_token(test_client: AsyncClient, db_session: AsyncSession)
     user_email = "refresh_user@example.com"
     user_password = "password123"
     # Use factory's create_user, passing session and password
-    user = UserFactory.create_user(session=db_session, email=user_email, password=user_password)
+    _user = UserFactory.create_user(session=db_session, email=user_email, password=user_password)
     await db_session.flush()  # Ensure user is flushed
 
-    # --- ADD THIS LINE BACK ---
     login_data = {"username": user_email, "password": user_password}
-    # --- End of addition ---
-
     login_response = await test_client.post("/api/auth/login", data=login_data)
     assert login_response.status_code == status.HTTP_200_OK
-    original_access_token = login_response.json()["access_token"]
+    _original_access_token = login_response.json()["access_token"]
     refresh_cookie_value = login_response.cookies.get("subRefreshToken")
     assert refresh_cookie_value
 
-    cookies = {"subRefreshToken": refresh_cookie_value}
-    refresh_response = await test_client.post("/api/auth/refresh", cookies=cookies)
+    # FIX: Set cookie on the client instead of passing in the request
+    test_client.cookies.set("subRefreshToken", refresh_cookie_value)
+
+    # Make the request without the cookies parameter
+    refresh_response = await test_client.post("/api/auth/refresh")
 
     # Assert refresh was successful
     assert refresh_response.status_code == status.HTTP_200_OK
     new_token_data = refresh_response.json()
     assert "access_token" in new_token_data
-    # assert new_token_data["access_token"] != original_access_token # Keep commented/removed
     assert "token_type" in new_token_data
     assert new_token_data["token_type"] == "bearer"
 
@@ -202,9 +201,12 @@ async def test_refresh_token_no_cookie(test_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_refresh_token_invalid_cookie(test_client: AsyncClient):
-    # Remains the same
-    cookies = {"subRefreshToken": "invalid-token-value"}
-    response = await test_client.post("/api/auth/refresh", cookies=cookies)
+    # FIX: Set cookie on the client instead of passing in the request
+    test_client.cookies.set("subRefreshToken", "invalid-token-value")
+
+    # Make the request without the cookies parameter
+    response = await test_client.post("/api/auth/refresh")
+
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     assert response.json()["detail"] == "Invalid or expired refresh token"
 
@@ -219,16 +221,14 @@ async def test_logout(test_client: AsyncClient, db_session: AsyncSession):
     login_data = {"username": user_email, "password": user_password}
     login_response = await test_client.post("/api/auth/login", data=login_data)
     assert login_response.status_code == status.HTTP_200_OK
-    refresh_cookie_value = login_response.cookies.get(
-        cookie_transport.cookie_name
-    )  # Use imported name
+    refresh_cookie_value = login_response.cookies.get(cookie_transport.cookie_name)
     assert refresh_cookie_value
 
-    # Store the cookie for the explicit logout call
-    cookies_for_logout = {cookie_transport.cookie_name: refresh_cookie_value}  # Use imported name
+    # FIX: Set cookie on the client instead of passing in the request
+    test_client.cookies.set(cookie_transport.cookie_name, refresh_cookie_value)
 
-    # --- Call Logout ---
-    logout_response = await test_client.post("/api/auth/logout", cookies=cookies_for_logout)
+    # Call logout without cookies parameter
+    logout_response = await test_client.post("/api/auth/logout")
 
     # Assert logout was successful and cookie deletion header was sent
     assert logout_response.status_code == status.HTTP_200_OK
@@ -240,17 +240,8 @@ async def test_logout(test_client: AsyncClient, db_session: AsyncSession):
         f"{cookie_transport.cookie_name}=;" in set_cookie_header or "Max-Age=0" in set_cookie_header
     )
 
-    # --- Test Refresh Behavior After Logout ---
-
-    # 1. Test that using the *original* cookie might still work (token not invalidated server-side yet)
-    #    This might depend on exact token implementation, but often the case.
-    #    The client *still has the cookie* at this point unless cleared.
-    # refresh_response_with_old_cookie = await test_client.post("/api/auth/refresh", cookies=cookies_for_logout)
-    # assert refresh_response_with_old_cookie.status_code == status.HTTP_200_OK # This might pass or fail depending on stricter invalidation
-    # assert "access_token" in refresh_response_with_old_cookie.json()
-
-    # 2. Test that a request *without* any cookies FAILS (simulate a cleared browser/client)
-    #    <<< CLEAR THE CLIENT'S COOKIE JAR >>>
+    # Test refresh behavior after logout
+    # Clear client cookies to simulate browser clearing cookies
     test_client.cookies.clear()
 
     # Now make the refresh request. The client should send no cookies.

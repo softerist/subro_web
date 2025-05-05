@@ -61,8 +61,14 @@ build-backend = "poetry.core.masonry.api"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-select = ["E", "W", "F", "C", "B", "I", "UP", "ASYNC", "ARG", "PTH", "PD", "NPY", "RUF"] # Select relevant rule sets
-ignore = ["E501"] # Ignore line length errors (handled by formatter)
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "C", "B", "I", "UP", "ASYNC", "ARG", "PTH", "PD", "NPY", "RUF"]
+# Add B008 to the ignore list
+ignore = [
+    "E501", # Ignore line length errors (handled by formatter)
+    "B008", # Ignore FastAPI Depends in args warning
+]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -75,19 +81,27 @@ known-first-party = ["app"]
 [tool.pytest.ini_options]
 minversion = "7.0"
 asyncio_mode = "auto"
+log_cli = true
+log_cli_level = "INFO"
+python_files = "test_*.py"
 addopts = "-ra -q --cov=app --cov-report=term-missing"
 testpaths = [
     "tests",
 ]
-python_files = "test_*.py"
+filterwarnings = [
+    "ignore::DeprecationWarning:pytest_asyncio.plugin",
+    # Add this line to ignore the starlette warning
+    "ignore:Please use `import python_multipart` instead\\.:PendingDeprecationWarning:starlette\\.formparsers",
+]
 python_classes = "Test*"
 python_functions = "test_*"
 # Environment variables for tests (can be overridden by .env.test)
-env = [
+env_files = [
     "APP_ENV=test",
     "DATABASE_URL=postgresql+psycopg://test_user:test_password@localhost:5433/test_db", # Example for testcontainers
     "REDIS_URL=redis://localhost:6380/0", # Example for testcontainers
-    "JWT_SECRET_KEY=testsecretkey" # Use a dummy secret for tests
+    "JWT_SECRET_KEY=testsecretkey", # Use a dummy secret for tests
+    ".env.test",
 ]
 
 # --- MyPy Configuration ---
