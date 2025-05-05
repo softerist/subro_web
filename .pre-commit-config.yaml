@@ -12,7 +12,7 @@ repos:
 
   # Python Backend Hooks
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 'v0.4.4'
+    rev: "v0.4.4"
     hooks:
       - id: ruff # Linter
         args: [--fix, --exit-non-zero-on-fix]
@@ -28,9 +28,9 @@ repos:
 
   # Frontend Hooks (add more as needed: stylelint, etc.)
   - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: 'v9.0.0-rc.0' # Or use a specific stable version
+    rev: "v9.0.0-rc.0" # Or use a specific stable version
     hooks:
-    -   id: eslint
+      - id: eslint
         files: \.[jt]sx?$ # *.js, *.jsx, *.ts, *.tsx
         types: [file]
         args: [--fix]
@@ -45,7 +45,7 @@ repos:
           # Add any other ESLint plugins/configs used
 
   - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: 'v4.0.0-alpha.8' # Use latest compatible version
+    rev: "v4.0.0-alpha.8" # Use latest compatible version
     hooks:
       - id: prettier
         files: \.(js|jsx|ts|tsx|json|css|md|yaml|yml)$ # Adjust file types as needed

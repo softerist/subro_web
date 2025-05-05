@@ -45,4 +45,28 @@ services:
       retries: 5
       start_period: 30s # Give Vite 30 seconds to start before first check
 
-# No need to redefine volumes or networks here, they are inherited from the base file.
+  # No need to redefine volumes or networks here, they are inherited from the base file.
+  db_test:
+    # Your test DB service
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: appdb_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+# Define networks used in this override file
+
+
+# Define volumes specific to the override if needed
+volumes:
+  postgres_test_data:
+    driver: local # Or leave empty for default driver

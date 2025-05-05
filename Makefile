@@ -46,6 +46,9 @@ PROJECT_NAME = subapp_dev
 # Development Commands
 dev: compose-up ## Start the full stack with hot-reloading
 
+rebuild-dev: compose-down # Ensure clean state
+	docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml up -d --build
+
 compose-up: ## Start the Docker Compose stack in detached mode
 	@echo "Starting Docker Compose stack..."
 	docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) up --build --detach
