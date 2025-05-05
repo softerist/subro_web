@@ -1,4 +1,5 @@
 import uuid
+
 from fastapi import Depends, Request
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin
 from fastapi_users.authentication import (
@@ -8,32 +9,29 @@ from fastapi_users.authentication import (
     JWTStrategy,
 )
 from fastapi_users.password import PasswordHelper
-from typing import Optional
 
 from app.core.config import settings
 from app.db.models.user import User
 from app.db.session import get_user_db
-from app.schemas.user import UserRead, UserCreate, UserUpdate # Keep all schema imports
 
 # --- Password Hashing ---
 password_helper = PasswordHelper()
+
 
 # --- User Manager ---
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = settings.SECRET_KEY
     verification_token_secret = settings.SECRET_KEY
 
-    async def on_after_register(self, user: User, request: Optional[Request] = None):
+    async def on_after_register(self, user: User, request: Request | None = None):
         print(f"User {user.id} has registered.")
 
     async def on_after_forgot_password(
-        self, user: User, token: str, request: Optional[Request] = None
+        self, user: User, token: str, request: Request | None = None
     ):
         print(f"User {user.id} has requested a password reset. Token: {token}")
 
-    async def on_after_request_verify(
-        self, user: User, token: str, request: Optional[Request] = None
-    ):
+    async def on_after_request_verify(self, user: User, token: str, request: Request | None = None):
         print(f"Verification requested for user {user.id}. Token: {token}")
 
     # <<< REMOVE THE validate_password METHOD OVERRIDE ENTIRELY >>>
@@ -47,14 +45,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def hash_password(self, password: str) -> str:
         return password_helper.hash(password)
 
-async def get_user_manager(user_db = Depends(get_user_db)):
-    yield UserManager(user_db, password_helper=password_helper) # Pass helper here
+
+async def get_user_manager(user_db=Depends(get_user_db)):
+    yield UserManager(user_db, password_helper=password_helper)  # Pass helper here
+
 
 # --- JWT Strategy ---
 # --- JWT Strategy ---
 def get_jwt_strategy() -> JWTStrategy:
     """Returns the JWT strategy configured with secrets and lifetimes."""
-    refresh_lifetime_seconds = cookie_transport.cookie_max_age # Use cookie max age
+    refresh_lifetime_seconds = cookie_transport.cookie_max_age  # Use cookie max age
     if refresh_lifetime_seconds is None:
         # Provide a default if cookie_max_age is None (shouldn't happen with current setup)
         refresh_lifetime_seconds = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
@@ -62,9 +62,10 @@ def get_jwt_strategy() -> JWTStrategy:
     return JWTStrategy(
         secret=settings.SECRET_KEY,
         lifetime_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        #refresh_lifetime_seconds=refresh_lifetime_seconds, # <--- ADD THIS
+        # refresh_lifetime_seconds=refresh_lifetime_seconds, # <--- ADD THIS
         algorithm=settings.ALGORITHM,
     )
+
 
 # --- Authentication Transports ---
 bearer_transport = BearerTransport(tokenUrl="/api/auth/login")
@@ -72,10 +73,10 @@ cookie_transport = CookieTransport(
     cookie_name="subRefreshToken",
     cookie_max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
     cookie_path="/api/auth",
-    cookie_secure=False, # TODO: Set to True in production
+    cookie_secure=False,  # TODO: Set to True in production
     cookie_httponly=True,
     cookie_samesite="lax",
- )
+)
 
 # --- Authentication Backend Instance ---
 auth_backend = AuthenticationBackend(

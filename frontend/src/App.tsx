@@ -1,6 +1,6 @@
 // frontend/src/App.tsx
-import React, { useState } from 'react';
-import './App.css'; // Assuming you have a basic App.css from Vite init
+import React, { useState } from "react";
+import "./App.css"; // Assuming you have a basic App.css from Vite init
 
 function App() {
   const [count, setCount] = useState(0);
@@ -26,7 +26,7 @@ function App() {
         >
           Learn React
         </a>
-        {' | '}
+        {" | "}
         <a
           className="App-link"
           href="https://vitejs.dev/guide/features.html"

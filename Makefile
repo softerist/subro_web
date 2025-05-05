@@ -140,4 +140,3 @@ permissions: ## Fix potential file permission issues from Docker volumes
 	@echo "Attempting to fix volume permissions (requires sudo)..."
 	sudo chown -R $(shell id -u):$(shell id -g) .
 	@echo "Permissions reset to current user."
-

@@ -2,18 +2,16 @@
 import os
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
+
+from app.core.config import Settings  # Import your Pydantic settings
 
 # --- Customizations Start ---
-
 # Import your Base model and application settings
 # Adjust the import path based on your project structure if needed
 # Assume alembic is run from the 'backend' directory
 from app.db.models.user import Base  # Import your Base from where models are defined
-from app.core.config import Settings # Import your Pydantic settings
 
 # Instantiate settings to access the database URL
 app_settings = Settings()
@@ -22,28 +20,30 @@ app_settings = Settings()
 # Make sure all your models are imported indirectly or directly before Base is used
 target_metadata = Base.metadata
 
+
 # Function to modify the config URL for Alembic's sync operations
 def get_sync_database_url() -> str:
     """Returns the database URL suitable for synchronous Alembic operations."""
-    db_url = app_settings.ASYNC_DATABASE_URI # Start with the configured async URL
+    db_url = app_settings.ASYNC_DATABASE_URI  # Start with the configured async URL
     # Alembic typically works best with the sync version of the URL
     # Replace +asyncpg with the standard driver if present
     sync_url = db_url.replace("+asyncpg", "")
     # Ensure it starts with postgresql://
     if not sync_url.startswith("postgresql://"):
-         # Handle case where DATABASE_URL might already be sync format but needs prefix
-         if "://" in sync_url:
-             driver, rest = sync_url.split("://", 1)
-             sync_url = f"postgresql://{rest}"
-         else: # Assume it's a relative path or malformed - less likely with PostgresDsn
-             raise ValueError(f"Unexpected database URL format for sync operations: {sync_url}")
+        # Handle case where DATABASE_URL might already be sync format but needs prefix
+        if "://" in sync_url:
+            driver, rest = sync_url.split("://", 1)
+            sync_url = f"postgresql://{rest}"
+        else:  # Assume it's a relative path or malformed - less likely with PostgresDsn
+            raise ValueError(f"Unexpected database URL format for sync operations: {sync_url}")
 
     # Set the environment variable expected by alembic.ini IF not already set directly
     # Alembic's ini interpolation takes precedence if already set in env
     # Also update the live Alembic config object
-    os.environ.setdefault('DATABASE_URL', sync_url)
+    os.environ.setdefault("DATABASE_URL", sync_url)
     config.set_main_option("sqlalchemy.url", sync_url)
     return sync_url
+
 
 # --- Customizations End ---
 
@@ -79,7 +79,7 @@ def run_migrations_offline() -> None:
     """
     # url = config.get_main_option("sqlalchemy.url") # URL is now set globally above
     context.configure(
-        url=sync_url, # Use the derived sync_url
+        url=sync_url,  # Use the derived sync_url
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

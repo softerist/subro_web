@@ -18,20 +18,20 @@ This project adheres to a Code of Conduct [Placeholder: Link to Code of Conduct 
 
 We follow a trunk-based development model using the `main` branch as the single source of truth.
 
-*   All development work should happen on short-lived feature branches.
-*   Branch names should follow the pattern `feature/issue-ticket-brief-desc` (e.g., `feature/15-add-job-cancellation`).
-*   Create branches from the latest `main`.
-*   Keep branches focused on a single issue or feature.
+- All development work should happen on short-lived feature branches.
+- Branch names should follow the pattern `feature/issue-ticket-brief-desc` (e.g., `feature/15-add-job-cancellation`).
+- Create branches from the latest `main`.
+- Keep branches focused on a single issue or feature.
 
 ## Commit Messages
 
-*   Commit messages **must** follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/).
-*   This allows for automated changelog generation and semantic versioning.
-*   A `commitizen` pre-commit hook is configured to help format messages correctly. You can use `git cz` or `cz c` if you have commitizen installed globally, or let the hook guide you during `git commit`.
-*   Example: `feat: add real-time log streaming via websockets`
-*   Example: `fix(api): correct authorization check for job details endpoint`
-*   Example: `docs: update architecture diagram for redis pubsub`
-*   Example: `chore: update pre-commit hook versions`
+- Commit messages **must** follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/).
+- This allows for automated changelog generation and semantic versioning.
+- A `commitizen` pre-commit hook is configured to help format messages correctly. You can use `git cz` or `cz c` if you have commitizen installed globally, or let the hook guide you during `git commit`.
+- Example: `feat: add real-time log streaming via websockets`
+- Example: `fix(api): correct authorization check for job details endpoint`
+- Example: `docs: update architecture diagram for redis pubsub`
+- Example: `chore: update pre-commit hook versions`
 
 ## Pull Request (PR) Process
 
@@ -47,24 +47,24 @@ We follow a trunk-based development model using the `main` branch as the single 
 
 ## Coding Standards
 
-*   **Python (Backend):**
-    *   Follow PEP 8 guidelines.
-    *   Use Ruff for linting and isort for import sorting (enforced by pre-commit).
-    *   Use Black for code formatting (line length 100, enforced by pre-commit).
-    *   Use type hints extensively. Run MyPy for type checking.
-*   **TypeScript/React (Frontend):**
-    *   Follow standard React/TypeScript best practices.
-    *   Use ESLint for linting (enforced by pre-commit).
-    *   Use Prettier for code formatting (enforced by pre-commit).
-*   **General:**
-    *   Write clear, concise, and well-commented code where necessary.
-    *   Write unit and integration tests for new features and bug fixes. Aim for high test coverage (>95% backend).
-    *   Keep functions and components focused (Single Responsibility Principle).
+- **Python (Backend):**
+  - Follow PEP 8 guidelines.
+  - Use Ruff for linting and isort for import sorting (enforced by pre-commit).
+  - Use Black for code formatting (line length 100, enforced by pre-commit).
+  - Use type hints extensively. Run MyPy for type checking.
+- **TypeScript/React (Frontend):**
+  - Follow standard React/TypeScript best practices.
+  - Use ESLint for linting (enforced by pre-commit).
+  - Use Prettier for code formatting (enforced by pre-commit).
+- **General:**
+  - Write clear, concise, and well-commented code where necessary.
+  - Write unit and integration tests for new features and bug fixes. Aim for high test coverage (>95% backend).
+  - Keep functions and components focused (Single Responsibility Principle).
 
 ## Issue Tracking
 
-*   We use GitHub Issues to track bugs, feature requests, and tasks.
-*   We use GitHub Projects (Kanban board) for visualizing work in progress (Todo → In Progress → Review → Done). Link issues to PRs.
+- We use GitHub Issues to track bugs, feature requests, and tasks.
+- We use GitHub Projects (Kanban board) for visualizing work in progress (Todo → In Progress → Review → Done). Link issues to PRs.
 
 ## Questions?
 

@@ -10,7 +10,20 @@ services:
     # environment:
     #   - PYTHONPATH=/app
     # Command to run uvicorn with live reload
-    command: [ "poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app" ]
+    command:
+      [
+        "poetry",
+        "run",
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+        "--reload-dir",
+        "/app",
+      ]
 
   worker:
     volumes:
@@ -21,7 +34,18 @@ services:
     #   - PYTHONPATH=/app
     # Command to run celery worker. '-P solo' is useful for local debugging (disables concurrency).
     # Remove '-P solo' if you need to test concurrency.
-    command: [ "poetry", "run", "celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=info", "-P", "solo" ]
+    command:
+      [
+        "poetry",
+        "run",
+        "celery",
+        "-A",
+        "app.tasks.celery_app",
+        "worker",
+        "--loglevel=info",
+        "-P",
+        "solo",
+      ]
 
   frontend:
     # Command to run Vite dev server with HMR, listening on all interfaces
@@ -39,7 +63,7 @@ services:
       - "5173:5173"
     # Healthcheck for the Vite dev server (can be slow to start)
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:5173" ]
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
       interval: 15s # Check less frequently
       timeout: 10s # Allow more time for response
       retries: 5
@@ -58,13 +82,12 @@ services:
     volumes:
       - postgres_test_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 5
 
 # Define networks used in this override file
-
 
 # Define volumes specific to the override if needed
 volumes:

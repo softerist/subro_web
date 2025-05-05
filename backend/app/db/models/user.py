@@ -2,13 +2,15 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
-from sqlalchemy import String, Boolean, TIMESTAMP, func
+from sqlalchemy import TIMESTAMP, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
 
 # Define a Base class for declarative models
 # It's good practice to have a central Base for all models
 class Base(DeclarativeBase):
     pass
+
 
 # Define the User model inheriting from fastapi-users' base and our Base
 class User(SQLAlchemyBaseUserTableUUID, Base):

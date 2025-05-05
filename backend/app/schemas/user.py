@@ -1,13 +1,14 @@
 # backend/app/schemas/user.py
 import uuid
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal
 
 from fastapi_users import schemas
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr
 
 # --- Base Schemas from fastapi-users ---
 # These provide the standard fields. We inherit from them.
+
 
 class UserRead(schemas.BaseUser[uuid.UUID]):
     # Inherits id, email, is_active, is_superuser, is_verified
@@ -36,23 +37,25 @@ class UserUpdate(schemas.BaseUserUpdate):
     # Standard users likely shouldn't update their own role.
     # Admins would need a separate mechanism or schema.
     # We'll handle admin role updates via a dedicated endpoint later.
-    email: Optional[EmailStr] = None # Allow email update if needed
-    is_active: Optional[bool] = None
-    is_superuser: Optional[bool] = None
-    is_verified: Optional[bool] = None
+    email: EmailStr | None = None  # Allow email update if needed
+    is_active: bool | None = None
+    is_superuser: bool | None = None
+    is_verified: bool | None = None
     # Do NOT allow role update via this standard schema
 
 
 # --- Custom Schemas (if needed for specific endpoints) ---
 
+
 class AdminUserUpdate(BaseModel):
     """Schema specifically for Admins updating other users."""
+
     # Define fields an admin IS allowed to change
-    email: Optional[EmailStr] = None
-    role: Optional[Literal["admin", "standard"]] = None
-    is_active: Optional[bool] = None
-    is_superuser: Optional[bool] = None # Keep this aligned with 'role'
-    is_verified: Optional[bool] = None
+    email: EmailStr | None = None
+    role: Literal["admin", "standard"] | None = None
+    is_active: bool | None = None
+    is_superuser: bool | None = None  # Keep this aligned with 'role'
+    is_verified: bool | None = None
 
     # Note: We might need logic in the update endpoint to ensure
     # if role='admin', then is_superuser=True, and vice-versa.
