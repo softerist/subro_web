@@ -1,37 +1,37 @@
 # backend/app/api/routers/auth.py
 import logging
 import uuid
-
-# Add necessary imports for manual JWT handling
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi_users.authentication import JWTStrategy
+from fastapi_users.authentication import JWTStrategy  # For type hinting strategy
 from jose import JWTError, jwt
 
 from app.core.config import settings
-from app.core.security import (
+from app.core.users import (  # Updated import path
     UserManager,
-    cookie_transport,
-    fastapi_users,
+    fastapi_users_instance,  # Renamed from 'fastapi_users' for clarity
     get_jwt_strategy,
     get_user_manager,
+    refresh_cookie_transport,  # Import the specific refresh_cookie_transport
 )
-from app.db.models.user import User
-from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.db.models.user import User  # For type hinting User
+from app.schemas.user import UserCreate, UserRead  # UserUpdate removed as it's not used here
 
 logger = logging.getLogger(__name__)
 
-auth_router = APIRouter(prefix="/auth", tags=["Auth"])
-users_router = APIRouter(prefix="/users", tags=["Users"])
+auth_router = APIRouter(
+    prefix="/auth",
+    tags=["Auth - Authentication & Authorization"],  # More descriptive tag
+)
 
 # --- Constants for manual refresh token handling ---
-# Ensure REFRESH_TOKEN_EXPIRE_DAYS is defined in settings
 REFRESH_TOKEN_LIFETIME = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-REFRESH_TOKEN_AUDIENCE = "fastapi-users:refresh"  # Standard audience
-ALGORITHM = settings.ALGORITHM  # Use same algorithm as access token
-SECRET_KEY = settings.SECRET_KEY  # Use same secret key
+REFRESH_TOKEN_AUDIENCE = "fastapi-users:auth-refresh"  # More specific audience
+ALGORITHM = settings.ALGORITHM
+# SECRET_KEY is used by get_jwt_strategy for access tokens
+REFRESH_SECRET_KEY = settings.JWT_REFRESH_SECRET_KEY
 
 
 # --- Helper functions for manual refresh token handling ---
@@ -39,28 +39,33 @@ def create_refresh_token(data: dict, expires_delta: timedelta = REFRESH_TOKEN_LI
     """Creates a JWT refresh token."""
     to_encode = data.copy()
     expire = datetime.now(UTC) + expires_delta
-    # Add 'jti' (JWT ID) claim for uniqueness
     to_encode.update(
         {
             "exp": expire,
-            "aud": REFRESH_TOKEN_AUDIENCE,
-            "jti": str(uuid.uuid4()),  # <--- ADD THIS LINE
+            "aud": REFRESH_TOKEN_AUDIENCE,  # Use the defined audience
+            "jti": str(uuid.uuid4()),
+            "type": "refresh",  # Optional: add a type claim
         }
     )
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, REFRESH_SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
 async def decode_refresh_token(token: str, user_manager: UserManager) -> User | None:
-    """Decodes refresh token, validates audience, gets user."""
+    """Decodes refresh token, validates audience and type, gets user."""
     try:
         payload = jwt.decode(
             token,
-            SECRET_KEY,
+            REFRESH_SECRET_KEY,
             algorithms=[ALGORITHM],
-            audience=REFRESH_TOKEN_AUDIENCE,  # Validate audience
+            audience=REFRESH_TOKEN_AUDIENCE,  # Validate against the defined audience
         )
-        # Check standard 'sub' claim for user ID
+
+        # Optional: Validate token type if set during creation
+        if payload.get("type") != "refresh":
+            logger.warning("Invalid token type in refresh token.")
+            return None
+
         user_id_str = payload.get("sub")
         if user_id_str is None:
             logger.warning("Refresh token missing 'sub' claim.")
@@ -72,12 +77,17 @@ async def decode_refresh_token(token: str, user_manager: UserManager) -> User | 
             logger.warning(f"Invalid UUID in refresh token 'sub' claim: {user_id_str}")
             return None
 
-        # Fetch the user from the database
         user = await user_manager.get(user_id)
-        return user
+        if user and user.is_active:  # Also ensure user is still active
+            return user
+        elif user:
+            logger.warning(f"Refresh token decoded for inactive user_id: {user_id}")
+        else:
+            logger.warning(f"User not found for refresh token sub: {user_id}")
+        return None  # Return None if user not found or not active
 
     except JWTError as e:
-        logger.warning(f"Invalid refresh token: {e}")
+        logger.warning(f"Invalid refresh token (JWTError): {e}")
         return None
     except Exception as e:
         logger.error(
@@ -86,194 +96,174 @@ async def decode_refresh_token(token: str, user_manager: UserManager) -> User | 
         return None
 
 
-# --- Custom Login Endpoint (Manual Refresh Token, Reverted Cookie Handling) ---
-@auth_router.post("/login")
+# --- Custom Login Endpoint ---
+@auth_router.post("/login", summary="Login for access and refresh tokens")
 async def custom_login(
     response: Response,
     credentials: OAuth2PasswordRequestForm = Depends(),
     user_manager: UserManager = Depends(get_user_manager),
-    strategy: JWTStrategy = Depends(get_jwt_strategy),
+    access_token_strategy: JWTStrategy = Depends(get_jwt_strategy),  # More specific name
 ):
     """
-    Custom login endpoint: authenticates, checks active status,
-    generates tokens, sets cookie, returns access token.
-    (Handles None return from authenticate for older fastapi-users versions).
+    Authenticates a user, generates an access token (JWT) and a refresh token (JWT).
+    The refresh token is set as an HttpOnly cookie.
+    The access token is returned in the response body.
     """
-    authenticated_user: User | None = None
+    logger.debug(f"Login attempt for user: {credentials.username}")
+    user = await user_manager.authenticate(credentials)
 
-    try:
-        logger.debug(f"Attempting authentication for user: {credentials.username}")
-        authenticated_user = await user_manager.authenticate(credentials)
-        logger.debug(
-            f"Authentication result for {credentials.username}: {type(authenticated_user)}"
-        )
-
-    except Exception as e:
-        logger.error(
-            f"Unexpected exception during user authentication call for {credentials.username}: {e}",
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="INTERNAL_SERVER_ERROR",
-        )
-
-    # Check the result of authentication
-    if authenticated_user is None:
-        # Failure case (UserNotFound or InvalidPassword)
-        logger.debug(
-            f"Login failed: Invalid credentials or user not found - {credentials.username}"
-        )
-        # --- REMOVE the get_by_email check ---
-        # existing_user = await user_manager.get_by_email(credentials.username) # REMOVE/COMMENT OUT
-        # if existing_user is None:
-        #      logger.debug(f"Login failed: User not found - {credentials.username}")
-        # else:
-        #      logger.debug(f"Login failed: Invalid credentials or inactive user - {credentials.username}")
-        # --- End of removal ---
+    if not user:  # Handles both user not found and invalid password
+        logger.warning(f"Login failed: Invalid credentials for {credentials.username}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="LOGIN_BAD_CREDENTIALS",  # Keep generic
+            detail="LOGIN_BAD_CREDENTIALS",
         )
 
-    user = authenticated_user
-
     if not user.is_active:
-        logger.warning(f"Login attempt for inactive user: {credentials.username} (ID: {user.id})")
+        logger.warning(f"Login attempt for inactive user: {user.email} (ID: {user.id})")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="LOGIN_USER_INACTIVE",
         )
 
-    # --- Token Generation (Remains the same) ---
     try:
-        access_token = await strategy.write_token(user)
-        refresh_token_data = {"sub": str(user.id)}
+        access_token = await access_token_strategy.write_token(user)
+        refresh_token_data = {"sub": str(user.id)}  # 'sub' is standard for subject (user ID)
         refresh_token = create_refresh_token(data=refresh_token_data)
     except Exception as e:
-        logger.error(f"Error writing tokens for user {user.id}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="TOKEN_GENERATION_ERROR",
-        )
+        logger.error(f"Error generating tokens for user {user.id}: {e}", exc_info=True)
 
-    # --- Set Cookie (Remains the same) ---
+    # Use parameters from the imported refresh_cookie_transport
     response.set_cookie(
-        key=cookie_transport.cookie_name,
+        key=refresh_cookie_transport.cookie_name,
         value=refresh_token,
-        max_age=cookie_transport.cookie_max_age,
-        path=cookie_transport.cookie_path,
-        domain=cookie_transport.cookie_domain,
-        secure=cookie_transport.cookie_secure,
-        httponly=cookie_transport.cookie_httponly,
-        samesite=cookie_transport.cookie_samesite,
+        max_age=refresh_cookie_transport.cookie_max_age,
+        path=refresh_cookie_transport.cookie_path,
+        domain=refresh_cookie_transport.cookie_domain,
+        secure=refresh_cookie_transport.cookie_secure,
+        httponly=refresh_cookie_transport.cookie_httponly,
+        samesite=refresh_cookie_transport.cookie_samesite,
     )
 
-    logger.info(f"User logged in successfully: {credentials.username} (ID: {user.id})")
+    logger.info(f"User logged in successfully: {user.email} (ID: {user.id})")
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-# --- Custom Refresh Token Endpoint (Manual Refresh Token Handling, Reverted Cookie Handling) ---
-@auth_router.post("/refresh")
+# --- Custom Refresh Token Endpoint ---
+@auth_router.post("/refresh", summary="Refresh access token using refresh token cookie")
 async def refresh_jwt(
     response: Response,
     request: Request,
     user_manager: UserManager = Depends(get_user_manager),
-    strategy: JWTStrategy = Depends(get_jwt_strategy),  # Still use for new access token
+    access_token_strategy: JWTStrategy = Depends(get_jwt_strategy),  # For new access token
 ):
-    """Refreshes token using cookie, generates new tokens, sets new cookie."""
-    # Get cookie MANUALLY (reverting helper usage)
-    refresh_token = request.cookies.get(cookie_transport.cookie_name)
+    """
+    Refreshes an access token using the refresh token stored in an HttpOnly cookie.
+    Returns a new access token and sets a new refresh token cookie.
+    """
+    refresh_token = request.cookies.get(refresh_cookie_transport.cookie_name)
     if not refresh_token:
         logger.debug("Refresh attempt without refresh token cookie.")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token cookie"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="REFRESH_TOKEN_MISSING"
         )
 
-    # Decode refresh token MANUALLY and get user
     user = await decode_refresh_token(refresh_token, user_manager)
 
-    if not user or not user.is_active:
-        detail = "Invalid or expired refresh token"
-        logger.warning(f"{detail} or inactive user attempt: user_id={user.id if user else 'None'}")
-        # Delete cookie MANUALLY (reverting helper usage)
+    if not user:  # decode_refresh_token now also checks for user.is_active
+        detail = "REFRESH_TOKEN_INVALID_OR_EXPIRED"
+        logger.warning(f"{detail} or inactive user. Deleting cookie.")
         response.delete_cookie(
-            key=cookie_transport.cookie_name,
-            path=cookie_transport.cookie_path,
-            domain=cookie_transport.cookie_domain,
-            secure=cookie_transport.cookie_secure,
-            httponly=cookie_transport.cookie_httponly,
-            samesite=cookie_transport.cookie_samesite,
+            key=refresh_cookie_transport.cookie_name,
+            path=refresh_cookie_transport.cookie_path,
+            domain=refresh_cookie_transport.cookie_domain,
+            secure=refresh_cookie_transport.cookie_secure,
+            httponly=refresh_cookie_transport.cookie_httponly,
+            samesite=refresh_cookie_transport.cookie_samesite,
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
 
     try:
-        # Generate *new* access token using standard strategy
-        new_access_token = await strategy.write_token(user)
-        # Generate *new* refresh token MANUALLY
+        new_access_token = await access_token_strategy.write_token(user)
         refresh_token_data = {"sub": str(user.id)}
         new_refresh_token = create_refresh_token(data=refresh_token_data)
     except Exception as e:
         logger.error(
             f"Error generating new tokens during refresh for user {user.id}: {e}", exc_info=True
         )
-        # Delete cookie MANUALLY on error
-        response.delete_cookie(
-            key=cookie_transport.cookie_name,
-            path=cookie_transport.cookie_path,
-            domain=cookie_transport.cookie_domain,
-            secure=cookie_transport.cookie_secure,
-            httponly=cookie_transport.cookie_httponly,
-            samesite=cookie_transport.cookie_samesite,
+        response.delete_cookie(  # Ensure cookie is deleted on error
+            key=refresh_cookie_transport.cookie_name,
+            path=refresh_cookie_transport.cookie_path,
+            domain=refresh_cookie_transport.cookie_domain,
+            secure=refresh_cookie_transport.cookie_secure,
+            httponly=refresh_cookie_transport.cookie_httponly,
+            samesite=refresh_cookie_transport.cookie_samesite,
         )
-        raise HTTPException(
+        raise HTTPException from e(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="TOKEN_GENERATION_ERROR",
         )
 
-    # Set the *new* cookie MANUALLY (reverting helper usage)
     response.set_cookie(
-        key=cookie_transport.cookie_name,
+        key=refresh_cookie_transport.cookie_name,
         value=new_refresh_token,
-        max_age=cookie_transport.cookie_max_age,
-        path=cookie_transport.cookie_path,
-        domain=cookie_transport.cookie_domain,
-        secure=cookie_transport.cookie_secure,
-        httponly=cookie_transport.cookie_httponly,
-        samesite=cookie_transport.cookie_samesite,
+        max_age=refresh_cookie_transport.cookie_max_age,
+        path=refresh_cookie_transport.cookie_path,
+        domain=refresh_cookie_transport.cookie_domain,
+        secure=refresh_cookie_transport.cookie_secure,
+        httponly=refresh_cookie_transport.cookie_httponly,
+        samesite=refresh_cookie_transport.cookie_samesite,
     )
 
     logger.info(f"Token refreshed for user: {user.email} (ID: {user.id})")
     return {"access_token": new_access_token, "token_type": "bearer"}
 
 
-# --- Custom Logout Endpoint (Reverted Cookie Handling) ---
-@auth_router.post("/logout")
+# --- Custom Logout Endpoint ---
+@auth_router.post("/logout", summary="Logout user by deleting refresh token cookie")
 async def custom_logout(response: Response):
     """Logs out the user by deleting the refresh token cookie."""
-    # Delete cookie MANUALLY (reverting helper usage)
+    logger.info(f"Logout attempt. Deleting cookie: {refresh_cookie_transport.cookie_name}")
     response.delete_cookie(
-        key=cookie_transport.cookie_name,
-        path=cookie_transport.cookie_path,
-        domain=cookie_transport.cookie_domain,
-        secure=cookie_transport.cookie_secure,
-        httponly=cookie_transport.cookie_httponly,
-        samesite=cookie_transport.cookie_samesite,
+        key=refresh_cookie_transport.cookie_name,
+        path=refresh_cookie_transport.cookie_path,
+        domain=refresh_cookie_transport.cookie_domain,
+        secure=refresh_cookie_transport.cookie_secure,
+        httponly=refresh_cookie_transport.cookie_httponly,
+        samesite=refresh_cookie_transport.cookie_samesite,
     )
-    logger.info("User logged out.")
-    return {"status": "logged out"}
+    return {"message": "LOGOUT_SUCCESSFUL"}
 
 
-# --- Included Routers (Keep as is) ---
-# ... (register, reset password, users routers) ...
+# --- FastAPI-Users Built-in Routes for Auth ---
+# Register Router (conditionally based on settings)
 if settings.OPEN_SIGNUP:
-    register_router = fastapi_users.get_register_router(UserRead, UserCreate)
-    auth_router.include_router(register_router)
+    # Uses UserRead for response, UserCreate for request body
+    register_router = fastapi_users_instance.get_register_router(UserRead, UserCreate)
+    auth_router.include_router(
+        register_router,
+        # prefix="/register", # No, fastapi-users router already has /register
+        tags=["Auth - Registration"],  # Specific tag
+    )
+    logger.info("User self-registration is ENABLED.")
 else:
-    print("INFO:     User self-registration is disabled (OPEN_SIGNUP=False)")
+    logger.info("User self-registration is DISABLED (OPEN_SIGNUP=False).")
 
-auth_router.include_router(fastapi_users.get_reset_password_router())
-
-users_router.include_router(
-    fastapi_users.get_users_router(UserRead, UserUpdate, requires_verification=False)
+# Reset Password Router
+auth_router.include_router(
+    fastapi_users_instance.get_reset_password_router(),
+    # No prefix, already part of fastapi-users router
+    tags=["Auth - Password Management"],  # Specific tag
 )
+
+# Verify Email Routers (if you implement email verification)
+# if settings.EMAIL_VERIFICATION_ENABLED: # Example setting
+#     auth_router.include_router(
+#         fastapi_users_instance.get_verify_router(UserRead),
+#         tags=["Auth - Email Verification"]
+#     )
+#     logger.info("Email verification routes ENABLED.")
+
+
+# Note: The standard user management routes (GET /users/me, PATCH /users/me, etc.)
+# are now correctly handled by `app.api.routers.users.py` and should NOT be included here.

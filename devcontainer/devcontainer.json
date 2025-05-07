@@ -1,37 +1,34 @@
 {
   "name": "Subtitle Downloader Dev Environment",
-  // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-  // "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bullseye"
-  // Use Docker Compose file instead to spin up the whole stack
   "dockerComposeFile": [
     "../infra/docker/docker-compose.yml",
     "../infra/docker/docker-compose.override.yml"
   ],
-
-  // The 'service' property specifies the service entrypoint for compiling and launching the container.
-  // It typically should be the service where your source code lives, e.g., the API or frontend service.
-  "service": "api", // Or 'frontend', depending on primary focus
-
-  // The 'workspaceFolder' property specifies the path VS Code should open by default inside the container.
-  "workspaceFolder": "/app",
-
-  // Configure tool-specific properties.
+  "service": "api", // VS Code will connect to and operate within the 'api' service
+  "workspaceFolder": "/app", // The default folder VS Code opens in the container
+  // Set environment variables specific to the dev container environment
+  // These will be available to your application when it runs inside this dev container.
+  "containerEnv": {
+    "POSTGRES_SERVER": "db", // Tells the app the DB hostname is 'db'
+    "REDIS_HOST": "redis", // Tells the app the Redis hostname is 'redis'
+    "PYTHONUNBUFFERED": "1" // Ensures Python output (print statements, logs) appears immediately
+    // Add any other non-secret environment variables needed for the dev context.
+    // Secrets (like DB passwords) should still primarily come from your .env file,
+    // which is gitignored and loaded by Pydantic Settings or Docker Compose.
+  },
   "customizations": {
-    // Configure properties specific to VS Code.
     "vscode": {
-      // Set *default* container specific settings.json values on container create.
       "settings": {
         // Python specific settings
-        "python.defaultInterpreterPath": "/app/.venv/bin/python", // Path inside the container
+        "python.defaultInterpreterPath": "/app/.venv/bin/python",
         "python.linting.enabled": true,
-        "python.linting.pylintEnabled": false, // Disable pylint if using Ruff
-        "python.linting.flake8Enabled": false, // Disable flake8 if using Ruff
+        "python.linting.pylintEnabled": false,
+        "python.linting.flake8Enabled": false,
         "python.linting.ruffEnabled": true,
-        "python.formatting.provider": "none", // Let ruff handle formatting
+        "python.formatting.provider": "none",
         "python.testing.pytestArgs": ["tests"],
         "python.testing.unittestEnabled": false,
         "python.testing.pytestEnabled": true,
-        // Editor settings for Python
         "[python]": {
           "editor.defaultFormatter": "charliermarsh.ruff",
           "editor.formatOnSave": true,
@@ -46,7 +43,7 @@
           "typescript",
           "typescriptreact"
         ],
-        "eslint.workingDirectories": ["./frontend"], // Specify frontend directory for ESLint
+        "eslint.workingDirectories": ["./frontend"],
         "editor.formatOnSave": true,
         "[typescript]": {
           "editor.defaultFormatter": "esbenp.prettier-vscode"
@@ -60,41 +57,28 @@
         "[json]": {
           "editor.defaultFormatter": "esbenp.prettier-vscode"
         },
-        // General settings
         "files.eol": "\n",
-        "terminal.integrated.defaultProfile.linux": "bash" // Or zsh if preferred
+        "terminal.integrated.defaultProfile.linux": "bash"
       },
-
-      // Add the IDs of extensions you want installed when the container is created.
       "extensions": [
-        // Core
         "ms-vscode-remote.remote-containers",
         "ms-azuretools.vscode-docker",
         "github.vscode-pull-request-github",
-        // Python
         "ms-python.python",
-        "ms-python.vscode-pylance", // Enhanced language server
-        "charliermarsh.ruff", // Ruff extension
-        // Frontend
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
-        "bradlc.vscode-tailwindcss", // Tailwind CSS IntelliSense
-        // Other useful extensions
+        "bradlc.vscode-tailwindcss",
         "editorconfig.editorconfig",
-        "eamodio.gitlens", // Git superpowers
-        "redhat.vscode-yaml", // YAML support
-        "bierner.markdown-mermaid", // Mermaid diagrams in Markdown
-        "yzhang.markdown-all-in-one" // Markdown editing tools
+        "eamodio.gitlens",
+        "redhat.vscode-yaml",
+        "bierner.markdown-mermaid",
+        "yzhang.markdown-all-in-one"
       ]
     }
   },
-
-  // Use 'forwardPorts' to make a list of ports inside the container available locally.
-  // "forwardPorts": [8000, 5173, 5432, 6379], // Forward ports if needed, Caddy proxy often sufficient
-
-  // Use 'postCreateCommand' to run commands after the container is created.
+  // "forwardPorts": [8000, 5173, 5432, 6379], // Caddy proxy generally handles this for app access
   "postCreateCommand": "sudo chown -R vscode /app && poetry install && cd frontend && npm install && cd .. && pre-commit install && pre-commit install --hook-type commit-msg",
-
-  // Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
-  "remoteUser": "vscode" // Runs as the default 'vscode' user inside the container
+  "remoteUser": "vscode"
 }

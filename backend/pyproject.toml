@@ -16,12 +16,15 @@ pydantic = {extras = ["email", "dotenv"], version = "^2.7.1"} # For settings man
 redis = {extras = ["hiredis"], version = "^5.0.4"} # For Celery broker/backend and PubSub
 celery = {extras = ["redis"], version = "^5.4.0"}
 python-json-logger = "^2.0.7" # For structured logging
+
+
 gunicorn = "^22.0.0" # Production server (optional alternative to uvicorn workers)
 sqlalchemy = "^2.0.29" # ORM
-psycopg = {extras = ["binary"], version = "^3.1.18"} # Postgres driver (use psycopg or psycopg2)
+psycopg = {extras = ["binary"], version = "^3.1.18"} # Postgres driver (psycopg3 for sync)
+asyncpg = "^0.30.0"
 alembic = "^1.13.1" # Database migrations
 fastapi-users = {extras = ["sqlalchemy"], version = "^14.0.1"} # User management
-# fastapi-users-db-sqlalchemy = "^6.0.0"
+fastapi-users-db-sqlalchemy = ">=7.0.0"  # <--- Update to match fastapi-users requirement
 argon2-cffi = "^23.1.0" # Password hashing (preferred)
 # bcrypt = "^4.1.2" # Alternative password hashing
 python-jose = {extras = ["cryptography"], version = "^3.4.0"} # For JWTs if not fully handled by fastapi-users
@@ -29,13 +32,14 @@ slowapi = "^0.1.9" # Rate limiting
 # fastapi-csrf-protect = "^1.0.0" # CSRF Protection
 
 # --- Development Dependencies ---
-asyncpg = "^0.30.0"
+# asyncpg = "^0.30.0"
 email-validator = "^2.2.0"
 python-dotenv = "^1.1.0"
 pydantic-settings = "^2.9.1"
 psycopg2-binary = "^2.9.10"
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
-python-multipart = "^0.0.20"
+# python-multipart = "^0.0.20"
+# python-multipart = "^0.0.9" # More common stable version
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.0"
 pytest-cov = "^5.0.0" # Code coverage

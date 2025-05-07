@@ -1,5 +1,5 @@
 // frontend/src/App.tsx
-import React, { useState } from "react";
+import { useState } from "react";
 import "./App.css"; // Assuming you have a basic App.css from Vite init
 
 function App() {

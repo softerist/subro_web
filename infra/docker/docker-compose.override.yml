@@ -74,9 +74,9 @@ services:
     # Your test DB service
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: appdb_test
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: Pa44w0rd
+      POSTGRES_DB: subappdb
     ports:
       - "5433:5432"
     volumes:
