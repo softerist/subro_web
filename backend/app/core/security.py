@@ -23,23 +23,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = settings.SECRET_KEY
     verification_token_secret = settings.SECRET_KEY
 
-    async def on_after_register(self, user: User, request: Request | None = None):
+    async def on_after_register(self, user: User, _request: Request | None = None):
         print(f"User {user.id} has registered.")
 
     async def on_after_forgot_password(
-        self, user: User, token: str, request: Request | None = None
+        self, user: User, token: str, _request: Request | None = None
     ):
         print(f"User {user.id} has requested a password reset. Token: {token}")
 
-    async def on_after_request_verify(self, user: User, token: str, request: Request | None = None):
+    async def on_after_request_verify(
+        self, user: User, token: str, _request: Request | None = None
+    ):
         print(f"Verification requested for user {user.id}. Token: {token}")
-
-    # <<< REMOVE THE validate_password METHOD OVERRIDE ENTIRELY >>>
-    # async def validate_password(self, password: str, user: User) -> bool:
-    #     # This method should NOT be overridden for standard password verification
-    #     # BaseUserManager.authenticate handles this internally using password_helper
-    #     # return password_helper.verify(password, user.hashed_password) # <-- Incorrect
-    #     pass # Or just remove the method definition
 
     # Keep the hash_password override as it IS required
     async def hash_password(self, password: str) -> str:
@@ -47,7 +42,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
 
 async def get_user_manager(user_db=Depends(get_user_db)):
-    yield UserManager(user_db, password_helper=password_helper)  # Pass helper here
+    yield UserManager(user_db, password_helper=password_helper)
 
 
 # --- JWT Strategy ---
@@ -94,3 +89,10 @@ fastapi_users = FastAPIUsers[User, uuid.UUID](
 current_active_user = fastapi_users.current_user(active=True)
 current_active_superuser = fastapi_users.current_user(active=True, superuser=True)
 current_user_optional = fastapi_users.current_user(optional=True)
+current_active_verified_user = fastapi_users.current_user(active=True, verified=True)
+current_active_verified_user_optional = fastapi_users.current_user(
+    active=True, verified=True, optional=True
+)
+# current_active_verified_user_optional = fastapi_users.current_user(
+#     active=True, verified=True, optional=True
+# )

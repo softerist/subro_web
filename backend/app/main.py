@@ -1,84 +1,94 @@
-# backend/app/main.py
 import logging
 from contextlib import asynccontextmanager
 
-from celery import Celery  # Kept Celery
-from fastapi import FastAPI, HTTPException, Request, status  # Added Depends
-from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware  # Added CORS
-from fastapi.responses import JSONResponse
-
-from app.api.routers.admin import admin_router  # Add this line
-from app.api.routers.auth import auth_router, users_router  # This should now work
-
 # --- Project Specific Imports ---
-from app.core.config import settings  # Import settings
+# Import settings early for Celery fallback
+from app.core.config import settings  # MOVED UP
 
-# from app.db.session import engine # Uncomment if used in lifespan/health
-# from app.db.models import Base # Uncomment if used in lifespan
+# Celery import - keep try/except if Celery setup is still evolving
+try:
+    from app.tasks.celery_app import celery_app
+except ImportError:
+    from celery import Celery  # Fallback import
+
+    logger_celery_fallback = logging.getLogger(__name__ + ".celery_fallback")
+    logger_celery_fallback.warning(
+        "Celery app not found at app.tasks.celery_app. Using a basic placeholder. "
+        "Ensure CELERY_BROKER_URL and CELERY_RESULT_BACKEND are set in .env if this fallback is used."
+    )
+    celery_app = Celery(
+        "tasks_placeholder",
+        broker=settings.CELERY_BROKER_URL,  # settings is now available
+        result_backend=settings.CELERY_RESULT_BACKEND,  # settings is now available
+    )
+    celery_app.conf.update(task_track_started=True)
+
+
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status  # Added APIRouter
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+# Import Routers
+from app.api.routers.admin import admin_router
+from app.api.routers.auth import auth_router
+from app.api.routers.jobs import router as jobs_router
+from app.api.routers.users import router as users_router
+from app.db.session import async_engine, get_async_session
 
 # Configure basic logging
-logging.basicConfig(level=logging.INFO)  # Or use settings.LOG_LEVEL later
+logging.basicConfig(
+    level=settings.LOG_LEVEL.upper(), format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
-# --- Celery App (Keep configuration here or move to dedicated module later) ---
-# TODO: Consider moving Celery app setup to app/tasks/celery_app.py later
-celery_app = Celery("tasks", broker="redis://redis:6379/0")  # Use settings.CELERY_BROKER_URL later
-celery_app.conf.update(
-    result_backend="redis://redis:6379/0",  # Use settings.CELERY_RESULT_BACKEND later
-)
 
-
-# --- Lifespan Management (for startup/shutdown events) ---
+# --- Lifespan Management ---
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup logic: connect to DB, initialize resources, etc.
+async def lifespan(_app_instance: FastAPI):  # Prefixed app_instance with underscore
     logger.info(f"Starting up {settings.APP_NAME} v{settings.APP_VERSION}...")
-    # Example: Create DB tables if they don't exist (handled by Alembic now)
-    # You might add checks here to ensure DB/Redis are reachable at startup
+    logger.info(f"Environment: {settings.ENVIRONMENT}")
     yield
-    # Shutdown logic: close connections, cleanup resources
-    logger.info("Application shutdown.")
-    # Example: Dispose DB engine if needed
-    # try:
-    #     if engine:
-    #         await engine.dispose()
-    #         logger.info("Database connection pool disposed.")
-    # except Exception as e:
-    #     logger.error(f"Error during database connection disposal: {e}")
+    logger.info(f"Shutting down {settings.APP_NAME}...")
+    if async_engine:
+        logger.info("Disposing database engine connection pool...")
+        await async_engine.dispose()
 
 
 # --- FastAPI App Initialization ---
-# IMPORTANT: Define the 'app' instance *before* using @app decorators
 app = FastAPI(
-    title=settings.APP_NAME,  # Use settings
-    version=settings.APP_VERSION,  # Use settings
-    description="API for managing subtitle download jobs and user authentication.",  # Updated description
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    description=settings.APP_DESCRIPTION,
     lifespan=lifespan,
-    openapi_url="/api/openapi.json",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    docs_url=f"{settings.API_V1_STR}/docs",
+    redoc_url=f"{settings.API_V1_STR}/redoc",
 )
 
 # --- Middleware ---
-# CORS (Cross-Origin Resource Sharing) - Integrated from Step 2.9
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[str(origin).strip() for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_origins=[str(origin).strip("/") for origin in settings.BACKEND_CORS_ORIGINS],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
     logger.info(f"CORS enabled for origins: {settings.BACKEND_CORS_ORIGINS}")
 else:
-    logger.warning("CORS disabled (no BACKEND_CORS_ORIGINS configured)")
+    logger.info("CORS disabled (BACKEND_CORS_ORIGINS not configured or empty).")
 
 
-# --- Exception Handlers (Keep existing handlers) ---
+# --- Exception Handlers ---
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.warning(f"Validation error for {request.method} {request.url.path}: {exc.errors()}")
+    logger.warning(
+        f"Request validation error: {request.method} {request.url.path} - Errors: {exc.errors()}",
+        extra={"errors": exc.errors()},
+    )
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": "Validation Error", "errors": exc.errors()},
@@ -86,77 +96,135 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 @app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    logger.info(
-        f"HTTPException for {request.method} {request.url.path}: {exc.status_code} - {exc.detail}"
-    )
+async def http_exception_handler_custom(
+    request: Request,
+    exc: HTTPException,
+):
+    """Custom handler for HTTP exceptions.
+
+    Args:
+        request: The incoming request
+        exc: The HTTP exception that was raised
+    """
+    # Force use of exc parameter
+    status_code, detail, headers = exc.status_code, exc.detail, getattr(exc, "headers", None)
+
+    if status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
+        logger.error(
+            f"HTTPException (Server Error): {status_code} for {request.method} {request.url.path} - Detail: {detail}",
+            exc_info=True,
+        )
+    elif status_code in [
+        status.HTTP_400_BAD_REQUEST,
+        status.HTTP_404_NOT_FOUND,
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+    ]:
+        logger.warning(
+            f"HTTPException (Client Error): {status_code} for {request.method} {request.url.path} - Detail: {detail}"
+        )
+
     return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail},
-        headers=getattr(exc, "headers", None),
+        status_code=status_code,
+        content={"detail": detail},
+        headers=headers,
     )
 
 
 @app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception):
-    logger.exception(f"Unhandled exception for request {request.method} {request.url.path}")
+async def generic_exception_handler_custom(request: Request, _exc: Exception):
+    logger.exception(f"Unhandled exception during request: {request.method} {request.url.path}")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "An unexpected internal server error occurred."},
+        content={"detail": "An unexpected internal server error occurred. Please try again later."},
     )
 
 
 # --- API Routers ---
-# Include authentication and user management routers - Integrated from Step 2.9
-app.include_router(auth_router, prefix="/api")  # Mounts under /api/auth/*
-app.include_router(users_router, prefix="/api")  # Mounts under /api/users/*
-app.include_router(admin_router, prefix="/api")  # Mounts under /api/admin/*
+api_v1_router = APIRouter()
 
-# Add job router later: app.include_router(jobs_router, prefix="/api")
-
-# --- Basic API Routes (Keep existing) ---
-
-
-# Root endpoint for /api
-@app.get("/api", tags=["Root"])
-async def api_root():
-    return {"message": f"Welcome to {settings.APP_NAME} API"}
+# Include your specific feature routers into this v1 group
+# These routers (auth_router, etc.) should have their own prefixes (e.g., "/auth")
+api_v1_router.include_router(auth_router)  # Assuming auth_router has prefix like "/auth"
+api_v1_router.include_router(users_router)  # Assuming users_router has prefix like "/users"
+api_v1_router.include_router(admin_router)  # Assuming admin_router has prefix like "/admin"
+api_v1_router.include_router(jobs_router)  # Assuming jobs_router has prefix like "/jobs"
 
 
-# Detailed health check at /api/healthz
-@app.get(
-    "/api/healthz",
+@api_v1_router.get("/", tags=["API Root"], summary="API v1 Root")
+async def api_v1_root_endpoint():  # Renamed for clarity
+    return {
+        "message": f"Welcome to {settings.APP_NAME} - API Version 1",
+        "version": settings.APP_VERSION,
+    }
+
+
+@api_v1_router.get(
+    "/healthz",
     tags=["Health"],
-    summary="Detailed application health check",
+    summary="Detailed API health check",  # Removed "(via APIRouter)" for cleaner summary
     status_code=status.HTTP_200_OK,
+    description="Performs a detailed health check of the API and its critical dependencies (e.g., database).",
+    # response_model=dict, # Consider defining a Pydantic model for this response
+    include_in_schema=True,
 )
-async def health_check_detailed():
-    # TODO: Add actual checks for DB, Redis using dependencies
-    db_ok = True
-    redis_ok = True
+async def health_check_api_v1_endpoint(db: AsyncSession = Depends(get_async_session)):  # Renamed
+    db_ok = False
+    redis_ok = True  # Placeholder, implement actual check if needed
+
+    try:
+        await db.execute(text("SELECT 1"))
+        db_ok = True
+        logger.debug("Health check: Database connection successful.")
+    except Exception as e:
+        logger.error(f"Health check: Database connection failed. Error: {e}", exc_info=True)
+
     if db_ok and redis_ok:
-        return {"status": "ok", "database": "connected", "redis": "connected"}  # Placeholder
+        return {
+            "status": "ok",
+            "dependencies": {
+                "database": "connected",
+                "redis": "connected" if redis_ok else "check_failed_or_not_applicable",
+            },
+        }
     else:
+        failed_deps = []
+        if not db_ok:
+            failed_deps.append("database")
+        # Example for adding redis check to failed_deps if it was implemented and failed
+        # if not redis_ok:
+        #     failed_deps.append("redis")
+        logger.error(f"API health check failed for dependencies: {', '.join(failed_deps)}")
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Dependency check failed"
-        )  # Placeholder
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Service unavailable. Failed dependencies: {', '.join(failed_deps)}.",
+        ) from None  # B904: Explicitly chain or break chain
 
 
-# Minimal health check at /health (for Docker - keep hidden from schema)
-@app.get("/health", tags=["Health"], status_code=status.HTTP_200_OK, include_in_schema=False)
-async def health_check_docker():
+# Use include_router to add the v1 router group to the main app with the prefix
+app.include_router(api_v1_router, prefix=settings.API_V1_STR)  # This is the correct way
+
+
+# --- Basic Non-API Routes (e.g., Docker health check) ---
+@app.get(
+    "/health",
+    tags=["System Health"],
+    summary="Basic system health check",
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+async def health_check_basic():
     return {"status": "healthy"}
 
 
-# --- Main execution block (Keep existing for local debugging) ---
+# --- Main execution block (for local debugging with Uvicorn) ---
 if __name__ == "__main__":
     import uvicorn
 
-    logger.info("Starting Uvicorn directly for debugging...")
+    logger.info("Starting Uvicorn server directly for local debugging...")
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,  # Be careful with reload and lifespan functions
-        log_level=logging.INFO,
+        host=settings.SERVER_HOST,
+        port=settings.SERVER_PORT,
+        reload=settings.DEBUG,
+        log_level=settings.LOG_LEVEL.lower(),
     )

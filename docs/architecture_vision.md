@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+
 # Architecture Vision: Subtitle Downloader Web Application (FastAPI Stack)
 
 ## Narrative Description
@@ -19,15 +20,15 @@ This application adopts a modern, containerized web architecture centered around
 
 **Key Architectural Benefits:**
 
-*   **Performance:** FastAPI provides high throughput for API requests. Celery enables non-blocking, asynchronous processing of potentially long-running subtitle jobs.
-*   **Scalability:** Individual components (API instances, Celery workers) can be scaled independently if needed (though initial deployment uses single instances).
-*   **Security:** Caddy handles TLS and security headers. FastAPI offers robust validation and dependency injection for security features. RBAC is implemented at the API level. Containerization provides process isolation.
-*   **Maintainability:** Clear separation of concerns between frontend, backend API, and background workers. Use of modern tooling and linters promotes code quality.
-*   **Developer Experience:** Hot reloading for frontend (Vite) and backend (Uvicorn/FastAPI) during development. Devcontainers provide a consistent environment.
+- **Performance:** FastAPI provides high throughput for API requests. Celery enables non-blocking, asynchronous processing of potentially long-running subtitle jobs.
+- **Scalability:** Individual components (API instances, Celery workers) can be scaled independently if needed (though initial deployment uses single instances).
+- **Security:** Caddy handles TLS and security headers. FastAPI offers robust validation and dependency injection for security features. RBAC is implemented at the API level. Containerization provides process isolation.
+- **Maintainability:** Clear separation of concerns between frontend, backend API, and background workers. Use of modern tooling and linters promotes code quality.
+- **Developer Experience:** Hot reloading for frontend (Vite) and backend (Uvicorn/FastAPI) during development. Devcontainers provide a consistent environment.
 
 ## Core Component Interaction Diagram (Mermaid)
 
-```mermaid
+````mermaid
 graph TD
     subgraph "User Browser"
         B[React SPA]
@@ -172,5 +173,6 @@ graph TD
     W -- Publish Logs --> R
 
     FE_Nginx -- Serves JS/CSS/HTML --> B
-```
->>>>>>> bbdeb9f (Chapter - 2 - commit of subro_web app)
+````
+
+> > > > > > > bbdeb9f (Chapter - 2 - commit of subro_web app)

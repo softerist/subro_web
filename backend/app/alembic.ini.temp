@@ -2,7 +2,7 @@
 
 [alembic]
 # path to migration scripts
-script_location = migrations
+script_location = alembic
 
 # template used to generate migration file names; The default value is %%(rev)s_%%(slug)s
 # Uncomment the line below if you want the files to be prepended with date and time
@@ -61,7 +61,7 @@ version_path_separator = os  # Use os.pathsep. Default configuration used for ne
 # output_encoding = utf-8
 
 #sqlalchemy.url = driver://user:pass@localhost/dbname
-sqlalchemy.url = ${DATABASE_URL}
+#sqlalchemy.url = ${DATABASE_URL}
 
 [post_write_hooks]
 # post_write_hooks defines scripts or Python functions that are run

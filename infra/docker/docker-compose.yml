@@ -35,6 +35,7 @@ services:
       - POETRY_VIRTUALENVS_CREATE=false # Tell poetry not to create venvs at runtime
       - POETRY_CACHE_DIR=/tmp/poetry_cache # Use a guaranteed writable location for cache
       - PYTHONPATH=/app # May still be needed
+      - POSTGRES_SERVER=db # This would also work if devcontainer.json didn't set it
     networks:
       - app_network
     depends_on:
@@ -133,23 +134,24 @@ services:
 
   db:
     image: postgres:16-alpine
+    ports:
+      - "5432:5432" # Maps container port 5432 to host port 5432
+    container_name: subapp_dev_db # Optional, but can be helpful
     volumes:
       - postgres_data:/var/lib/postgresql/data
     env_file:
       - ../../.env # Loads POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
     environment:
-      # PGDATA is already set by the image, but explicitly setting is fine if needed elsewhere
       - PGDATA=/var/lib/postgresql/data/pgdata
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=Pa44w0rd
+      - POSTGRES_DB=subappdb
     networks:
       - app_network
     healthcheck:
       # Uses env vars loaded via env_file
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h localhost",
-        ]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
       timeout: 5s
       retries: 5
     restart: always
