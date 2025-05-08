@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-
 # Subtitle Downloader Web Application
 
 [![CI Status](https://github.com/softerist/subro_web/actions/workflows/ci.yml/badge.svg)](https://github.com/softerist/subro_web/actions/workflows/ci.yml)
