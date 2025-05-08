@@ -1,0 +1,84 @@
+{
+  "name": "Subtitle Downloader Dev Environment",
+  "dockerComposeFile": [
+    "../infra/docker/docker-compose.yml",
+    "../infra/docker/docker-compose.override.yml"
+  ],
+  "service": "api", // VS Code will connect to and operate within the 'api' service
+  "workspaceFolder": "/app", // The default folder VS Code opens in the container
+  // Set environment variables specific to the dev container environment
+  // These will be available to your application when it runs inside this dev container.
+  "containerEnv": {
+    "POSTGRES_SERVER": "db", // Tells the app the DB hostname is 'db'
+    "REDIS_HOST": "redis", // Tells the app the Redis hostname is 'redis'
+    "PYTHONUNBUFFERED": "1" // Ensures Python output (print statements, logs) appears immediately
+    // Add any other non-secret environment variables needed for the dev context.
+    // Secrets (like DB passwords) should still primarily come from your .env file,
+    // which is gitignored and loaded by Pydantic Settings or Docker Compose.
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        // Python specific settings
+        "python.defaultInterpreterPath": "/app/.venv/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": false,
+        "python.linting.flake8Enabled": false,
+        "python.linting.ruffEnabled": true,
+        "python.formatting.provider": "none",
+        "python.testing.pytestArgs": ["tests"],
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestEnabled": true,
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          }
+        },
+        // TypeScript/JavaScript specific settings
+        "eslint.validate": [
+          "javascript",
+          "javascriptreact",
+          "typescript",
+          "typescriptreact"
+        ],
+        "eslint.workingDirectories": ["./frontend"],
+        "editor.formatOnSave": true,
+        "[typescript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[typescriptreact]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[javascript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[json]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "files.eol": "\n",
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+      "extensions": [
+        "ms-vscode-remote.remote-containers",
+        "ms-azuretools.vscode-docker",
+        "github.vscode-pull-request-github",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "editorconfig.editorconfig",
+        "eamodio.gitlens",
+        "redhat.vscode-yaml",
+        "bierner.markdown-mermaid",
+        "yzhang.markdown-all-in-one"
+      ]
+    }
+  },
+  // "forwardPorts": [8000, 5173, 5432, 6379], // Caddy proxy generally handles this for app access
+  "postCreateCommand": "sudo chown -R vscode /app && poetry install && cd frontend && npm install && cd .. && pre-commit install && pre-commit install --hook-type commit-msg",
+  "remoteUser": "vscode"
+}

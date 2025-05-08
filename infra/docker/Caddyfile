@@ -1,0 +1,55 @@
+# infra/docker/Caddyfile (Development)
+{
+	debug
+	local_certs
+}
+
+(common_security_headers) {
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+localhost {
+	tls internal
+	import common_security_headers
+
+	# Define named matchers for clarity
+	@api path /api*      # Matches /api and /api/*
+	@websockets path /ws* # Matches /ws and /ws/*
+
+	# IMPORTANT: Use route blocks for explicit ordering and control
+
+	# 1. Handle API requests - NO rewrite/strip should happen here
+	route @api {
+		reverse_proxy api:8000
+	}
+
+	# 2. Handle WebSocket requests
+	route @websockets {
+		reverse_proxy api:8000 {
+			header_up Host {http.request.host}
+			header_up X-Real-IP {http.request.remote}
+			header_up Connection {http.request.header.Connection}
+			header_up Upgrade {http.request.header.Upgrade}
+		}
+	}
+
+	# 3. Handle everything else (frontend) - This route block acts as the final catch-all
+	route {
+		reverse_proxy frontend:5173 {
+			header_up Connection {http.request.header.Connection}
+			header_up Upgrade {http.request.header.Upgrade}
+		}
+	}
+
+	# Log configuration
+	log {
+		output stdout
+		format console
+		level DEBUG
+	}
+}

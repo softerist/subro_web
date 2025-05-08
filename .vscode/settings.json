@@ -1,0 +1,73 @@
+{
+  // General Workspace Settings
+  "files.eol": "\n", // Enforce LF line endings
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "editor.rulers": [100], // Visual guide for line length
+  // Python Specific Settings (using Ruff)
+  "python.defaultInterpreterPath": "/app/.venv/bin/python", // Set interpreter for Dev Container
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": false,
+  "python.linting.flake8Enabled": false,
+  "python.linting.ruffEnabled": true,
+  "python.formatting.provider": "none", // Let Ruff handle formatting via editor integration
+  "python.testing.pytestArgs": [
+    "backend/tests" // Point pytest to the tests directory
+  ],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true,
+  // Ruff Integration
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit", // Use Ruff's fixAll
+      "source.organizeImports": "explicit" // Use Ruff's import sorting
+    }
+  },
+  // Frontend Specific Settings (ESLint & Prettier)
+  "eslint.workingDirectories": [
+    {
+      "directory": "frontend",
+      "changeProcessCWD": true
+    } // Crucial for monorepo ESLint
+  ],
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact"
+  ],
+  "editor.formatOnSave": true,
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  // Tailwind CSS Integration
+  "tailwindCSS.includeLanguages": {
+    "typescript": "javascript",
+    "typescriptreact": "javascript"
+  },
+  "tailwindCSS.experimental.classRegex": [
+    ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"] // For class-variance-authority
+  ],
+  // Docker Integration
+  "docker.commands.composeUp": "docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml --project-name subapp_dev up -d --build",
+  "docker.commands.composeDown": "docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml --project-name subapp_dev down -v --remove-orphans",
+  "containers.commands.composeUp": "docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml --project-name subapp_dev up -d --build",
+  "containers.commands.composeDown": "docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml --project-name subapp_dev down -v --remove-orphans"
+}

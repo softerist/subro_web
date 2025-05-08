@@ -1,0 +1,95 @@
+# infra/docker/docker-compose.override.yml
+# Overrides for local development: volume mounts for hot-reloading, specific commands.
+
+services:
+  api:
+    volumes:
+      # CORRECTED PATH: Mount project's backend code into /app for hot-reloading
+      - ../../backend:/app
+    # PYTHONPATH is inherited from the base docker-compose.yml
+    # environment:
+    #   - PYTHONPATH=/app
+    # Command to run uvicorn with live reload
+    command:
+      [
+        "poetry",
+        "run",
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+        "--reload-dir",
+        "/app",
+      ]
+
+  worker:
+    volumes:
+      # CORRECTED PATH: Mount project's backend code into /app
+      - ../../backend:/app
+    # PYTHONPATH is inherited from the base docker-compose.yml
+    # environment:
+    #   - PYTHONPATH=/app
+    # Command to run celery worker. '-P solo' is useful for local debugging (disables concurrency).
+    # Remove '-P solo' if you need to test concurrency.
+    command:
+      [
+        "poetry",
+        "run",
+        "celery",
+        "-A",
+        "app.tasks.celery_app",
+        "worker",
+        "--loglevel=info",
+        "-P",
+        "solo",
+      ]
+
+  frontend:
+    # Command to run Vite dev server with HMR, listening on all interfaces
+    # The '--host 0.0.0.0' makes it accessible to Caddy over the docker network
+    command: npm run dev -- --host 0.0.0.0
+    volumes:
+      # CORRECTED: Mount the entire frontend source directory for live updates
+      - ../../frontend:/app
+      # Important: Keep this anonymous volume to isolate container's node_modules
+      # This prevents the host's node_modules (or lack thereof) from interfering
+      - /app/node_modules
+    ports:
+      # Expose Vite's port directly to the host (optional, Caddy is the primary entry)
+      # Useful for direct access during debugging if Caddy has issues.
+      - "5173:5173"
+    # Healthcheck for the Vite dev server (can be slow to start)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 15s # Check less frequently
+      timeout: 10s # Allow more time for response
+      retries: 5
+      start_period: 30s # Give Vite 30 seconds to start before first check
+
+  # No need to redefine volumes or networks here, they are inherited from the base file.
+  db_test:
+    # Your test DB service
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: Pa44w0rd
+      POSTGRES_DB: subappdb
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+# Define networks used in this override file
+
+# Define volumes specific to the override if needed
+volumes:
+  postgres_test_data:
+    driver: local # Or leave empty for default driver

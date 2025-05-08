@@ -1,0 +1,131 @@
+# backend/pyproject.toml
+[tool.poetry]
+name = "subtitle-downloader-backend"
+version = "0.1.0"
+description = "Backend API and Worker for the Subtitle Downloader Web Application"
+authors = ["Your Name <you@example.com>"] # Replace with actual author info
+# readme = "README.md"
+package-mode = false
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = { version = "^0.109.0", extras = ["all"] } # Some versions of fastapi[all] might pull in an older uvicorn
+uvicorn = { version = ">=0.29.0,<0.30.0", extras = ["standard"] } # An older explicit requirement?
+pydantic = {extras = ["email", "dotenv"], version = "^2.7.1"} # For settings management and email validation
+redis = {extras = ["hiredis"], version = "^5.0.4"} # For Celery broker/backend and PubSub
+celery = {extras = ["redis"], version = "^5.4.0"}
+python-json-logger = "^2.0.7" # For structured logging
+
+
+gunicorn = "^22.0.0" # Production server (optional alternative to uvicorn workers)
+sqlalchemy = "^2.0.29" # ORM
+psycopg = {extras = ["binary"], version = "^3.1.18"} # Postgres driver (psycopg3 for sync)
+asyncpg = "^0.30.0"
+alembic = "^1.13.1" # Database migrations
+fastapi-users = {extras = ["sqlalchemy"], version = "^14.0.1"} # User management
+fastapi-users-db-sqlalchemy = ">=7.0.0"  # <--- Update to match fastapi-users requirement
+argon2-cffi = "^23.1.0" # Password hashing (preferred)
+# bcrypt = "^4.1.2" # Alternative password hashing
+python-jose = {extras = ["cryptography"], version = "^3.4.0"} # For JWTs if not fully handled by fastapi-users
+slowapi = "^0.1.9" # Rate limiting
+# fastapi-csrf-protect = "^1.0.0" # CSRF Protection
+
+# --- Development Dependencies ---
+# asyncpg = "^0.30.0"
+email-validator = "^2.2.0"
+python-dotenv = "^1.1.0"
+pydantic-settings = "^2.9.1"
+psycopg2-binary = "^2.9.10"
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+# python-multipart = "^0.0.20"
+# python-multipart = "^0.0.9" # More common stable version
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+pytest-cov = "^5.0.0" # Code coverage
+pytest-asyncio = "^0.23.6" # For testing async code
+httpx = "^0.27.0" # HTTP client for testing API
+factory-boy = "^3.3.0" # Test data generation
+pytest-mock = "^3.12.0"
+# testcontainers = {extras = ["postgres", "redis"], version = "^4.4.0"} # For integration testing with real services
+# pre-commit = "^3.7.0" # Managed via system/global install usually
+ruff = "^0.4.4" # Linter & Formatter
+black = "^24.4.2" # Formatter (used via Ruff or standalone)
+isort = "^5.13.2" # Import sorting (used via Ruff)
+mypy = "^1.9.0" # Static type checking
+commitizen = "^3.21.3" # Conventional commits helper
+pytest-docker = "^3.2.1"
+pytest-dotenv = "^0.5.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# --- Ruff Configuration ---
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "C", "B", "I", "UP", "ASYNC", "ARG", "PTH", "PD", "NPY", "RUF"]
+# Add B008 to the ignore list
+ignore = [
+    "E501", # Ignore line length errors (handled by formatter)
+    "B008", # Ignore FastAPI Depends in args warning
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+# --- Pytest Configuration ---
+[tool.pytest.ini_options]
+minversion = "7.0"
+asyncio_mode = "auto"
+log_cli = true
+log_cli_level = "INFO"
+python_files = "test_*.py"
+addopts = "-ra -q --cov=app --cov-report=term-missing"
+testpaths = [
+    "tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:pytest_asyncio.plugin",
+    # Add this line to ignore the starlette warning
+    "ignore:Please use `import python_multipart` instead\\.:PendingDeprecationWarning:starlette\\.formparsers",
+]
+python_classes = "Test*"
+python_functions = "test_*"
+# Environment variables for tests (can be overridden by .env.test)
+env_files = [
+    "APP_ENV=test",
+    "DATABASE_URL=postgresql+psycopg://test_user:test_password@localhost:5433/test_db", # Example for testcontainers
+    "REDIS_URL=redis://localhost:6380/0", # Example for testcontainers
+    "JWT_SECRET_KEY=testsecretkey", # Use a dummy secret for tests
+    ".env.test",
+]
+
+# --- MyPy Configuration ---
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true # Start permissive, tighten later
+check_untyped_defs = true
+disallow_untyped_defs = true
+# Add paths as needed
+# mypy_path = "app"
+
+# --- Commitizen ---
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+version_files = [
+    "backend/pyproject.toml:version",
+    "frontend/package.json:version" # If managing frontend version here too
+]
+tag_format = "v$version"
+bump_message = "chore(release): bump version to $new_version"
