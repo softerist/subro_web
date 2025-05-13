@@ -12,22 +12,36 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
 
 # --- BEGIN EARLY PATH MODIFICATION ---
-# This block ensures that the 'app' module (containing core.config, db.base, db.models)
-# is findable by Python when Alembic runs this script.
-# It assumes 'env.py' is in 'project_root/alembic/' and 'app' is in 'project_root/app/'.
-# 'project_root_for_app_module' will thus point to 'project_root'.
-
-# alembic_dir is the directory containing this env.py file
 alembic_dir = Path(__file__).resolve().parent
-# project_root_for_app_module is the parent of alembic_dir (e.g., your project's root)
 project_root_for_app_module = alembic_dir.parent
+
+# --- DEBUGGING SYS.PATH ---
+print(f"DEBUG [env.py]: __file__ is {__file__}")
+print(f"DEBUG [env.py]: alembic_dir is {alembic_dir}")
+print(f"DEBUG [env.py]: project_root_for_app_module is {project_root_for_app_module}")
+original_sys_path = list(sys.path)  # Make a copy
+# --- END DEBUGGING SYS.PATH ---
 
 if str(project_root_for_app_module) not in sys.path:
     sys.path.insert(0, str(project_root_for_app_module))
-    # Optional: print for debugging path setup
-    # print(f"DEBUG [env.py early path mod]: Added {project_root_for_app_module} to sys.path.")
-    # print(f"DEBUG [env.py early path mod]: sys.path is now: {sys.path}")
+    print(f"DEBUG [env.py early path mod]: Added {project_root_for_app_module} to sys.path.")
+else:
+    print(f"DEBUG [env.py early path mod]: {project_root_for_app_module} was already in sys.path.")
+
+print(f"DEBUG [env.py early path mod]: sys.path BEFORE Alembic imports is now: {sys.path}")
 # --- END EARLY PATH MODIFICATION ---
+
+# Application imports
+print("DEBUG [env.py]: Attempting to import Base from app.db.base")
+try:
+    from app.db.base import Base  # This is line 35 in your original traceback
+
+    print("DEBUG [env.py]: Successfully imported Base")
+except ImportError as e:
+    print(f"DEBUG [env.py]: FAILED to import Base. Error: {e}")
+    print(f"DEBUG [env.py]: Original sys.path was: {original_sys_path}")
+    print(f"DEBUG [env.py]: Current sys.path is: {sys.path}")
+    raise  # Re-raise the error to see the full traceback
 
 # Application imports - these should now work due to path modification
 # is used because these imports must happen after sys.path is modified.

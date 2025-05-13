@@ -1,8 +1,8 @@
 """
 
-Revision ID: 32decd351f99
+Revision ID: 3174f72f3821
 Revises:
-Create Date: 2025-05-12 20:24:26.048037
+Create Date: 2025-05-13 07:20:16.640198
 
 """
 
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "32decd351f99"
+revision: str = "3174f72f3821"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
