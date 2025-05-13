@@ -129,3 +129,6 @@ version_files = [
 ]
 tag_format = "v$version"
 bump_message = "chore(release): bump version to $new_version"
+
+[tool.poetry.scripts]
+init-data = "app.initial_data:main_cli_runner_function" # You'd need to wrap asyncio.run(main())

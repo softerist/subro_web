@@ -25,6 +25,8 @@ services:
       dockerfile: Dockerfile
       target: development # Use the development stage from backend/Dockerfile
     # Command is overridden in docker-compose.override.yml for hot-reloading
+    ports:
+      - "8000:8000" # Host port : Container port
     volumes:
       # Base volume mount (can be overridden) - maps built code into /app
       - ../../backend:/app # Mount source for reference, but override focuses on dev workflow
@@ -70,6 +72,7 @@ services:
       - POETRY_VIRTUALENVS_CREATE=false
       - POETRY_CACHE_DIR=/tmp/poetry_cache
       - PYTHONPATH=/app
+      - POSTGRES_SERVER=db # This would also work if devcontainer.json didn't set it
     networks:
       - app_network
     depends_on:
@@ -135,7 +138,7 @@ services:
   db:
     image: postgres:16-alpine
     ports:
-      - "5432:5432" # Maps container port 5432 to host port 5432
+      - "${POSTGRES_PORT:-5432}:5432" # Reads from .env, maps to host
     container_name: subapp_dev_db # Optional, but can be helpful
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -143,9 +146,9 @@ services:
       - ../../.env # Loads POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
     environment:
       - PGDATA=/var/lib/postgresql/data/pgdata
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=Pa44w0rd
-      - POSTGRES_DB=subappdb
+      - POSTGRES_USER=${POSTGRES_USER:-admin} # Reads from .env, defaults to admin
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-Pa44w0rd} # Reads from .env
+      - POSTGRES_DB=${POSTGRES_DB:-subappdb} # <--- THIS IS CRUCIAL
     networks:
       - app_network
     healthcheck:

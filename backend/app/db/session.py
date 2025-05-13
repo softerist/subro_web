@@ -1,23 +1,32 @@
 # backend/app/db/session.py
-from collections.abc import AsyncGenerator  # For precise type hinting of the generator
+import logging  # For logging warnings
+from collections.abc import AsyncGenerator, Generator  # Added Generator for sync part
 
 from fastapi import Depends
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.orm import Session as SyncSession
+from sqlalchemy.orm import sessionmaker  # Alias Session
 
-from app.core.config import settings  # Your Pydantic settings instance
+from app.core.config import settings
 
 from .models.user import User  # Assuming User model is in .models.user
 
+logger = logging.getLogger(__name__)
+
 # 1. Create the async engine
+# Ensure ASYNC_DATABASE_URI from settings is a string representation of the DSN.
+# The settings.ASYNC_DATABASE_URI property should already be a PostgresDsn,
+# which stringifies correctly.
 async_engine = create_async_engine(
-    str(settings.ASYNC_DATABASE_URI),  # Ensure ASYNC_DATABASE_URI is a string
+    str(settings.ASYNC_DATABASE_URI),
     pool_pre_ping=True,
-    echo=settings.DB_ECHO,  # Control SQL echoing via settings (e.g., settings.DEBUG)
+    echo=settings.DB_ECHO,
 )
 
 # 2. Create a configured "AsyncSessionLocal" factory
@@ -25,8 +34,8 @@ AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,
     autocommit=False,
     autoflush=False,
-    expire_on_commit=False,  # Good practice for async, prevents issues with detached objects
-    class_=AsyncSession,  # Explicitly specify the class, though often inferred
+    expire_on_commit=False,  # Important for async to prevent issues with detached objects
+    class_=AsyncSession,
 )
 
 
@@ -34,23 +43,19 @@ AsyncSessionLocal = async_sessionmaker(
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     """
     Dependency to get an asynchronous database session.
-    Ensures the session is closed and rolled back on error.
+    The `async with` statement ensures the session is closed automatically.
+    Rolls back the session on any exception during its use.
     """
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            # No explicit commit here, route handlers should manage commits.
+            # If the route handler using this session needs to commit,
+            # it should call `await session.commit()` explicitly.
         except Exception:
             await session.rollback()
             raise
-        finally:
-            # The 'async with' context manager handles closing the session.
-            # An explicit session.close() is generally not needed here with async_sessionmaker context manager.
-            # However, if you were not using 'async with AsyncSessionLocal() as session:',
-            # then await session.close() would be crucial.
-            # For consistency and explicitness, keeping it doesn't harm,
-            # but it's good to understand the context manager handles it.
-            await session.close()  # Often redundant with `async with`, but ensures closure.
+        # No explicit `await session.close()` needed here;
+        # `async with AsyncSessionLocal() as session:` handles closing.
 
 
 # --- fastapi-users Database Adapter Setup ---
@@ -64,36 +69,77 @@ async def get_user_db(
 
 
 # --- Synchronous Session for Alembic or Scripts (Optional) ---
-# Keep this section if you need synchronous sessions for tasks outside FastAPI (e.g., Alembic migrations, standalone scripts).
-# Ensure SYNC_DATABASE_URI is configured in your settings if you use this.
+# This section is useful if you need synchronous database access,
+# for example, for Alembic migrations or standalone scripts.
+
+sync_engine = None
+SyncSessionLocal = None
+
+if settings.SYNC_DATABASE_URI:
+    try:
+        sync_engine = create_engine(
+            str(settings.SYNC_DATABASE_URI),
+            echo=settings.DB_ECHO,  # Can share echo setting
+            pool_pre_ping=True,  # Good practice for sync engine too
+        )
+        SyncSessionLocal = sessionmaker(
+            autocommit=False,
+            autoflush=False,
+            bind=sync_engine,
+            class_=SyncSession,  # Use the aliased SyncSession
+        )
+        logger.info("Synchronous database engine and session maker configured.")
+    except Exception as e:
+        logger.error(f"Failed to configure synchronous database engine: {e}", exc_info=True)
+        sync_engine = None
+        SyncSessionLocal = None
+
+else:
+    logger.warning(
+        "SYNC_DATABASE_URI not configured in settings. "
+        "Synchronous database session utilities (e.g., for Alembic if not configured separately) will not be available via SyncSessionLocal."
+    )
+
+
+def get_sync_db_session() -> Generator[SyncSession, None, None]:
+    """
+    Provides a synchronous database session.
+    Intended for use in synchronous contexts like scripts or Alembic (if not using engine directly).
+    The session must be closed by the caller or via the context manager pattern.
+    """
+    if SyncSessionLocal is None:
+        raise RuntimeError(
+            "Synchronous session factory (SyncSessionLocal) is not initialized. "
+            "Ensure SYNC_DATABASE_URI is configured correctly."
+        )
+
+    db: SyncSession = SyncSessionLocal()
+    try:
+        yield db
+        # db.commit() # Commits should be handled by the code using the session
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+# Example of how Alembic's env.py might use the sync_engine:
 #
-# from sqlalchemy import create_engine
-# from sqlalchemy.orm import sessionmaker, Session as SyncSession # Alias Session to avoid name clash
+# from app.db.session import sync_engine # Assuming Alembic can import this
+# ...
+# def run_migrations_online():
+#     """Run migrations in 'online' mode.
+#     In this scenario we need to create an Engine
+#     and associate a connection with the context.
+#     """
+#     if sync_engine is None:
+#         raise Exception("Alembic migrations require sync_engine to be configured.")
 #
-# if settings.SYNC_DATABASE_URI: # Conditionally create if configured
-#     sync_engine = create_engine(
-#         str(settings.SYNC_DATABASE_URI),
-#         echo=settings.DB_ECHO, # Can use the same echo setting
-#     )
-#     SyncSessionLocal = sessionmaker(
-#         autocommit=False,
-#         autoflush=False,
-#         bind=sync_engine,
-#         class_=SyncSession # Use the aliased SyncSession
-#     )
-#
-#     def get_sync_db_session() -> SyncSession: # Use type hint for clarity
-#         """
-#         Provides a synchronous database session.
-#         Remember to close the session manually or use a context manager.
-#         """
-#         db = SyncSessionLocal()
-#         try:
-#             yield db
-#         finally:
-#             db.close()
-# else:
-#     sync_engine = None
-#     SyncSessionLocal = None
-#     get_sync_db_session = None
-#     print("Warning: SYNC_DATABASE_URI not configured. Synchronous DB session utilities will not be available.")
+#     connectable = sync_engine
+#     with connectable.connect() as connection:
+#         context.configure(
+#             connection=connection, target_metadata=target_metadata
+#         )
+#         with context.begin_transaction():
+#             context.run_migrations()

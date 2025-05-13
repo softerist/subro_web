@@ -69,8 +69,9 @@ FROM base AS development
 WORKDIR ${APP_HOME}
 
 # Install curl (needed for docker-compose healthcheck)
+# And netcat-openbsd (needed for the entrypoint script's DB check)
 # And any dev-specific system dependencies (like git if needed by poetry plugins)
-RUN apt-get update && apt-get install -y curl --no-install-recommends && \
+RUN apt-get update && apt-get install -y curl netcat-openbsd --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy Poetry files, ensuring correct ownership
@@ -81,8 +82,11 @@ COPY --chown=appuser:appuser pyproject.toml poetry.lock ./
 RUN poetry install --verbose --sync --no-cache
 
 # Copy application code (less critical now due to volume mount, but good practice)
-# Remove the duplicate COPY line
 COPY --chown=appuser:appuser . .
+
+# --- ADDED: Copy and set permissions for the entrypoint script ---
+COPY --chown=appuser:appuser ./scripts/entrypoint.sh /app/scripts/entrypoint.sh
+RUN chmod +x /app/scripts/entrypoint.sh
 
 # Switch to non-root user for running the application
 USER appuser
@@ -90,9 +94,13 @@ USER appuser
 # Expose the port (good practice)
 EXPOSE 8000
 
-# Default command is intentionally left out or commented
-# It WILL BE OVERRIDDEN by docker-compose.override.yml for development
-# CMD ["echo", "Default CMD - Should be overridden by Compose for dev"]
+# --- ADDED: Set the entrypoint script ---
+# This script waits for DB, runs migrations, then executes CMD
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
+
+# --- MODIFIED: Define the default command for development ---
+# This is what entrypoint.sh executes via 'exec "$@"' after its tasks
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 
 # --- Production Stage (API) ---
@@ -114,6 +122,7 @@ USER appuser
 EXPOSE 8000
 
 # Use the venv Python via the updated PATH
+# NOTE: Production does NOT use the entrypoint script
 CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-w", "4", "-b", "0.0.0.0:8000", "app.main:app"]
 
 
@@ -122,4 +131,5 @@ FROM production-api AS production-worker
 # Inherits everything from production-api (user, venv, code, WORKDIR, USER, PATH)
 
 # Use the venv Python via the updated PATH
+# NOTE: Production does NOT use the entrypoint script
 CMD ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=INFO"] # Add pool/concurrency as needed e.g. "-P gevent -c 4"

@@ -2,14 +2,13 @@ import logging
 from contextlib import asynccontextmanager
 
 # --- Project Specific Imports ---
-# Import settings early for Celery fallback
-from app.core.config import settings  # MOVED UP
+from app.core.config import settings  # Should be one of the first project imports
 
-# Celery import - keep try/except if Celery setup is still evolving
+# Celery import
 try:
-    from app.tasks.celery_app import celery_app
+    from app.tasks.celery_app import celery_app  # type: ignore
 except ImportError:
-    from celery import Celery  # Fallback import
+    from celery import Celery
 
     logger_celery_fallback = logging.getLogger(__name__ + ".celery_fallback")
     logger_celery_fallback.warning(
@@ -17,40 +16,105 @@ except ImportError:
         "Ensure CELERY_BROKER_URL and CELERY_RESULT_BACKEND are set in .env if this fallback is used."
     )
     celery_app = Celery(
-        "tasks_placeholder",
-        broker=settings.CELERY_BROKER_URL,  # settings is now available
-        result_backend=settings.CELERY_RESULT_BACKEND,  # settings is now available
+        "tasks_placeholder",  # A name for the Celery app
+        broker=settings.CELERY_BROKER_URL,
+        result_backend=settings.CELERY_RESULT_BACKEND,
     )
-    celery_app.conf.update(task_track_started=True)
+    # Basic Celery configuration if using fallback
+    celery_app.conf.update(
+        task_track_started=True,
+    )
 
-
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status  # Added APIRouter
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
+from fastapi_users.exceptions import UserNotExists  # <--- THIS IS THE MISSING IMPORT
+from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase  # Adapter for FastAPI-Users
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import Routers
 from app.api.routers.admin import admin_router
-from app.api.routers.auth import auth_router
+from app.api.routers.auth import auth_router as custom_auth_router
 from app.api.routers.jobs import router as jobs_router
 from app.api.routers.users import router as users_router
-from app.db.session import async_engine, get_async_session
+
+# --- Add these imports for initial superuser creation ---
+from app.core.users import UserManager  # For creating UserManager instance
+from app.db.models.user import User as UserModel
+from app.db.session import AsyncSessionLocal, async_engine, get_async_session
+from app.schemas.user import UserCreate  # Pydantic schema for user creation
 
 # Configure basic logging
 logging.basicConfig(
-    level=settings.LOG_LEVEL.upper(), format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=settings.LOG_LEVEL.upper(),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
 
 # --- Lifespan Management ---
 @asynccontextmanager
-async def lifespan(_app_instance: FastAPI):  # Prefixed app_instance with underscore
+async def lifespan(_app_instance: FastAPI):
     logger.info(f"Starting up {settings.APP_NAME} v{settings.APP_VERSION}...")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
-    yield
+
+    if settings.FIRST_SUPERUSER_EMAIL and settings.FIRST_SUPERUSER_PASSWORD:
+        logger.info(
+            f"Attempting to create/ensure initial superuser: {settings.FIRST_SUPERUSER_EMAIL}"
+        )
+        # Use AsyncSessionLocal for a session outside of request scope
+        async with AsyncSessionLocal() as session:  # Create a new session for this startup task
+            try:
+                user_db_adapter = SQLAlchemyUserDatabase(session, UserModel)
+                user_manager = UserManager(
+                    user_db_adapter
+                )  # UserManager typically handles its own password_helper
+
+                try:
+                    # Check if user exists
+                    existing_user = await user_manager.get_by_email(settings.FIRST_SUPERUSER_EMAIL)
+                    if existing_user:
+                        logger.info(
+                            f"Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {existing_user.id}) already exists."
+                        )
+                except UserNotExists:
+                    # User does not exist, so create them
+                    logger.info(
+                        f"Initial superuser {settings.FIRST_SUPERUSER_EMAIL} not found, creating..."
+                    )
+                    user_create_data = UserCreate(
+                        email=settings.FIRST_SUPERUSER_EMAIL,
+                        password=settings.FIRST_SUPERUSER_PASSWORD,
+                        # username=settings.FIRST_SUPERUSER_USERNAME, # If you have this field
+                        is_superuser=True,
+                        is_active=True,
+                        is_verified=True,  # Superusers are often auto-verified
+                        role="admin",  # Ensure role is set according to your User model
+                    )
+                    # UserManager.create handles hashing and raises UserAlreadyExists if, by some race condition,
+                    # it was created between the get_by_email and here.
+                    # safe=True is default and correct for UserCreate with plain password.
+                    created_user = await user_manager.create(user_create_data, safe=True)
+                    await session.commit()  # <--- IMPORTANT: Commit the transaction
+                    logger.info(
+                        f"Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {created_user.id}) created successfully."
+                    )
+
+            except Exception as e:
+                await session.rollback()  # Rollback on any error during this block
+                logger.error(
+                    f"Error during initial superuser creation in lifespan: {e}", exc_info=True
+                )
+    else:
+        logger.warning(
+            "FIRST_SUPERUSER_EMAIL or FIRST_SUPERUSER_PASSWORD not set. Skipping superuser creation in lifespan."
+        )
+
+    yield  # Application runs here
+
     logger.info(f"Shutting down {settings.APP_NAME}...")
     if async_engine:
         logger.info("Disposing database engine connection pool...")
@@ -58,6 +122,17 @@ async def lifespan(_app_instance: FastAPI):  # Prefixed app_instance with unders
 
 
 # --- FastAPI App Initialization ---
+advertised_host = "localhost" if settings.SERVER_HOST == "0.0.0.0" else settings.SERVER_HOST
+server_protocol = "https" if settings.USE_HTTPS else "http"
+advertised_server_url_base = f"{server_protocol}://{advertised_host}:{settings.SERVER_PORT}"
+
+if hasattr(settings, "ROOT_PATH") and settings.ROOT_PATH and settings.ROOT_PATH != "/":
+    effective_root_path = "/" + settings.ROOT_PATH.strip("/")
+    openapi_server_url = f"{advertised_server_url_base}{effective_root_path}"
+else:
+    openapi_server_url = advertised_server_url_base
+
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
@@ -66,18 +141,34 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url=f"{settings.API_V1_STR}/docs",
     redoc_url=f"{settings.API_V1_STR}/redoc",
+    servers=[{"url": openapi_server_url, "description": "Current environment server"}],
 )
 
 # --- Middleware ---
 if settings.BACKEND_CORS_ORIGINS:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[str(origin).strip("/") for origin in settings.BACKEND_CORS_ORIGINS],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    logger.info(f"CORS enabled for origins: {settings.BACKEND_CORS_ORIGINS}")
+    origins = [
+        str(origin).strip("/") for origin in settings.BACKEND_CORS_ORIGINS if str(origin).strip("/")
+    ]
+    if origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,  # THIS IS WHAT'S BEING USED
+            # If you still suspect CORS and want to be absolutely sure for testing:
+            # allow_origins=["*"], # TEMPORARILY allow all
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        # logger.info(f"CORS enabled for origins: {origins}") # Log the actual origins being used
+        # If using ["*"]:
+        logger.info(
+            f"CORS enabled for origins: {origins} (Note: If this list is ['*'], it means all origins are allowed)"
+        )
+
+    else:
+        logger.warning(
+            "BACKEND_CORS_ORIGINS was configured but resulted in an empty list after processing. CORS might not work as expected."
+        )
 else:
     logger.info("CORS disabled (BACKEND_CORS_ORIGINS not configured or empty).")
 
@@ -85,54 +176,49 @@ else:
 # --- Exception Handlers ---
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    error_details = exc.errors()
+    log_body = (
+        await request.body()
+        if settings.DEBUG and request.method in ["POST", "PUT", "PATCH"]
+        else None
+    )
     logger.warning(
-        f"Request validation error: {request.method} {request.url.path} - Errors: {exc.errors()}",
-        extra={"errors": exc.errors()},
+        f"Request validation error: {request.method} {request.url.path} - Errors: {error_details}",
+        extra={"errors": error_details, "request_body": log_body.decode() if log_body else None},
     )
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={"detail": "Validation Error", "errors": exc.errors()},
+        content={"detail": error_details},
     )
 
 
 @app.exception_handler(HTTPException)
-async def http_exception_handler_custom(
-    request: Request,
-    exc: HTTPException,
-):
-    """Custom handler for HTTP exceptions.
-
-    Args:
-        request: The incoming request
-        exc: The HTTP exception that was raised
-    """
-    # Force use of exc parameter
-    status_code, detail, headers = exc.status_code, exc.detail, getattr(exc, "headers", None)
-
-    if status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
-        logger.error(
-            f"HTTPException (Server Error): {status_code} for {request.method} {request.url.path} - Detail: {detail}",
-            exc_info=True,
-        )
-    elif status_code in [
-        status.HTTP_400_BAD_REQUEST,
-        status.HTTP_404_NOT_FOUND,
-        status.HTTP_422_UNPROCESSABLE_ENTITY,
-    ]:
-        logger.warning(
-            f"HTTPException (Client Error): {status_code} for {request.method} {request.url.path} - Detail: {detail}"
-        )
+async def http_exception_handler_custom(request: Request, exc: HTTPException):
+    log_message = (
+        f"HTTPException: Status={exc.status_code}, Detail='{exc.detail}' "
+        f"for {request.method} {request.url.path}"
+    )
+    if exc.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
+        logger.error(log_message, exc_info=True)
+    else:
+        logger.warning(log_message)
 
     return JSONResponse(
-        status_code=status_code,
-        content={"detail": detail},
-        headers=headers,
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=getattr(exc, "headers", None),
     )
 
 
 @app.exception_handler(Exception)
-async def generic_exception_handler_custom(request: Request, _exc: Exception):
-    logger.exception(f"Unhandled exception during request: {request.method} {request.url.path}")
+async def generic_exception_handler_custom(
+    request: Request, _exc: Exception
+):  # MODIFIED: exc -> _exc
+    """Handles any other unhandled exceptions."""
+    logger.error(
+        f"Unhandled exception during request: {request.method} {request.url.path}",
+        exc_info=True,  # This will log the details of _exc
+    )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "An unexpected internal server error occurred. Please try again later."},
@@ -142,85 +228,101 @@ async def generic_exception_handler_custom(request: Request, _exc: Exception):
 # --- API Routers ---
 api_v1_router = APIRouter()
 
-# Include your specific feature routers into this v1 group
-# These routers (auth_router, etc.) should have their own prefixes (e.g., "/auth")
-api_v1_router.include_router(auth_router)  # Assuming auth_router has prefix like "/auth"
-api_v1_router.include_router(users_router)  # Assuming users_router has prefix like "/users"
-api_v1_router.include_router(admin_router)  # Assuming admin_router has prefix like "/admin"
-api_v1_router.include_router(jobs_router)  # Assuming jobs_router has prefix like "/jobs"
+api_v1_router.include_router(
+    custom_auth_router,
+    prefix="/auth",
+    tags=["Auth - Authentication & Authorization"],  # Make this MATCH auth.py
+)
+api_v1_router.include_router(users_router, prefix="/users", tags=["User Management"])
+api_v1_router.include_router(admin_router, prefix="/admin", tags=["Administration"])
+api_v1_router.include_router(jobs_router, prefix="/jobs", tags=["Job Management"])
 
 
-@api_v1_router.get("/", tags=["API Root"], summary="API v1 Root")
-async def api_v1_root_endpoint():  # Renamed for clarity
+@api_v1_router.get("/", tags=["API Root"], summary="API v1 Root Endpoint")
+async def api_v1_root_endpoint():
     return {
         "message": f"Welcome to {settings.APP_NAME} - API Version 1",
         "version": settings.APP_VERSION,
+        "documentation_url": app.docs_url,
     }
+
+
+@api_v1_router.get("/test-db-users", tags=["Debug"])
+async def test_db_users(db: AsyncSession = Depends(get_async_session)):
+    try:
+        stmt = select(UserModel).limit(1)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user:
+            return {"status": "User table accessible", "first_user_email": user.email}
+        else:
+            return {"status": "User table accessible, but no users found."}
+    except Exception as e:
+        logger.error(f"Error in /test-db-users: {e}", exc_info=True)
+        if isinstance(e, HTTPException):
+            raise
+        # MODIFIED: Added "from e" to chain the exception
+        raise HTTPException(status_code=500, detail=f"DB Test Error: {e!s}") from e
 
 
 @api_v1_router.get(
     "/healthz",
-    tags=["Health"],
-    summary="Detailed API health check",  # Removed "(via APIRouter)" for cleaner summary
+    tags=["Health Checks"],
+    summary="Detailed API and Dependencies Health Check",
     status_code=status.HTTP_200_OK,
     description="Performs a detailed health check of the API and its critical dependencies (e.g., database).",
-    # response_model=dict, # Consider defining a Pydantic model for this response
-    include_in_schema=True,
 )
-async def health_check_api_v1_endpoint(db: AsyncSession = Depends(get_async_session)):  # Renamed
-    db_ok = False
-    redis_ok = True  # Placeholder, implement actual check if needed
-
+async def health_check_api_v1_detailed(db: AsyncSession = Depends(get_async_session)):
+    db_status = "unavailable"
     try:
         await db.execute(text("SELECT 1"))
-        db_ok = True
-        logger.debug("Health check: Database connection successful.")
+        db_status = "connected"
+        logger.debug("Health check (detailed): Database connection successful.")
     except Exception as e:
-        logger.error(f"Health check: Database connection failed. Error: {e}", exc_info=True)
+        logger.error(
+            f"Health check (detailed): Database connection failed. Error: {e}",
+            exc_info=settings.DEBUG,
+        )
 
-    if db_ok and redis_ok:
-        return {
-            "status": "ok",
-            "dependencies": {
-                "database": "connected",
-                "redis": "connected" if redis_ok else "check_failed_or_not_applicable",
-            },
-        }
+    dependencies_status = {
+        "database": db_status,
+    }
+    overall_status = (
+        "ok"
+        if all(status == "connected" for status in dependencies_status.values())
+        else "degraded"
+    )
+
+    if overall_status == "ok":
+        return {"status": overall_status, "dependencies": dependencies_status}
     else:
-        failed_deps = []
-        if not db_ok:
-            failed_deps.append("database")
-        # Example for adding redis check to failed_deps if it was implemented and failed
-        # if not redis_ok:
-        #     failed_deps.append("redis")
-        logger.error(f"API health check failed for dependencies: {', '.join(failed_deps)}")
+        logger.error(
+            f"API health check (detailed) failed. Status: {overall_status}, Dependencies: {dependencies_status}"
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Service unavailable. Failed dependencies: {', '.join(failed_deps)}.",
-        ) from None  # B904: Explicitly chain or break chain
+            detail={"status": overall_status, "dependencies": dependencies_status},
+        )
 
 
-# Use include_router to add the v1 router group to the main app with the prefix
-app.include_router(api_v1_router, prefix=settings.API_V1_STR)  # This is the correct way
+app.include_router(api_v1_router, prefix=settings.API_V1_STR)
 
 
-# --- Basic Non-API Routes (e.g., Docker health check) ---
 @app.get(
     "/health",
     tags=["System Health"],
-    summary="Basic system health check",
+    summary="Basic System Liveness Check",
     status_code=status.HTTP_200_OK,
     include_in_schema=False,
 )
-async def health_check_basic():
+async def health_check_basic_system():
     return {"status": "healthy"}
 
 
-# --- Main execution block (for local debugging with Uvicorn) ---
 if __name__ == "__main__":
     import uvicorn
 
-    logger.info("Starting Uvicorn server directly for local debugging...")
+    logger.info(f"Starting Uvicorn server directly for {settings.APP_NAME} (local debugging)...")
     uvicorn.run(
         "app.main:app",
         host=settings.SERVER_HOST,

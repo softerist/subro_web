@@ -23,12 +23,10 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
 
 class UserCreate(schemas.BaseUserCreate):
     # Inherits email, password
-    # Add custom fields required during creation, if any.
-    # The 'role' could be set here, but often it's better handled
-    # by admin logic or defaults, rather than direct user input on creation.
-    # We rely on the DB default 'standard' for role.
-    # If OPEN_SIGNUP=False, this schema might only be used by admins.
-    pass
+    role: Literal["admin", "standard"] | None = "standard"  # Add role, default to standard
+    is_active: bool | None = True  # Explicitly set defaults if desired for creation
+    is_superuser: bool | None = False
+    is_verified: bool | None = False  # Often new users aren't auto-verified unless it's a superuser
 
 
 class UserUpdate(schemas.BaseUserUpdate):

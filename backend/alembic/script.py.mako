@@ -5,10 +5,14 @@ Revises: ${down_revision | comma,n}
 Create Date: ${create_date}
 
 """
-from typing import Sequence, Union
 
 from alembic import op
+from typing import Sequence, Union
+from collections.abc import Sequence
+from sqlalchemy.dialects import postgresql  # For explicit ENUM drop
 import sqlalchemy as sa
+import fastapi_users_db_sqlalchemy  # Make sure this import is present for generics.GUID
+
 ${imports if imports else ""}
 
 # revision identifiers, used by Alembic.

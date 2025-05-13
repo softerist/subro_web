@@ -10,7 +10,13 @@
 # The 'noqa' comment can be used to silence linters about unused imports,
 # as these imports are indeed used by SQLAlchemy's declarative system implicitly.
 
+
+# Import all SQLAlchemy models defined in your application.
+# This is crucial for Alembic's autogenerate feature to discover the models
+# and compare them against the current database schema.
+from app.db.models.job import Job  # noqa: F401  <--- MAKE SURE THIS IS PRESENT TOO!
 from app.db.models.user import User  # noqa: F401
+
 
 # Example for future models:
 # from app.db.models.another_model import AnotherModel
