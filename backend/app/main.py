@@ -1,8 +1,9 @@
+# backend/app/main.py
 import logging
 from contextlib import asynccontextmanager
 
 # --- Project Specific Imports ---
-from app.core.config import settings  # Should be one of the first project imports
+from app.core.config import settings
 
 # Celery import
 try:
@@ -16,11 +17,10 @@ except ImportError:
         "Ensure CELERY_BROKER_URL and CELERY_RESULT_BACKEND are set in .env if this fallback is used."
     )
     celery_app = Celery(
-        "tasks_placeholder",  # A name for the Celery app
+        "tasks_placeholder",
         broker=settings.CELERY_BROKER_URL,
         result_backend=settings.CELERY_RESULT_BACKEND,
     )
-    # Basic Celery configuration if using fallback
     celery_app.conf.update(
         task_track_started=True,
     )
@@ -29,22 +29,26 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi_users.exceptions import UserNotExists  # <--- THIS IS THE MISSING IMPORT
-from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase  # Adapter for FastAPI-Users
+from fastapi_users.exceptions import UserNotExists
+from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Import Routers
+# Import Routers - these are the actual router objects from your files
 from app.api.routers.admin import admin_router
 from app.api.routers.auth import auth_router as custom_auth_router
 from app.api.routers.jobs import router as jobs_router
 from app.api.routers.users import router as users_router
 
 # --- Add these imports for initial superuser creation ---
-from app.core.users import UserManager  # For creating UserManager instance
+from app.core.users import UserManager
 from app.db.models.user import User as UserModel
-from app.db.session import AsyncSessionLocal, async_engine, get_async_session
-from app.schemas.user import UserCreate  # Pydantic schema for user creation
+from app.db.session import (  # get_async_session is used later
+    AsyncSessionLocal,
+    async_engine,
+    get_async_session,
+)
+from app.schemas.user import UserCreate
 
 # Configure basic logging
 logging.basicConfig(
@@ -65,46 +69,35 @@ async def lifespan(_app_instance: FastAPI):
         logger.info(
             f"Attempting to create/ensure initial superuser: {settings.FIRST_SUPERUSER_EMAIL}"
         )
-        # Use AsyncSessionLocal for a session outside of request scope
-        async with AsyncSessionLocal() as session:  # Create a new session for this startup task
+        async with AsyncSessionLocal() as session:
             try:
                 user_db_adapter = SQLAlchemyUserDatabase(session, UserModel)
-                user_manager = UserManager(
-                    user_db_adapter
-                )  # UserManager typically handles its own password_helper
-
+                user_manager = UserManager(user_db_adapter)
                 try:
-                    # Check if user exists
                     existing_user = await user_manager.get_by_email(settings.FIRST_SUPERUSER_EMAIL)
                     if existing_user:
                         logger.info(
                             f"Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {existing_user.id}) already exists."
                         )
                 except UserNotExists:
-                    # User does not exist, so create them
                     logger.info(
                         f"Initial superuser {settings.FIRST_SUPERUSER_EMAIL} not found, creating..."
                     )
                     user_create_data = UserCreate(
                         email=settings.FIRST_SUPERUSER_EMAIL,
                         password=settings.FIRST_SUPERUSER_PASSWORD,
-                        # username=settings.FIRST_SUPERUSER_USERNAME, # If you have this field
                         is_superuser=True,
                         is_active=True,
-                        is_verified=True,  # Superusers are often auto-verified
-                        role="admin",  # Ensure role is set according to your User model
+                        is_verified=True,
+                        role="admin",
                     )
-                    # UserManager.create handles hashing and raises UserAlreadyExists if, by some race condition,
-                    # it was created between the get_by_email and here.
-                    # safe=True is default and correct for UserCreate with plain password.
                     created_user = await user_manager.create(user_create_data, safe=True)
-                    await session.commit()  # <--- IMPORTANT: Commit the transaction
+                    await session.commit()
                     logger.info(
                         f"Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {created_user.id}) created successfully."
                     )
-
             except Exception as e:
-                await session.rollback()  # Rollback on any error during this block
+                await session.rollback()
                 logger.error(
                     f"Error during initial superuser creation in lifespan: {e}", exc_info=True
                 )
@@ -113,7 +106,7 @@ async def lifespan(_app_instance: FastAPI):
             "FIRST_SUPERUSER_EMAIL or FIRST_SUPERUSER_PASSWORD not set. Skipping superuser creation in lifespan."
         )
 
-    yield  # Application runs here
+    yield
 
     logger.info(f"Shutting down {settings.APP_NAME}...")
     if async_engine:
@@ -131,7 +124,6 @@ if hasattr(settings, "ROOT_PATH") and settings.ROOT_PATH and settings.ROOT_PATH 
     openapi_server_url = f"{advertised_server_url_base}{effective_root_path}"
 else:
     openapi_server_url = advertised_server_url_base
-
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -152,19 +144,14 @@ if settings.BACKEND_CORS_ORIGINS:
     if origins:
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=origins,  # THIS IS WHAT'S BEING USED
-            # If you still suspect CORS and want to be absolutely sure for testing:
-            # allow_origins=["*"], # TEMPORARILY allow all
+            allow_origins=origins,
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
         )
-        # logger.info(f"CORS enabled for origins: {origins}") # Log the actual origins being used
-        # If using ["*"]:
         logger.info(
-            f"CORS enabled for origins: {origins} (Note: If this list is ['*'], it means all origins are allowed)"
+            f"CORS enabled for origins: {origins} (Note: If this list contains '*', it means all origins are allowed)"
         )
-
     else:
         logger.warning(
             "BACKEND_CORS_ORIGINS was configured but resulted in an empty list after processing. CORS might not work as expected."
@@ -202,7 +189,6 @@ async def http_exception_handler_custom(request: Request, exc: HTTPException):
         logger.error(log_message, exc_info=True)
     else:
         logger.warning(log_message)
-
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
@@ -211,13 +197,10 @@ async def http_exception_handler_custom(request: Request, exc: HTTPException):
 
 
 @app.exception_handler(Exception)
-async def generic_exception_handler_custom(
-    request: Request, _exc: Exception
-):  # MODIFIED: exc -> _exc
-    """Handles any other unhandled exceptions."""
+async def generic_exception_handler_custom(request: Request, _exc: Exception):
     logger.error(
         f"Unhandled exception during request: {request.method} {request.url.path}",
-        exc_info=True,  # This will log the details of _exc
+        exc_info=True,
     )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -225,29 +208,43 @@ async def generic_exception_handler_custom(
     )
 
 
-# --- API Routers ---
+# --- API v1 Router Definition and Inclusions ---
 api_v1_router = APIRouter()
 
+# Include all specific routers into the api_v1_router
 api_v1_router.include_router(
-    custom_auth_router,
+    custom_auth_router,  # This is the 'auth_router as custom_auth_router' from app.api.routers.auth
     prefix="/auth",
-    tags=["Auth - Authentication & Authorization"],  # Make this MATCH auth.py
+    tags=["Auth - Authentication & Authorization"],
 )
-api_v1_router.include_router(users_router, prefix="/users", tags=["User Management"])
-api_v1_router.include_router(admin_router, prefix="/admin", tags=["Administration"])
-api_v1_router.include_router(jobs_router, prefix="/jobs", tags=["Job Management"])
+api_v1_router.include_router(
+    users_router,  # This is the 'router as users_router' from app.api.routers.users
+    prefix="/users",
+    tags=["Users - User Management"],
+)
+api_v1_router.include_router(
+    admin_router,  # This is 'admin_router' from app.api.routers.admin
+    prefix="/admin",
+    tags=["Admins - Admin Management"],
+)
+api_v1_router.include_router(
+    jobs_router,  # This is the 'router as jobs_router' from app.api.routers.jobs
+    prefix="/jobs",
+    tags=["Jobs - Subtitle Download Management"],
+)
 
 
+# Add root and healthz for the /api/v1 path itself
 @api_v1_router.get("/", tags=["API Root"], summary="API v1 Root Endpoint")
 async def api_v1_root_endpoint():
     return {
         "message": f"Welcome to {settings.APP_NAME} - API Version 1",
         "version": settings.APP_VERSION,
-        "documentation_url": app.docs_url,
+        "documentation_url": app.docs_url,  # This will be /api/v1/docs
     }
 
 
-@api_v1_router.get("/test-db-users", tags=["Debug"])
+@api_v1_router.get("/test-db-users", tags=["Debug"])  # This will be /api/v1/test-db-users
 async def test_db_users(db: AsyncSession = Depends(get_async_session)):
     try:
         stmt = select(UserModel).limit(1)
@@ -255,18 +252,16 @@ async def test_db_users(db: AsyncSession = Depends(get_async_session)):
         user = result.scalar_one_or_none()
         if user:
             return {"status": "User table accessible", "first_user_email": user.email}
-        else:
-            return {"status": "User table accessible, but no users found."}
+        return {"status": "User table accessible, but no users found."}
     except Exception as e:
         logger.error(f"Error in /test-db-users: {e}", exc_info=True)
         if isinstance(e, HTTPException):
             raise
-        # MODIFIED: Added "from e" to chain the exception
         raise HTTPException(status_code=500, detail=f"DB Test Error: {e!s}") from e
 
 
 @api_v1_router.get(
-    "/healthz",
+    "/healthz",  # This will be /api/v1/healthz
     tags=["Health Checks"],
     summary="Detailed API and Dependencies Health Check",
     status_code=status.HTTP_200_OK,
@@ -283,37 +278,34 @@ async def health_check_api_v1_detailed(db: AsyncSession = Depends(get_async_sess
             f"Health check (detailed): Database connection failed. Error: {e}",
             exc_info=settings.DEBUG,
         )
-
-    dependencies_status = {
-        "database": db_status,
-    }
+    dependencies_status = {"database": db_status}
     overall_status = (
         "ok"
         if all(status == "connected" for status in dependencies_status.values())
         else "degraded"
     )
-
     if overall_status == "ok":
         return {"status": overall_status, "dependencies": dependencies_status}
-    else:
-        logger.error(
-            f"API health check (detailed) failed. Status: {overall_status}, Dependencies: {dependencies_status}"
-        )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"status": overall_status, "dependencies": dependencies_status},
-        )
+    logger.error(
+        f"API health check (detailed) failed. Status: {overall_status}, Dependencies: {dependencies_status}"
+    )
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={"status": overall_status, "dependencies": dependencies_status},
+    )
 
 
+# Mount the consolidated api_v1_router to the main app
 app.include_router(api_v1_router, prefix=settings.API_V1_STR)
 
 
+# --- Health Check Endpoint (at app root) ---
 @app.get(
-    "/health",
+    "/health",  # This will be /health
     tags=["System Health"],
     summary="Basic System Liveness Check",
     status_code=status.HTTP_200_OK,
-    include_in_schema=False,
+    include_in_schema=False,  # Typically not part of the versioned API docs
 )
 async def health_check_basic_system():
     return {"status": "healthy"}

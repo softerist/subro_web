@@ -7,10 +7,6 @@ OVERRIDE_COMPOSE_FILE := infra/docker/docker-compose.override.yml
 COMPOSE_FILES := -f $(BASE_COMPOSE_FILE) -f $(OVERRIDE_COMPOSE_FILE)
 UID := $(shell id -u)
 GID := $(shell id -g)
-# Infer API and Frontend ports from .env if possible, otherwise use defaults
-# This assumes you have these in an .env file at the root or export them
-# For example: API_PORT_HOST=8000 FRONTEND_PORT_HOST=5173
-# If not, replace with your actual host ports.
 API_PORT_HOST ?= 8000
 FRONTEND_PORT_HOST ?= 5173
 
@@ -67,18 +63,21 @@ help: ## Show help for Makefile targets
 	@echo "  local-db-upgrade   - (DEPRECATED-STYLE) Run Alembic upgrade head locally."
 	@echo "  local-db-revision MSG=\"your_message\" - (DEPRECATED-STYLE) Create Alembic revision locally."
 
+
 # Near the top with other variables if you like
 PYTHON_MIGRATION_FILES_EXIST := $(shell find backend/alembic/versions -maxdepth 1 -name '*.py' -not -name '__init__.py' -print -quit)
 
 # ==============================================================================
 # Development Docker Commands
 # ==============================================================================
-.PHONY: dev rebuild-dev compose-up compose-down compose-down-keep-volumes
-dev: compose-up ## Start the full stack with hot-reloading (uses existing volumes)
-	@echo "Development stack is up."
-	@echo "API available at http://localhost:$(API_PORT_HOST) (or http://localhost for Caddy)"
-	@echo "Frontend available at http://localhost:$(FRONTEND_PORT_HOST)"
+# THIS IS THE SECTION WHERE THE OLD 'dev' WAS. IT'S NOW GONE.
+# The .PHONY for dev is handled by the later definition.
+# We still keep the other .PHONY targets from the old block if they are unique.
+.PHONY: rebuild-dev compose-up compose-down compose-down-keep-volumes
 
+# rebuild-dev now correctly depends on the later 'dev' implicitly through compose-up if needed,
+# or you might adjust its dependencies if 'ensure-migrations' logic should also apply here.
+# For now, let's assume its current dependencies are fine.
 rebuild-dev: compose-down db-migrate compose-up ## Clean rebuild: stop, wipe volumes, migrate, then start fresh
 	@echo "Development stack fully rebuilt and started."
 
@@ -93,7 +92,6 @@ compose-down: ## Stop and remove the Docker Compose stack AND volumes
 compose-down-keep-volumes: ## Stop and remove Docker Compose stack, but KEEP volumes
 	@echo "Stopping Docker Compose stack, keeping volumes..."
 	docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) down --remove-orphans
-
 
 # ==============================================================================
 # Logging
@@ -176,6 +174,7 @@ ensure-migrations:
 	else \
 		echo "Migration files found. Skipping generation."; \
 	fi
+	@echo "Running database migrations..."
 
 
 # ==============================================================================

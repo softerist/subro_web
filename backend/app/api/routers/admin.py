@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 admin_router = APIRouter(
     prefix="/admin",
-    tags=["Admin - User Management"],
+    tags=["Admins - Admin Management"],
     dependencies=[Depends(current_active_superuser)],  # Protects all routes in this router
 )
 
@@ -44,6 +44,7 @@ async def get_target_user_or_404(
 
 @admin_router.get(
     "/users",
+    tags=["Admins - Admin Management"],
     response_model=list[UserRead],
     summary="List all users (Admin only)",
     description="Retrieves a paginated list of all users, ordered by creation date (descending).",

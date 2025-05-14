@@ -26,9 +26,9 @@ router = APIRouter(
 # If you implement email verification later and want to enforce it for certain actions,
 # you might use a different dependency like `current_active_verified_user` in custom endpoints
 # or configure fastapi-users differently if it supports per-route verification requirements.
-router.include_router(  # <<< CORRECTED
+router.include_router(
     fastapi_users_instance.get_users_router(UserRead, UserUpdate),
-    tags=["users"],  # Consider if this tag should be "Users - User Management" for consistency
+    tags=["Users - User Management"],
 )
 # Example of a custom user-related endpoint (if needed in the future):
 # from app.db.models.user import User # Would be needed for type hinting current_user

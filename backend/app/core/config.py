@@ -138,7 +138,7 @@ class Settings(BaseSettings):
 
     # --- Fields for complex parsing ---
     allowed_media_folders_env_str: str = Field(
-        default='["/mnt/sata0/Media","/media/usb_drive"]',
+        default='["/mnt/sata0/Media","/mnt/sata1/Media"]',
         validation_alias="ALLOWED_MEDIA_FOLDERS",
     )
     backend_cors_origins_env_str: str | None = Field(
