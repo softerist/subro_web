@@ -51,16 +51,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         _request: Request | None = None,
     ):
         logger.info(
-            f"User {user.id} ({user.email}) has requested a password reset. Token: {token[:8]}..."
+            f"User {user.id} ({user.email}) has requested a password reset. Token: {token}..."
         )
         # Implement actual email sending logic here.
 
     async def on_after_request_verify(
         self, user: User, token: str, _request: Request | None = None
     ):
-        logger.info(
-            f"Verification requested for user {user.id} ({user.email}). Token: {token[:8]}..."
-        )
+        logger.info(f"Verification requested for user {user.id} ({user.email}). Token: {token}...")
         # Implement actual email sending logic here.
 
     async def on_after_verify(self, user: User, _token: str, _request: Request | None = None):

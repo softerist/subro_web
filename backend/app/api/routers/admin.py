@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 admin_router = APIRouter(
-    prefix="/admin",
     tags=["Admins - Admin Management"],
     dependencies=[Depends(current_active_superuser)],  # Protects all routes in this router
 )

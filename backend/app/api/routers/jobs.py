@@ -3,23 +3,28 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+# FastAPI imports
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import Path as FastApiPath
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import crud
 from app.core.config import settings
 from app.core.security import current_active_user
-from app.db.crud import job as crud_job
 from app.db.models.job import Job, JobStatus
 from app.db.models.user import User
 from app.db.session import get_async_session
-from app.schemas.job import JobCreate, JobRead
+
+# Ensure these schemas are correctly defined and imported from app.schemas.job
+from app.schemas.job import JobCreate, JobCreateInternal, JobRead, JobReadLite, JobUpdate
 from app.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(
+router = APIRouter(  # NO PREFIX HERE
     tags=["Jobs - Subtitle Download Management"],
     responses={
         status.HTTP_404_NOT_FOUND: {"description": "Resource not found"},
@@ -30,10 +35,6 @@ router = APIRouter(
 
 
 def _is_path_allowed(resolved_path_to_check: Path, allowed_paths_list: list[str]) -> bool:
-    """
-    Checks if the resolved_path_to_check is within one of the allowed_paths.
-    allowed_paths_list contains string paths that will be resolved.
-    """
     for allowed_base_path_str in allowed_paths_list:
         try:
             resolved_allowed_base = Path(allowed_base_path_str).resolve(strict=True)
@@ -47,7 +48,7 @@ def _is_path_allowed(resolved_path_to_check: Path, allowed_paths_list: list[str]
                 f"Resolution of configured allowed base path '{allowed_base_path_str}' failed (e.g. symlink loop). Skipping: {e}"
             )
             continue
-        except Exception as e:
+        except Exception as e:  # NOSONAR
             logger.error(
                 f"Unexpected error during resolution of configured allowed base path '{allowed_base_path_str}'. Skipping: {e}"
             )
@@ -64,10 +65,6 @@ def _is_path_allowed(resolved_path_to_check: Path, allowed_paths_list: list[str]
 async def _validate_and_resolve_job_path(
     folder_path_str: str, allowed_folders: list[str], user_email: str
 ) -> Path:
-    """
-    Validates the folder path for a job submission.
-    Resolves the path and checks if it's within allowed directories.
-    """
     if not allowed_folders:
         logger.error(
             "CRITICAL: ALLOWED_MEDIA_FOLDERS is not configured or empty. Denying all job submissions."
@@ -87,7 +84,7 @@ async def _validate_and_resolve_job_path(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"The provided folder path '{folder_path_str}' does not exist or is not accessible.",
         ) from e
-    except RuntimeError as e:
+    except RuntimeError as e:  # e.g. symlink loop
         logger.warning(
             f"Path resolution failed for input '{folder_path_str}' by user {user_email}: {e}"
         )
@@ -95,7 +92,7 @@ async def _validate_and_resolve_job_path(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"The provided folder path '{folder_path_str}' is invalid or could not be resolved (e.g., symlink loop).",
         ) from e
-    except Exception as e:
+    except Exception as e:  # NOSONAR - Catch any other FS related errors
         logger.warning(
             f"Unexpected error during path resolution for input '{folder_path_str}' by user {user_email}: {e}"
         )
@@ -122,15 +119,15 @@ async def _validate_and_resolve_job_path(
 
 
 async def _create_db_job_and_set_celery_id(
-    db: AsyncSession, job_create_schema: JobCreate, user_id: int, user_email: str
+    db: AsyncSession, job_create_schema: JobCreateInternal, user_email: str
 ) -> Job:
     """
     Creates a job record in the database and updates it with a Celery task ID.
     """
     try:
-        db_job = await crud_job.create_job_db(db, job_in=job_create_schema, user_id=user_id)
+        db_job = await crud.job.create(db, obj_in=job_create_schema)
         logger.info(
-            f"Job {db_job.id} created in DB for user {user_email} with status {db_job.status}."
+            f"Job {db_job.id} created in DB for user {user_email} (User ID from schema: {job_create_schema.user_id}) with status {db_job.status}."
         )
     except SQLAlchemyError as e:
         await db.rollback()
@@ -142,40 +139,32 @@ async def _create_db_job_and_set_celery_id(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="JOB_CREATION_DB_ERROR"
         ) from e
 
-    celery_task_id = str(db_job.id)  # Use DB job ID as Celery task ID
+    celery_task_id_str = str(db_job.id)
     try:
-        updated_db_job = await crud_job.update_job_celery_task_id(
-            db, job_id=db_job.id, celery_task_id=celery_task_id
-        )
-        if not updated_db_job:
-            logger.error(
-                f"Critical: Failed to update celery_task_id for just-created job {db_job.id}."
-            )
-            # Attempt to mark job as failed if celery_task_id update fails
-            await crud_job.update_job_completion_details(
-                db,
-                job_id=db_job.id,
-                status=JobStatus.FAILED,
-                completed_at=datetime.now(UTC),
-                exit_code=-200,
-                result_message="Internal error: Failed to link Celery task ID.",
-                log_snippet="Failed to set celery_task_id in DB after creation.",
-            )
-            await db.commit()  # Commit the failure state
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="JOB_PREPARATION_FOR_ENQUEUE_FAILED",
-            )
-        logger.info(
-            f"Job {updated_db_job.id} celery_task_id set to {updated_db_job.celery_task_id}."
-        )
-        return updated_db_job
+        db_job.celery_task_id = celery_task_id_str
+        await db.commit()
+        await db.refresh(db_job)
+
+        logger.info(f"Job {db_job.id} celery_task_id set to {db_job.celery_task_id}.")
+        return db_job
     except SQLAlchemyError as e:
         await db.rollback()
         logger.error(
             f"Database error while updating celery_task_id for job {db_job.id}: {e}", exc_info=True
         )
-        # Don't try to update db_job object here as session is rolled back
+        try:
+            db_job.status = JobStatus.FAILED
+            db_job.result_message = "Internal error: Failed to link Celery task ID."
+            db_job.exit_code = -200
+            db_job.log_snippet = "Failed to set celery_task_id in DB after creation."
+            db_job.completed_at = datetime.now(UTC)
+            await db.commit()
+        except Exception as final_fail_exc:
+            logger.critical(
+                f"Failed to mark job {db_job.id} as FAILED after celery_id update error: {final_fail_exc}"
+            )
+            await db.rollback()
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="JOB_CELERY_ID_UPDATE_DB_ERROR",
@@ -185,10 +174,6 @@ async def _create_db_job_and_set_celery_id(
 async def _enqueue_celery_task_and_handle_errors(
     db: AsyncSession, job_to_enqueue: Job, user_email: str
 ) -> None:
-    """
-    Enqueues the Celery task for the job and handles potential errors,
-    updating job status if enqueueing fails.
-    """
     try:
         task_name = settings.CELERY_SUBTITLE_TASK_NAME
         celery_app.send_task(
@@ -198,7 +183,7 @@ async def _enqueue_celery_task_and_handle_errors(
                 job_to_enqueue.folder_path,
                 job_to_enqueue.language,
             ],
-            task_id=job_to_enqueue.celery_task_id,  # This should be set from previous step
+            task_id=job_to_enqueue.celery_task_id,
         )
         logger.info(
             f"Successfully enqueued Celery task '{task_name}' with ID {job_to_enqueue.celery_task_id} "
@@ -210,19 +195,17 @@ async def _enqueue_celery_task_and_handle_errors(
             exc_info=True,
         )
         try:
-            await crud_job.update_job_completion_details(
-                db,
-                job_id=job_to_enqueue.id,
+            job_update_schema = JobUpdate(
                 status=JobStatus.FAILED,
                 completed_at=datetime.now(UTC),
                 exit_code=-201,
                 result_message=f"Failed to enqueue Celery task: {str(e)[:200]}",
                 log_snippet=f"Celery send_task failed: {str(e)[:500]}",
             )
-            await db.commit()  # Commit the failure state
+            await crud.job.update(db, db_obj=job_to_enqueue, obj_in=job_update_schema)
             logger.info(f"Updated job {job_to_enqueue.id} status to FAILED due to enqueue error.")
         except SQLAlchemyError as db_exc:
-            await db.rollback()  # Rollback if update fails
+            await db.rollback()
             logger.error(
                 f"Failed to update job {job_to_enqueue.id} status to FAILED after Celery enqueue error: {db_exc}",
                 exc_info=True,
@@ -233,7 +216,7 @@ async def _enqueue_celery_task_and_handle_errors(
             ) from db_exc
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="JOB_ENQUEUE_FAILED_DB_UPDATED",  # Implies DB update to FAILED was successful before this re-raise
+            detail="JOB_ENQUEUE_FAILED_DB_UPDATED",
         ) from e
 
 
@@ -253,72 +236,88 @@ async def create_job(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ) -> Job:
-    """
-    Submits a new subtitle download job.
-    1. Validates the input folder path.
-    2. Creates a job record in the database and sets its Celery task ID.
-    3. Enqueues the job to Celery.
-    """
+    # Ensure settings.ALLOWED_MEDIA_FOLDERS is a list[str] if it's used here.
+    # If it's settings.ALLOWED_MEDIA_FOLDERS_LIST, update this line.
     resolved_input_path = await _validate_and_resolve_job_path(
         job_in.folder_path, settings.ALLOWED_MEDIA_FOLDERS, current_user.email
     )
     normalized_job_folder_path_str = str(resolved_input_path)
 
-    # Prepare data for DB creation using the normalized path
-    job_data_for_db = JobCreate(
-        folder_path=normalized_job_folder_path_str, language=job_in.language
+    job_create_internal = JobCreateInternal(
+        folder_path=normalized_job_folder_path_str,
+        language=job_in.language,
+        user_id=current_user.id,
     )
-
-    # This function now handles DB job creation and Celery task ID update
     db_job_with_celery_id = await _create_db_job_and_set_celery_id(
-        db, job_data_for_db, current_user.id, current_user.email
+        db, job_create_internal, current_user.email
     )
 
-    # This function handles enqueuing and error cases related to it
     await _enqueue_celery_task_and_handle_errors(db, db_job_with_celery_id, current_user.email)
 
-    # If all steps above are successful, commit the session changes
-    # (e.g., job creation, celery_id update)
-    # Note: _create_db_job_and_set_celery_id might commit on partial failure
-    # and _enqueue_celery_task_and_handle_errors might commit on failure.
-    # A successful path implies db_job_with_celery_id is already persisted.
-    # If _create_db_job_and_set_celery_id had a SQLAlchemyError and rolled back,
-    # an exception would have been raised, so we wouldn't reach here.
-    # If _enqueue_celery_task_and_handle_errors failed, it would raise an exception
-    # or commit a failure state for the job.
-    # A final commit here ensures the successful creation and celery_id update is persisted if no errors occurred.
-    try:
-        await db.commit()
-    except SQLAlchemyError as e:
-        # This case should be rare if helpers manage their transactions on error,
-        # but acts as a final safeguard.
-        await db.rollback()
-        logger.error(
-            f"Final commit failed after successful operations for job {db_job_with_celery_id.id}: {e}",
-            exc_info=True,
-        )
-        # Update job to FAILED if possible, though it might already be in a failed state or uncommittable
-        try:
-            await crud_job.update_job_completion_details(
-                db,
-                job_id=db_job_with_celery_id.id,
-                status=JobStatus.FAILED,
-                completed_at=datetime.now(UTC),
-                exit_code=-202,  # Different code for this specific failure point
-                result_message="Internal error: Final commit after task enqueue failed.",
-                log_snippet=f"Final commit SQLAlchemyError: {str(e)[:500]}",
-            )
-            await db.commit()  # Try to commit this failure state
-        except (
-            Exception
-        ) as final_update_exc:  # Catch all for any error during this last-ditch update
-            logger.critical(
-                f"CRITICAL: Failed to mark job {db_job_with_celery_id.id} as FAILED after final commit error: {final_update_exc}",
-                exc_info=True,
-            )
-            # No further db operations possible here
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="JOB_FINALIZATION_DB_ERROR"
-        ) from e
-
     return db_job_with_celery_id
+
+
+@router.get(
+    "/",
+    response_model=list[JobReadLite],
+    summary="List subtitle download jobs",
+    description=(
+        "Retrieves a list of subtitle download jobs. "
+        "Superusers can see all jobs. Regular users can only see their own jobs. "
+        "Jobs are ordered by submission time, newest first, by default."
+    ),
+)
+async def list_jobs(
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
+    skip: Annotated[int, Query(ge=0, description="Number of jobs to skip")] = 0,
+    limit: Annotated[
+        int, Query(ge=1, le=200, description="Maximum number of jobs to return")
+    ] = 100,
+) -> list[Job]:
+    logger.info(
+        f"User '{current_user.email}' (ID: {current_user.id}, Superuser: {current_user.is_superuser}) listing jobs. Skip: {skip}, Limit: {limit}"
+    )
+    if current_user.is_superuser:
+        jobs = await crud.job.get_multi(db, skip=skip, limit=limit)
+    else:
+        jobs = await crud.job.get_multi_by_owner(
+            db, user_id=current_user.id, skip=skip, limit=limit
+        )
+
+    logger.info(f"Found {len(jobs)} jobs for user '{current_user.email}'.")
+    return jobs
+
+
+@router.get(
+    "/{job_id}",
+    response_model=JobRead,
+    summary="Get details for a specific job",
+    description=(
+        "Retrieves detailed information for a specific subtitle download job by its ID. "
+        "Superusers can access any job. Regular users can only access their own jobs."
+    ),
+)
+async def get_job_details(
+    job_id: Annotated[UUID, FastApiPath(description="The ID of the job to retrieve")],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
+) -> Job:
+    logger.info(
+        f"User '{current_user.email}' (ID: {current_user.id}) requesting details for job ID: {job_id}"
+    )
+    job = await crud.job.get(db, id=job_id)
+    if not job:
+        logger.warning(f"Job ID {job_id} not found when requested by user '{current_user.email}'.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="JOB_NOT_FOUND")
+
+    if not current_user.is_superuser and job.user_id != current_user.id:
+        logger.error(
+            f"User '{current_user.email}' (ID: {current_user.id}) FORBIDDEN from accessing job ID {job_id} owned by user ID {job.user_id}."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="NOT_AUTHORIZED_TO_ACCESS_JOB"
+        )
+
+    logger.info(f"Successfully retrieved job ID {job_id} for user '{current_user.email}'.")
+    return job

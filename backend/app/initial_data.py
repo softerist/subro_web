@@ -74,17 +74,25 @@ async def init_db(db: AsyncSession) -> None:  # Pass AsyncSession directly
         superuser_in = UserCreate(
             email=settings.FIRST_SUPERUSER_EMAIL,
             password=settings.FIRST_SUPERUSER_PASSWORD,
-            role="admin",
+            role="admin",  # Will be UserRole.ADMIN due to Pydantic coercion
             is_active=True,
             is_superuser=True,
             is_verified=True,
         )
-        logger.info(f"Attempting to create superuser: {settings.FIRST_SUPERUSER_EMAIL}")
-        await create_user_with_usermanager(script_user_manager, superuser_in)
-    else:
-        logger.warning(
-            "FIRST_SUPERUSER_EMAIL or FIRST_SUPERUSER_PASSWORD not set in environment. "
-            "Skipping superuser creation."
+        logger.info(
+            f"LIFESPAN PRE-CREATE: superuser_in Pydantic model: {superuser_in.model_dump_json(indent=2)}"
+        )  # <<< ADD THIS
+
+        # Ensure script_user_manager is correctly getting your user_db that uses CRUDUser
+        # or that SQLAlchemyUserDatabase itself works as expected
+        created_user = await script_user_manager.create(superuser_in, safe=True)
+        await db.commit()  # Changed from session to db
+
+        logger.info(
+            f"LIFESPAN POST-CREATE: created_user object: id={created_user.id}, email={created_user.email}, role={getattr(created_user, 'role', 'N/A')}, is_superuser={getattr(created_user, 'is_superuser', 'N/A')}, is_verified={getattr(created_user, 'is_verified', 'N/A')}"
+        )  # <<< ADD THIS
+        logger.info(
+            f"Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {created_user.id}) created successfully (according to user_manager)."
         )
 
     # Placeholder for creating other initial data

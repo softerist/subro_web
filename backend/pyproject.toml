@@ -38,6 +38,7 @@ python-dotenv = "^1.1.0"
 pydantic-settings = "^2.9.1"
 psycopg2-binary = "^2.9.10"
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+nest-asyncio = "^1.6.0"
 # python-multipart = "^0.0.20"
 # python-multipart = "^0.0.9" # More common stable version
 [tool.poetry.group.dev.dependencies]

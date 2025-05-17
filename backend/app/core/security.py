@@ -30,6 +30,20 @@ logger = logging.getLogger(__name__)
 password_helper = PasswordHelper()
 
 
+# START ADDED CODE: Expose password hashing and verification functions
+def get_password_hash(password: str) -> str:
+    """Hashes a password using the configured password helper."""
+    return password_helper.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verifies a plain password against a hashed password."""
+    return password_helper.verify(plain_password, hashed_password)
+
+
+# END ADDED CODE
+
+
 # --- User Manager ---
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = str(settings.SECRET_KEY)
@@ -67,13 +81,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
 
         password = user_create.password  # Store original password
+        # UserManager uses its own password_helper instance internally,
+        # which is typically the one passed during its instantiation.
+        # If not specified, it creates its own. Here we ensure it uses the shared one.
         user_dict["hashed_password"] = self.password_helper.hash(password)
-        # Ensure 'password' field itself is not stored if create_update_dict doesn't remove it.
-        # (Though for Pydantic models, it's usually controlled by exclude/include in model_dump)
-        # For safety, explicitly remove if BaseUserCreate might pass it through.
-        # However, UserCreate schema usually doesn't have password field directly.
-        # fastapi-users handles this by not mapping 'password' from UserCreate to User model directly.
-        # The BaseUserCreate.create_update_dict() should already exclude 'password'.
 
         if "password" in user_dict:  # Defensive pop
             user_dict.pop("password")
@@ -97,6 +108,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
 
 async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db)):
+    # Pass the module-level password_helper to the UserManager instance
     yield UserManager(user_db, password_helper)
 
 
@@ -106,16 +118,17 @@ def get_jwt_strategy() -> JWTStrategy:
         secret=str(settings.SECRET_KEY),
         lifetime_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         algorithm=settings.ALGORITHM,
+        token_audience=[
+            "fastapi-users:auth",
+            "fastapi-users:verify",
+            "fastapi-users:reset-password",
+        ],
     )
 
 
 # --- Authentication Transports ---
 
-# MODIFICATION: Align BearerTransport tokenUrl with the actual expected login route.
-# Assuming the login route from custom_auth_router (prefixed with /api/v1/auth) is /login,
-# (i.e., no additional /jwt sub-prefix in app.api.routers.auth.py for the bearer auth router).
-# This aligns with the openapi_components override in main.py and the 404 on /auth/jwt/login.
-bearer_transport = BearerTransport(tokenUrl=f"{settings.API_V1_STR}/auth/login")  # CHANGED HERE
+bearer_transport = BearerTransport(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
 cookie_transport = CookieTransport(
     cookie_name=settings.REFRESH_TOKEN_COOKIE_NAME,
@@ -133,7 +146,7 @@ cookie_auth_backend = AuthenticationBackend(
     get_strategy=get_jwt_strategy,
 )
 bearer_auth_backend = AuthenticationBackend(
-    name="jwt-bearer",  # This name is internal to fastapi-users, distinct from OpenAPI scheme name
+    name="jwt-bearer",
     transport=bearer_transport,
     get_strategy=get_jwt_strategy,
 )
@@ -144,7 +157,7 @@ fastapi_users = FastAPIUsers[User, uuid.UUID](
     [
         cookie_auth_backend,
         bearer_auth_backend,
-    ],  # Order can matter if schemes have same UI preference
+    ],
 )
 
 # --- Reusable Dependencies ---
