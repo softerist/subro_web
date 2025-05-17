@@ -24,3 +24,6 @@ class TokenData(BaseModel):
     username: str | None = None  # Or user_id, email, etc., depending on your token's 'sub' claim
     # You might add other fields here if your tokens contain more claims you need to parse
     # e.g., scopes: list[str] = []
+
+
+# This is the dependency that fastapi-users provides for getting the current authenticated user

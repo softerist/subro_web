@@ -11,6 +11,7 @@ services:
       - "443:443/udp" # For HTTP/3
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile # Mount local Caddyfile for dev config
+      - /mnt/sata0/Media:/mnt/sata0/Media
       - caddy_data:/data # Persist certificates and state
       - caddy_config:/config
     environment:

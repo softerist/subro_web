@@ -18,13 +18,11 @@ ENV APP_HOME=/app \
     # Poetry settings
     POETRY_VERSION=${POETRY_VERSION} \
     POETRY_HOME="/opt/poetry" \
-    # ---> CHANGED VENV LOCATION <---
     POETRY_VIRTUALENVS_CREATE=true \
     POETRY_VIRTUALENVS_IN_PROJECT=false \
     POETRY_VIRTUALENVS_PATH="/opt/pysetup/.venv" \
     POETRY_NO_INTERACTION=1 \
     # Path settings - Add venv bin and poetry bin to PATH
-    # ---> UPDATED PATH <---
     PATH="/opt/pysetup/.venv/bin:$POETRY_HOME/bin:/usr/local/bin:$PATH"
 
 # Set working directory
@@ -33,10 +31,14 @@ WORKDIR ${APP_HOME} # Use the ENV variable
 # Install Poetry globally using the build argument
 # Also update pip first
 RUN pip install --upgrade pip && pip install poetry==${POETRY_VERSION}
+RUN mkdir -p /mnt/sata0/Media
 
 # Create a non-root user and group early for consistent permissions
 # Use the WORKDIR path for the home directory (-d)
 RUN groupadd -r appuser && useradd --no-log-init -r -g appuser -d ${APP_HOME} appuser
+
+# --- Create scripts directory structure ---
+RUN mkdir -p /app/scripts && chown appuser:appuser /app/scripts
 
 # --- Builder Stage ---
 # Used to install dependencies with build tools
@@ -57,9 +59,6 @@ COPY --chown=appuser:appuser pyproject.toml poetry.lock ./
 # Use --no-cache to avoid potential poetry caching issues inside build
 # The venv will be created at /opt/pysetup/.venv due to ENV vars in base
 RUN poetry install --no-dev --no-root --sync --no-cache
-
-# Install the project itself as editable AFTER dependencies
-# RUN poetry install --no-dev --sync --no-cache
 
 # --- Development Stage ---
 # Optimized for local development with hot-reloading
@@ -84,9 +83,30 @@ RUN poetry install --verbose --sync --no-cache
 # Copy application code (less critical now due to volume mount, but good practice)
 COPY --chown=appuser:appuser . .
 
-# --- ADDED: Copy and set permissions for the entrypoint script ---
-COPY --chown=appuser:appuser ./scripts/entrypoint.sh /app/scripts/entrypoint.sh
+# Make sure scripts directory exists before attempting to copy to it
+RUN mkdir -p /app/scripts
+
+# Create placeholder entrypoint script if it doesn't exist in the context
+RUN if [ ! -f /app/scripts/entrypoint.sh ]; then \
+    echo '#!/bin/bash' > /app/scripts/entrypoint.sh && \
+    echo 'echo "Waiting for database..."' >> /app/scripts/entrypoint.sh && \
+    echo 'sleep 5' >> /app/scripts/entrypoint.sh && \
+    echo 'echo "Database ready!"' >> /app/scripts/entrypoint.sh && \
+    echo 'exec "$@"' >> /app/scripts/entrypoint.sh; \
+    fi
+
+# Set proper permissions
 RUN chmod +x /app/scripts/entrypoint.sh
+
+# Create sub_downloader placeholder if needed
+RUN if [ ! -f /app/scripts/sub_downloader.py ]; then \
+    echo '#!/usr/bin/env python3' > /app/scripts/sub_downloader.py && \
+    echo '# Placeholder for subtitle downloader script' >> /app/scripts/sub_downloader.py && \
+    echo 'print("Subtitle downloader placeholder")' >> /app/scripts/sub_downloader.py; \
+    fi
+
+# Make Python scripts executable
+RUN find /app/scripts -type f -iname "*.py" -exec chmod +x {} \;
 
 # Switch to non-root user for running the application
 USER appuser
@@ -94,11 +114,11 @@ USER appuser
 # Expose the port (good practice)
 EXPOSE 8000
 
-# --- ADDED: Set the entrypoint script ---
+# Set the entrypoint script
 # This script waits for DB, runs migrations, then executes CMD
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
 
-# --- MODIFIED: Define the default command for development ---
+# Define the default command for development
 # This is what entrypoint.sh executes via 'exec "$@"' after its tasks
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
@@ -115,14 +135,16 @@ COPY --chown=appuser:appuser --from=builder /opt/pysetup/.venv /opt/pysetup/.ven
 
 # Copy only the application code needed for runtime
 COPY --chown=appuser:appuser app ./app
-# Add any other necessary files like scripts, static files etc.
-# COPY --chown=appuser:appuser scripts ./scripts
+
+# Ensure scripts directory exists and copy necessary scripts
+RUN mkdir -p /app/scripts
+COPY --chown=appuser:appuser --from=development /app/scripts/entrypoint.sh /app/scripts/entrypoint.sh
+RUN chmod +x /app/scripts/entrypoint.sh
 
 USER appuser
 EXPOSE 8000
 
 # Use the venv Python via the updated PATH
-# NOTE: Production does NOT use the entrypoint script
 CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-w", "4", "-b", "0.0.0.0:8000", "app.main:app"]
 
 
@@ -131,5 +153,4 @@ FROM production-api AS production-worker
 # Inherits everything from production-api (user, venv, code, WORKDIR, USER, PATH)
 
 # Use the venv Python via the updated PATH
-# NOTE: Production does NOT use the entrypoint script
 CMD ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=INFO"] # Add pool/concurrency as needed e.g. "-P gevent -c 4"

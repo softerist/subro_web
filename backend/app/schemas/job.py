@@ -4,47 +4,60 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, constr
 
-# Re-use the JobStatus Enum from the model for consistency in schemas
+# Import JobStatus Enum directly from the model for consistency
 from app.db.models.job import JobStatus
 
 
-# Schema for creating a new job (input from user)
+# Schema for creating a new job (input from API consumer)
 class JobCreate(BaseModel):
     folder_path: str = Field(
         ..., min_length=1, max_length=1024, description="Absolute path to the media folder"
     )
-    language: constr(max_length=10) | None = Field(
-        None, description="Optional language code (e.g., 'en', 'es-ES')"
-    )  # For Python 3.9+ use str | None = ...
+    language: constr(max_length=10) | None = Field(  # Use Optional for Python < 3.10
+        # language: str | None = Field( # Use this for Python 3.10+
+        default=None,
+        description="Optional language code (e.g., 'en', 'es-ES')",
+    )
 
 
-# Schema for representing a job in API responses (output to user)
+# Schema for representing a job in API responses
 class JobRead(BaseModel):
     id: uuid.UUID
-    user_id: uuid.UUID
+    user_id: uuid.UUID  # Assuming user_id is always present on a job
     folder_path: str
-    language: str | None = None  # For Python 3.9+ use str | None
-    status: JobStatus
+    language: str | None = None  # Python < 3.10
+    # language: str | None = None # Python 3.10+
+    status: JobStatus  # Use the imported Enum
     submitted_at: datetime
-    started_at: datetime | None = None  # For Python 3.9+ use datetime | None
-    completed_at: datetime | None = None  # For Python 3.9+ use datetime | None
-    result_message: str | None = None  # For Python 3.9+ use str | None
-    exit_code: int | None = None  # For Python 3.9+ use int | None
-    log_snippet: str | None = None  # For Python 3.9+ use str | None
-    celery_task_id: str | None = None  # For Python 3.9+ use str | None
+    started_at: datetime | None = None  # Python < 3.10
+    # started_at: datetime | None = None # Python 3.10+
+    completed_at: datetime | None = None  # Python < 3.10
+    # completed_at: datetime | None = None # Python 3.10+
+    result_message: str | None = None  # Python < 3.10
+    # result_message: str | None = None # Python 3.10+
+    exit_code: int | None = None  # Python < 3.10
+    # exit_code: int | None = None # Python 3.10+
+    log_snippet: str | None = None  # Python < 3.10
+    # log_snippet: str | None = None # Python 3.10+
+    celery_task_id: str | None = None  # Python < 3.10
+    # celery_task_id: str | None = None # Python 3.10+
 
     class Config:
-        from_attributes = True  # For Pydantic V2 (was orm_mode = True in V1)
-        # Allows creating schema instances from ORM objects
+        from_attributes = True  # Pydantic V2 (orm_mode = True in V1)
+        # Consider adding:
+        # use_enum_values = True # To serialize Enum members to their values (e.g., "PENDING" string)
 
 
-# Schema for a simpler representation, perhaps for lists
+# Schema for a simpler representation, e.g., for paginated lists
 class JobReadLite(BaseModel):
     id: uuid.UUID
     folder_path: str
     status: JobStatus
     submitted_at: datetime
-    language: str | None = None  # For Python 3.9+ use str | None
+    language: str | None = None  # Python < 3.10
+    # language: str | None = None # Python 3.10+
+    user_id: uuid.UUID  # Often useful to know who submitted it even in a lite view
 
     class Config:
         from_attributes = True
+        # use_enum_values = True

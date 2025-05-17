@@ -134,6 +134,30 @@ app = FastAPI(
     docs_url=f"{settings.API_V1_STR}/docs",
     redoc_url=f"{settings.API_V1_STR}/redoc",
     servers=[{"url": openapi_server_url, "description": "Current environment server"}],
+    # --- ADD THIS SECTION TO CUSTOMIZE OPENAPI SECURITY SCHEMES ---
+    openapi_components={
+        "securitySchemes": {
+            # This name MUST match the name fastapi-users (or your manual setup)
+            # is using for the OAuth2 Password flow in the generated openapi.json.
+            # Common default is "OAuth2PasswordBearer".
+            "OAuth2PasswordBearer": {
+                "type": "oauth2",
+                "flows": {
+                    "password": {
+                        # Point to YOUR custom login endpoint
+                        "tokenUrl": f"{settings.API_V1_STR}/auth/login",
+                        "scopes": {},  # Add scopes here if your app uses them, e.g., {"read:items": "Read items."}
+                    }
+                },
+            }
+            # If you have other schemes (e.g., for a cookie-based auth also shown in Swagger),
+            # you might need to define or adjust them here too.
+            # For example, if fastapi-users also defines a scheme for its cookie auth that
+            # you want to keep, you'd copy its existing definition from openapi.json here
+            # and just modify the OAuth2PasswordBearer one.
+        }
+    },
+    # --- END OF ADDED SECTION ---
 )
 
 # --- Middleware ---
