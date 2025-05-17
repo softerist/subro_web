@@ -76,8 +76,8 @@ async def _execute_subtitle_script(
     Extracted from _execute_subtitle_downloader_async_logic to reduce complexity.
     """
     job_db_id_str = str(job_db_id)
-    script_path = settings.SUBTITLE_DOWNLOADER_SCRIPT_PATH
-    job_timeout = settings.SUBTITLE_JOB_TIMEOUT_SECONDS
+    script_path = settings.DOWNLOAD_SCRIPT_PATH
+    job_timeout = settings.JOB_TIMEOUT_SEC
 
     try:
         # Run the script process and handle timeouts
