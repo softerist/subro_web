@@ -87,7 +87,13 @@ known-first-party = ["app"]
 minversion = "7.0"
 asyncio_mode = "auto"
 log_cli = true
-log_cli_level = "INFO"
+log_cli_level = "DEBUG"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(name)s:%(filename)s:%(lineno)s --- %(message)s (%(pathname)s:%(lineno)d)"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+# log_levels = [
+#     "app = DEBUG",
+#     "app.tasks.subtitle_jobs = DEBUG",
+# ]
 python_files = "test_*.py"
 addopts = "-ra -q --cov=app --cov-report=term-missing"
 testpaths = [

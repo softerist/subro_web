@@ -1,12 +1,13 @@
 # backend/app/db/session.py
 import asyncio
+import contextlib  # <--- IMPORT THIS
 import logging
 from collections.abc import AsyncGenerator, Generator
 
 from fastapi import Depends
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy import Engine as SaEngine
-from sqlalchemy import create_engine, text  # Added SaEngine for type hint
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -16,10 +17,8 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import Session as SyncSessionORM
 from sqlalchemy.orm import sessionmaker
 
-# Ensure FastAPI is imported if Depends is used, though it's only for get_user_db
-# from fastapi import Depends # If get_user_db is directly used by FastAPI endpoints not using lifespan
 from app.core.config import settings
-from app.db.models.user import User  # Ensure this import path is correct
+from app.db.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +40,8 @@ def _initialize_fastapi_db_resources_sync():
 
     logger.info("FastAPI: Initializing asynchronous database engine and session maker.")
     try:
-        # Access the computed property from config.py
-        # It will raise an exception if it cannot be computed (e.g., missing underlying components and no base DSN)
         db_url_fastapi_obj = settings.ASYNC_SQLALCHEMY_DATABASE_URL
-        if not db_url_fastapi_obj:  # Should not happen if PostgresDsn is returned and is valid
+        if not db_url_fastapi_obj:
             logger.critical(
                 "CRITICAL: FastAPI: ASYNC_SQLALCHEMY_DATABASE_URL computed to None or empty."
             )
@@ -56,7 +53,7 @@ def _initialize_fastapi_db_resources_sync():
         current_engine = create_async_engine(
             db_url_fastapi_str,
             pool_pre_ping=True,
-            echo=getattr(settings, "DB_ECHO", False),  # DB_ECHO is defined in your config
+            echo=getattr(settings, "DB_ECHO", False),
         )
         current_session_local = async_sessionmaker(
             bind=current_engine,
@@ -112,12 +109,10 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
-# Assuming get_user_db needs `fastapi.Depends` if used in FastAPI path operations.
-# If only used internally, Depends might not be needed here.
 async def get_user_db(
     session: AsyncSession = Depends(get_async_session),
 ) -> AsyncGenerator[SQLAlchemyUserDatabase, None]:
-    from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase  # Local import if heavy
+    from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
     yield SQLAlchemyUserDatabase(session, User)
 
@@ -127,9 +122,8 @@ sync_engine: SaEngine | None = None
 SyncSessionLocal: sessionmaker[SyncSessionORM] | None = None
 
 try:
-    # Access the computed property. It handles fallback to components if PRIMARY_DATABASE_URL_ENV is not set.
     sync_db_url_obj = settings.SYNC_SQLALCHEMY_DATABASE_URL
-    if not sync_db_url_obj:  # Should not happen if PostgresDsn is returned
+    if not sync_db_url_obj:
         logger.critical("SYNC: SYNC_SQLALCHEMY_DATABASE_URL computed to None or empty.")
         raise ValueError("SYNC: SYNC_SQLALCHEMY_DATABASE_URL is empty or None after computation.")
     sync_db_url_str = str(sync_db_url_obj)
@@ -184,9 +178,8 @@ def initialize_worker_db_resources():
     if worker_async_engine is None:
         logger.info("CELERY_WORKER: Initializing database engine and session factory.")
         try:
-            # Access the computed property. It handles its own fallback logic.
             db_url_worker_obj = settings.ASYNC_SQLALCHEMY_DATABASE_URL_WORKER
-            if not db_url_worker_obj:  # Should not happen
+            if not db_url_worker_obj:
                 logger.critical(
                     "CELERY_WORKER: ASYNC_SQLALCHEMY_DATABASE_URL_WORKER computed to None or empty."
                 )
@@ -198,9 +191,7 @@ def initialize_worker_db_resources():
             current_worker_engine = create_async_engine(
                 db_url_worker_str,
                 pool_pre_ping=True,
-                echo=getattr(
-                    settings, "DB_ECHO_WORKER", getattr(settings, "DB_ECHO", False)
-                ),  # Fallback to DB_ECHO
+                echo=getattr(settings, "DB_ECHO_WORKER", getattr(settings, "DB_ECHO", False)),
             )
             current_worker_session_local = async_sessionmaker(
                 bind=current_worker_engine,
@@ -232,12 +223,8 @@ def dispose_worker_db_resources_sync():
     if worker_async_engine:
         logger.info("CELERY_WORKER: Disposing database engine (sync call).")
         try:
-            # This asyncio.run() will also benefit from nest_asyncio being applied
-            # in the worker process.
             asyncio.run(worker_async_engine.dispose())
         except RuntimeError as e:
-            # This can happen if the loop is already closed or closing,
-            # especially during forceful shutdown. nest_asyncio might make it cleaner.
             logger.warning(
                 f"CELERY_WORKER: asyncio.run() failed during dispose: {e}. Common during shutdown."
             )
@@ -254,6 +241,7 @@ def dispose_worker_db_resources_sync():
         logger.info("CELERY_WORKER: No database engine to dispose for this worker process.")
 
 
+@contextlib.asynccontextmanager  # <--- ADD THIS DECORATOR
 async def get_worker_db_session() -> AsyncGenerator[AsyncSession, None]:
     if WorkerSessionLocal is None:
         logger.critical(
@@ -262,16 +250,28 @@ async def get_worker_db_session() -> AsyncGenerator[AsyncSession, None]:
         raise RuntimeError(
             "Database session factory (WorkerSessionLocal) not initialized for Celery worker."
         )
-    async with WorkerSessionLocal() as session:
+
+    # The WorkerSessionLocal() call returns an AsyncSession instance.
+    # AsyncSession itself is an asynchronous context manager.
+    async with WorkerSessionLocal() as session:  # session: AsyncSession
         try:
+            # Yield the session to the `async with get_worker_db_session() as db:` block
             yield session
+            # If the `with` block in the task completes without error, execution resumes here.
+            # Note: AsyncSession's context manager does not auto-commit by default.
+            # Commits should be explicit in the code using the session.
         except Exception:
-            await session.rollback()
+            # If an exception occurs in the code using the yielded session,
+            # it's caught here. The `async with WorkerSessionLocal() as session:`
+            # context manager will also see this exception (as it propagates)
+            # and will ensure `session.rollback()` and `session.close()` are called.
+            # Logging here can be useful for context.
             logger.error(
-                "CELERY_WORKER: Async DB session in worker rolled back due to an exception.",
+                "CELERY_WORKER: Exception occurred in user code of get_worker_db_session. "
+                "Session rollback and close will be handled by AsyncSession's context manager.",
                 exc_info=True,
             )
-            raise
+            raise  # Re-raise the exception to be handled by the caller and the outer context manager.
 
 
 # --- FastAPI Lifespan Event Handler Integration ---

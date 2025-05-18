@@ -81,6 +81,7 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
         result_message: str | None = None,
         log_snippet: str | None = None,
         started_at: datetime | None = None,
+        celery_task_id: str | None = None,  # MODIFIED: Added parameter
     ) -> Job | None:
         """
         Updates job status and other completion or running details using JobUpdate schema.
@@ -98,7 +99,14 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
 
         # Create the update data dictionary with non-None values
         update_data_dict = self._prepare_update_data(  # Now calls the method within the class
-            db_job, status, completed_at, exit_code, result_message, log_snippet, started_at
+            db_job,
+            status,
+            completed_at,
+            exit_code,
+            result_message,
+            log_snippet,
+            started_at,
+            celery_task_id,  # MODIFIED: Pass celery_task_id
         )
 
         try:
@@ -121,6 +129,7 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
         result_message: str | None,
         log_snippet: str | None,
         started_at: datetime | None,
+        celery_task_id: str | None = None,  # MODIFIED: Added parameter
     ) -> dict:
         """
         Prepares update data dictionary based on the job status and provided parameters.
@@ -136,6 +145,8 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
             update_data["exit_code"] = exit_code
         if log_snippet is not None:
             update_data["log_snippet"] = log_snippet
+        if celery_task_id is not None:  # MODIFIED: Added condition to include celery_task_id
+            update_data["celery_task_id"] = celery_task_id
 
         current_time_utc = datetime.now(UTC)
 
