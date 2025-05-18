@@ -120,7 +120,8 @@ async def _execute_subtitle_downloader_async_logic(
     task_log_prefix = f"[AsyncTask:{task_name_for_log} CeleryID:{celery_internal_task_id} DBJobID:{job_db_id_str}]"
     logger.info(f"{task_log_prefix} ASYNC LOGIC ENTERED.")
 
-    response = _create_default_error_response(job_db_id_str)
+    # Ensure the default error response coroutine is awaited
+    response = await _create_default_error_response(job_db_id_str)
     stdout_accumulator: list[bytes] = []
     stderr_accumulator: list[bytes] = []
     redis_client = await _initialize_redis_client(settings.REDIS_PUBSUB_URL, task_log_prefix)
@@ -149,6 +150,49 @@ async def _execute_subtitle_downloader_async_logic(
         await _cleanup_resources(redis_client, task_log_prefix, response.get("status"))
 
     return response
+
+
+# async def _execute_subtitle_downloader_async_logic(
+#     task_name_for_log: str,
+#     celery_internal_task_id: str,
+#     job_db_id: UUID,
+#     folder_path: str,
+#     language: str | None,
+# ) -> dict:
+#     """Execute subtitle downloader task asynchronously with proper error handling and status reporting."""
+#     job_db_id_str = str(job_db_id)
+#     task_log_prefix = f"[AsyncTask:{task_name_for_log} CeleryID:{celery_internal_task_id} DBJobID:{job_db_id_str}]"
+#     logger.info(f"{task_log_prefix} ASYNC LOGIC ENTERED.")
+
+#     response = _create_default_error_response(job_db_id_str)
+#     stdout_accumulator: list[bytes] = []
+#     stderr_accumulator: list[bytes] = []
+#     redis_client = await _initialize_redis_client(settings.REDIS_PUBSUB_URL, task_log_prefix)
+
+#     try:
+#         response = await _execute_main_task_logic(
+#             job_db_id,
+#             job_db_id_str,
+#             celery_internal_task_id,
+#             folder_path,
+#             language,
+#             task_log_prefix,
+#             redis_client,
+#             stdout_accumulator,
+#             stderr_accumulator,
+#         )
+#     except RuntimeError as e:
+#         response = await _handle_runtime_error(e, job_db_id_str, redis_client, task_log_prefix)
+#     except SQLAlchemyError as db_e:
+#         response = await _handle_database_error(db_e, job_db_id_str, redis_client, task_log_prefix)
+#     except Exception as e_unhandled:
+#         response = await _handle_unexpected_error(
+#             e_unhandled, job_db_id, job_db_id_str, redis_client, task_log_prefix
+#         )
+#     finally:
+#         await _cleanup_resources(redis_client, task_log_prefix, response.get("status"))
+
+#     return response
 
 
 async def _create_default_error_response(job_id: str) -> dict:
