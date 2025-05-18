@@ -607,7 +607,9 @@ async def _execute_subtitle_script(
         )
         logger.error(f"{task_log_prefix} {err_msg_general}", exc_info=settings.LOG_TRACEBACKS)
         effective_exit_code = getattr(e, "exit_code", -200)
-        if exit_code != -1 and exit_code != -255:
+        if (
+            exit_code != -1 and exit_code != -255
+        ):  # -255 is initial value in _run_script_and_get_output
             effective_exit_code = exit_code
         current_log_snippet = _build_log_snippet(
             b"".join(stdout_accumulator).decode("utf-8", errors="replace"),
@@ -961,7 +963,7 @@ async def _final_process_cleanup_kill(
             )
             special_error_codes = [-99, -98, -254, -9, -97]
             if current_exit_code not in special_error_codes:
-                return -9
+                return -9  # A distinct error code indicating final kill failure
     return current_exit_code
 
 
@@ -982,9 +984,13 @@ async def _run_script_and_get_output(
 
     logger.info(f"{task_log_prefix} Executing command: {' '.join(cmd_args)}")
 
-    exit_code_to_return = -255
+    exit_code_to_return = -255  # Default/initial "indeterminate" exit code
     process: asyncio.subprocess.Process | None = None
-    monitoring_tasks: list[asyncio.Task[Any] | None] = [None, None, None]
+    monitoring_tasks: list[asyncio.Task[Any] | None] = [
+        None,
+        None,
+        None,
+    ]  # stdout, stderr, process_wait
     all_tasks_gather_future: asyncio.Future[list[Any]] | None = None
 
     try:
@@ -992,7 +998,7 @@ async def _run_script_and_get_output(
             cmd_args, task_log_prefix, redis_client, job_db_id_str, stderr_accumulator
         )
         (
-            monitoring_tasks,
+            monitoring_tasks,  # [stdout_task, stderr_task, process_wait_task]
             all_tasks_gather_future,
         ) = await _create_monitoring_tasks_and_gather_future(
             process,
@@ -1005,31 +1011,47 @@ async def _run_script_and_get_output(
         logger.debug(
             f"{task_log_prefix} Gathering stream readers and process.wait() with timeout {job_timeout_sec}s."
         )
+        # This is the main wait point. `all_tasks_gather_future` completes when all tasks in it complete.
+        # The `process_wait_task` within it only completes when the subprocess itself exits.
         results = await asyncio.wait_for(all_tasks_gather_future, timeout=job_timeout_sec)
         exit_code_to_return = _process_gather_results(results, process, task_log_prefix)
 
-    except RuntimeError as e_setup:
+    except RuntimeError as e_setup:  # Covers _setup_subprocess failure (e.g. streams not available)
         logger.error(
             f"{task_log_prefix} Subprocess setup failed: {e_setup}",
             exc_info=settings.LOG_TRACEBACKS,
         )
-        exit_code_to_return = -254
+        exit_code_to_return = -254  # Specific code for setup failure before full execution
+        # This error needs to be re-raised to be caught by _execute_subtitle_script's general Exception handler
+        # which then calls _handle_task_failure_in_db.
+        # Or, we can directly call something similar to _handle_task_failure_in_db logic here.
+        # For simplicity, let the outer handler in _execute_subtitle_script catch it.
         raise
-    except TimeoutError:
+    except TimeoutError:  # Specifically from asyncio.wait_for(all_tasks_gather_future, ...)
+        # This means the script + stream reading took too long.
         exit_code_to_return = await _handle_script_timeout(
             process, all_tasks_gather_future, job_timeout_sec, stderr_accumulator, task_log_prefix
         )
+        # Re-raise for _execute_subtitle_script to handle TimeoutError specifically for DB update.
         raise
-    except Exception as e_manage:
+    except Exception as e_manage:  # Other errors during process management or gather
         exit_code_to_return = await _handle_script_management_error(
             e_manage, process, stderr_accumulator, task_log_prefix
         )
+        # Re-raise for _execute_subtitle_script's general Exception handler.
         raise
     finally:
+        # Ensure all monitoring tasks (stdout/stderr readers, process_wait_task) are cancelled and awaited.
+        # This is crucial to prevent "Task was destroyed but it is pending!" warnings
+        # and to clean up resources, especially if an exception occurred.
         await _ensure_tasks_cancelled_and_awaited(monitoring_tasks, task_log_prefix)
+
+        # Final check: if process is somehow still running (e.g., cancellation logic failed or was bypassed), kill it.
+        # This also handles the case where an error occurred *after* process start but *before* normal exit/timeout handling.
         exit_code_to_return = await _final_process_cleanup_kill(
             process, exit_code_to_return, task_log_prefix
         )
+
     return exit_code_to_return
 
 
@@ -1068,7 +1090,7 @@ def _build_log_snippet(
         parts.append(f"STDOUT:\n{stdout}")
     if stderr:
         parts.append(f"STDERR:\n{stderr}")
-        if status == JobStatus.FAILED and code != -99:
+        if status == JobStatus.FAILED and code != -99:  # -99 is timeout, already logged explicitly
             logger.warning(
                 f"{task_log_prefix} Task failed with STDERR. Code: {code}. STDERR (first 500 chars): {stderr[:500]}"
             )
@@ -1087,21 +1109,25 @@ def _build_result_message(stdout: str, stderr: str, status: JobStatus, code: int
         lines = [ln for ln in stdout.splitlines() if ln.strip()]
         return lines[-1] if lines else "Script completed successfully with no specific message."
 
+    # For failures, prioritize stderr for the message
     err_lines = [
         ln
         for ln in stderr.splitlines()
-        if ln.strip() and not ln.startswith("[TASK_INTERNAL_ERROR]")
+        if ln.strip()
+        and not ln.startswith("[TASK_INTERNAL_ERROR]")  # Filter out our own task messages
     ]
     if err_lines:
-        relevant_err_lines = err_lines[-3:]
+        relevant_err_lines = err_lines[-3:]  # Get last few lines
         snippet = " | ".join(relevant_err_lines)
         return f"Script failed (code {code}). Error: {snippet}"
 
+    # If no stderr, try stdout for failure context
     out_lines = [ln for ln in stdout.splitlines() if ln.strip()]
     if out_lines:
         return f"Script failed (code {code}). Last output: {out_lines[-1]}"
 
-    if code == -99:
+    # Specific message for timeout if not already clear
+    if code == -99:  # Timeout code from _handle_script_timeout
         return f"Script failed due to timeout (code {code})."
     return f"Script failed (code {code}) with no discernible output."
 
@@ -1133,15 +1159,17 @@ async def _finalize_job_in_db(
             log_snippet=log_snippet,
             completed_at=datetime.now(UTC),
         )
+        # Note: db.commit() is handled by the calling context (_execute_main_task_logic's `async with`)
+        # or explicitly in error handlers (_handle_task_failure_in_db).
         logger.info(
             f"{task_log_prefix} Job final status attributes prepared for commit (status: {status.value})."
         )
-    except Exception as e:
+    except Exception as e:  # Includes SQLAlchemyError if commit fails or other issues
         logger.error(
             f"{task_log_prefix} FAILED to stage job completion details for commit: {e}",
             exc_info=settings.LOG_TRACEBACKS,
         )
-        raise
+        raise  # Re-raise to be caught by the caller's error handling
 
 
 async def _handle_task_failure_in_db(
@@ -1152,7 +1180,7 @@ async def _handle_task_failure_in_db(
     job_id: UUID,
     error: Exception | str,
     task_log_prefix: str,
-    exit_code_override: int = -400,
+    exit_code_override: int = -400,  # General internal task failure
     log_snippet_override: str | None = None,
 ):
     err_str = str(error)
@@ -1163,9 +1191,13 @@ async def _handle_task_failure_in_db(
     )
     tb_str = ""
     if isinstance(error, Exception) and settings.LOG_TRACEBACKS_IN_JOB_LOGS:
+        # Capture traceback if it's an exception and configured
         tb_full = traceback.format_exc()
-        max_tb_len_for_snippet = settings.JOB_LOG_SNIPPET_MAX_LEN - len(result_message_full) - 100
-        if max_tb_len_for_snippet < 200:
+        # Ensure traceback doesn't make log_snippet too long
+        max_tb_len_for_snippet = (
+            settings.JOB_LOG_SNIPPET_MAX_LEN - len(result_message_full) - 100
+        )  # Approximation
+        if max_tb_len_for_snippet < 200:  # Minimum reasonable length for a TB
             max_tb_len_for_snippet = 200
         tb_str = f"\nTraceback:\n{tb_full[:max_tb_len_for_snippet]}"
         if len(tb_full) > max_tb_len_for_snippet:
@@ -1174,7 +1206,7 @@ async def _handle_task_failure_in_db(
     log_snippet_full: str
     if log_snippet_override is not None:
         log_snippet_full = log_snippet_override
-        if tb_str:
+        if tb_str:  # Append traceback if available and an override is given
             log_snippet_full += tb_str
     else:
         log_snippet_full = f"Task error details: {result_message_full}{tb_str}"
@@ -1194,6 +1226,7 @@ async def _handle_task_failure_in_db(
             log_snippet=log_snippet_trimmed,
             completed_at=failure_time_utc,
         )
+        # Try to publish failure to Redis if client is available
         if redis_client:
             await _publish_to_redis_pubsub_async(
                 redis_client,
@@ -1201,8 +1234,8 @@ async def _handle_task_failure_in_db(
                 "status",
                 {
                     "status": JobStatus.FAILED.value,
-                    "ts": failure_time_utc,
-                    "error_message": result_message_full,
+                    "ts": failure_time_utc,  # Use the same timestamp
+                    "error_message": result_message_full,  # Publish full message
                     "exit_code": exit_code_override,
                 },
                 task_log_prefix,
@@ -1211,17 +1244,18 @@ async def _handle_task_failure_in_db(
             logger.warning(
                 f"{task_log_prefix} Redis client not available. Skipping FAILED status publish from _handle_task_failure_in_db."
             )
-        await db.commit()
+
+        await db.commit()  # Crucial: commit the failure state
         logger.info(
             f"{task_log_prefix} Job marked as FAILED in DB due to task error and committed. Pub/Sub status sent if Redis available."
         )
-    except Exception as db_exc:
+    except Exception as db_exc:  # If updating DB itself fails
         logger.error(
             f"{task_log_prefix} Additionally FAILED to update DB on task error: {db_exc}",
             exc_info=settings.LOG_TRACEBACKS,
         )
         try:
-            await db.rollback()
+            await db.rollback()  # Attempt to rollback any partial changes
             logger.info(
                 f"{task_log_prefix} Rolled back DB transaction after failing to mark job as FAILED."
             )
@@ -1229,6 +1263,7 @@ async def _handle_task_failure_in_db(
             logger.error(
                 f"{task_log_prefix} Rollback also failed after failing to update DB on task error: {rb_exc}"
             )
+        # Original error should still be propagated or handled by caller
 
 
 @celery_app.task(
@@ -1257,6 +1292,8 @@ def execute_subtitle_downloader_task(
             f"{wrapper_log_prefix} Invalid job_db_id_str: '{job_db_id_str}'. Cannot proceed.",
             exc_info=True,
         )
+        # This error occurs before DB interaction for this job, so we can't easily mark the specific job FAILED.
+        # Raising ValueError will make Celery mark the task as FAILED.
         raise ValueError(f"Invalid Job DB ID format: {job_db_id_str}") from None
 
     final_result_from_async = None
@@ -1270,6 +1307,8 @@ def execute_subtitle_downloader_task(
         logger.info(
             f"{wrapper_log_prefix} Async logic completed. Raw result: {str(final_result_from_async)[:500]}..."
         )
+
+        # If async logic explicitly returned a FAILED status, ensure Celery task reflects this.
         if (
             isinstance(final_result_from_async, dict)
             and final_result_from_async.get("status") == JobStatus.FAILED.value
@@ -1281,23 +1320,37 @@ def execute_subtitle_downloader_task(
             logger.warning(
                 f"{wrapper_log_prefix} Async logic reported failure (Type: {error_type}): '{failure_message}'. Raising."
             )
+            # Raise a RuntimeError to make Celery mark the task as FAILED.
+            # The DB job status should have already been set to FAILED by the async logic.
             raise RuntimeError(f"Task failed via async logic ({error_type}): {failure_message}")
+
         logger.info(
             f"{wrapper_log_prefix} SYNC WRAPPER COMPLETED successfully. Result: {final_result_from_async}"
         )
-        return final_result_from_async
+        return final_result_from_async  # This is what Celery stores as the task result
+
     except RuntimeError as e_runtime:
+        # This catches RuntimeErrors raised from _execute_subtitle_downloader_async_logic
+        # (e.g., from _setup_job_as_running or if we re-raise them)
+        # or the one raised just above if async logic returned FAILED.
         logger.error(
             f"{wrapper_log_prefix} RuntimeError caught in SYNC WRAPPER: {e_runtime}",
             exc_info=settings.LOG_TRACEBACKS_CELERY_WRAPPER,
         )
+        # Re-raise to ensure Celery marks the task as FAILED.
+        # The job status in DB should ideally be FAILED already by this point if the error
+        # originated within the main async try-except block.
         raise
     except Exception as e_unhandled_wrapper:
+        # This catches truly unexpected errors in the sync wrapper or asyncio.run() itself.
         logger.error(
             f"{wrapper_log_prefix} Unexpected exception caught in SYNC WRAPPER: {type(e_unhandled_wrapper).__name__}: {e_unhandled_wrapper}",
             exc_info=settings.LOG_TRACEBACKS_CELERY_WRAPPER,
         )
         error_message_for_celery = f"Celery task wrapper unexpected error: {type(e_unhandled_wrapper).__name__}: {str(e_unhandled_wrapper)[:500]}"
+
+        # Emergency attempt to mark the job as FAILED in DB and Pub/Sub,
+        # as the main async logic might not have reached its own error handling.
         try:
             logger.error(
                 f"{wrapper_log_prefix} Emergency: Attempting to mark job {job_db_id_str} as FAILED."
@@ -1313,33 +1366,39 @@ def execute_subtitle_downloader_task(
                     async with get_worker_db_session() as db_emergency:
                         # traceback.format_exc() will capture the traceback of e_unhandled_wrapper
                         # as this function is called from within its except block.
-                        tb_formatted_str = traceback.format_exc()
+                        tb_formatted_str = (
+                            traceback.format_exc()
+                        )  # Get traceback for the current exception
                         await _handle_task_failure_in_db(
                             db_emergency,
                             redis_emergency_client,
                             job_db_id_str,
                             crud_job_operations,
                             job_db_id,
-                            error_message_for_celery,
+                            error_message_for_celery,  # Pass the error string
                             wrapper_log_prefix,
-                            exit_code_override=-600,
+                            exit_code_override=-600,  # Unique code for wrapper failure
                             log_snippet_override=f"Celery wrapper critical error: {error_message_for_celery}\n\n{tb_formatted_str}",
                         )
                 except Exception as emergency_update_err:
                     logger.critical(
                         f"{wrapper_log_prefix} Emergency DB/PubSub update FAILED: {emergency_update_err}",
-                        exc_info=True,
+                        exc_info=True,  # Log this critical failure too
                     )
                 finally:
                     if redis_emergency_client:
                         await redis_emergency_client.close()
 
             asyncio.run(emergency_db_and_pubsub_update())
-        except Exception as emergency_setup_exc:
+        except (
+            Exception
+        ) as emergency_setup_exc:  # Catch errors from asyncio.run or redis/db connection
             logger.critical(
                 f"{wrapper_log_prefix} Setup for emergency DB/PubSub update FAILED: {emergency_setup_exc}",
                 exc_info=True,
             )
+
+        # Finally, raise an error to make Celery mark the task as FAILED.
         raise RuntimeError(error_message_for_celery) from e_unhandled_wrapper
     finally:
         logger.info(f"{wrapper_log_prefix} SYNC WRAPPER EXITING.")

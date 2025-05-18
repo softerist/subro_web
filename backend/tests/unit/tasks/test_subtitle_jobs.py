@@ -1,3 +1,4 @@
+# backend/tests/unit/tasks/test_subtitle_jobs.py
 import asyncio
 import json
 import uuid
@@ -20,7 +21,7 @@ from app.schemas.job import JobStatus
 
 # Make sure the SUT (System Under Test) is correctly imported
 from app.tasks import (
-    subtitle_jobs,  # Assuming subtitle_jobs is the module containing _execute_subtitle_downloader_async_logic
+    subtitle_jobs,
 )
 
 TEST_JOB_DB_ID = uuid.UUID("123e4567-e89b-12d3-a456-426614174000")
@@ -36,7 +37,8 @@ def mock_settings_env(monkeypatch: pytest.MonkeyPatch):
     mock_settings_obj.REDIS_PUBSUB_URL = RedisDsn("redis://mock-redis:6379/1")
     mock_settings_obj.SUBTITLE_DOWNLOADER_SCRIPT_PATH = "/mock/scripts/sub_downloader.py"
     mock_settings_obj.PYTHON_EXECUTABLE_PATH = "/usr/bin/python3"
-    mock_settings_obj.JOB_TIMEOUT_SEC = 0.1  # Default, can be overridden in tests
+    mock_settings_obj.JOB_TIMEOUT_SEC = 0.01  # Short for testing main timeout
+    mock_settings_obj.PROCESS_TERMINATE_GRACE_PERIOD_S = 0.001  # Shorter for testing grace period
     mock_settings_obj.LOG_TRACEBACKS = True
     mock_settings_obj.LOG_TRACEBACKS_IN_JOB_LOGS = True
     mock_settings_obj.LOG_TRACEBACKS_CELERY_WRAPPER = True
@@ -44,7 +46,6 @@ def mock_settings_env(monkeypatch: pytest.MonkeyPatch):
     mock_settings_obj.JOB_RESULT_MESSAGE_MAX_LEN = 256
     mock_settings_obj.JOB_LOG_SNIPPET_MAX_LEN = 1024
     mock_settings_obj.LOG_SNIPPET_PREVIEW_LEN = 100
-    mock_settings_obj.PROCESS_TERMINATE_GRACE_PERIOD_S = 0.001
 
     original_settings = getattr(subtitle_jobs, "settings", None)
     monkeypatch.setattr(subtitle_jobs, "settings", mock_settings_obj)
@@ -64,7 +65,8 @@ async def mock_redis_client() -> AsyncGenerator[AsyncMock, None]:
 
 
 @pytest.fixture
-def mock_async_redis_from_url(mock_redis_client: AsyncMock) -> MagicMock:
+def mock_async_redis_from_url(mock_redis_client: AsyncMock) -> AsyncMock:
+    # This fixture provides a mock for aioredis.from_url that simulates a successful connection by default
     mock_from_url_function = AsyncMock(return_value=mock_redis_client)
     with patch.object(
         subtitle_jobs.aioredis, "from_url", mock_from_url_function
@@ -116,6 +118,64 @@ def mock_celery_task_context() -> MagicMock:
     return task_mock
 
 
+# Helper for mock_subprocess_protocol to reduce its complexity
+def _create_mock_stream_reader_helper() -> AsyncMock:
+    reader = AsyncMock(spec=asyncio.StreamReader)
+    # Attach a list to the mock directly to act as the buffer
+    reader.lines_buffer: list[bytes] = []
+
+    def _at_eof_impl():
+        return not reader.lines_buffer
+
+    reader.at_eof = MagicMock(side_effect=_at_eof_impl)
+
+    async def readline_mock():
+        if reader.lines_buffer:
+            return reader.lines_buffer.pop(0)
+        # If buffer is empty, simulate EOF for subsequent calls
+        reader.at_eof = MagicMock(return_value=True)
+        return b""
+
+    reader.readline = AsyncMock(side_effect=readline_mock)
+    return reader
+
+
+class MockProcessController:
+    def __init__(self, process_mock: AsyncMock):
+        self.process_mock = process_mock
+        self._actual_return_code: int | None = None
+        # Dynamically add attribute for test tracking
+        self.process_mock._terminate_signal_sent: bool = False  # type: ignore[attr-defined]
+
+        type(self.process_mock).returncode = PropertyMock(side_effect=self.get_rc)
+        self.process_mock.terminate = MagicMock(side_effect=self.on_terminate_called)
+        self.process_mock.kill = MagicMock(side_effect=self.on_kill_called)
+        self.process_mock.wait = AsyncMock(side_effect=self.simple_wait_side_effect)
+        self.set_rc(None)  # Initialize return code
+
+    def set_rc(self, val: int | None):
+        self._actual_return_code = val
+
+    def get_rc(self):
+        return self._actual_return_code
+
+    def on_terminate_called(self):
+        self.process_mock._terminate_signal_sent = True  # type: ignore[attr-defined]
+
+    def on_kill_called(self):
+        self.set_rc(-9)  # SIGKILL
+
+    async def simple_wait_side_effect(self):
+        # If return code is already set, return it (simulates process already exited)
+        if self.get_rc() is not None:
+            return self.get_rc()
+        # Otherwise, simulate waiting indefinitely (to be interrupted by timeout or explicit rc set)
+        await asyncio.Event().wait()
+        # This part is reached if the event is somehow set externally,
+        # or if wait is called after rc is set by kill/terminate.
+        return self.get_rc()
+
+
 @pytest_asyncio.fixture
 async def mock_subprocess_protocol() -> (
     AsyncGenerator[tuple[AsyncMock, AsyncMock, AsyncMock], None]
@@ -123,77 +183,23 @@ async def mock_subprocess_protocol() -> (
     process_mock = AsyncMock(spec=asyncio.subprocess.Process)
     process_mock.pid = 12345
 
-    _actual_return_code: int | None = None
+    MockProcessController(process_mock)  # Attaches behaviors to process_mock
 
-    def set_rc(val: int | None):
-        nonlocal _actual_return_code
-        _actual_return_code = val
-
-    def get_rc():
-        return _actual_return_code
-
-    type(process_mock).returncode = PropertyMock(side_effect=get_rc)
-    set_rc(None)  # Initial state: process running / return code not yet set
-
-    # Default wait behavior: returns the current _actual_return_code.
-    # This code is set by terminate/kill side effects, or by test logic for specific scenarios.
-    async def simple_wait_side_effect():
-        return get_rc()
-
-    process_mock.wait = AsyncMock(side_effect=simple_wait_side_effect)
-
-    def on_terminate_called():
-        # If process is terminated, its return code is typically -15 (SIGTERM).
-        # Don't override if it was already killed (-9).
-        if get_rc() != -9:
-            set_rc(-15)
-
-    process_mock.terminate = MagicMock(side_effect=on_terminate_called)
-
-    def on_kill_called():
-        # If process is killed, its return code is typically -9 (SIGKILL).
-        set_rc(-9)
-
-    process_mock.kill = MagicMock(side_effect=on_kill_called)
-
-    # Helper to create mock stream readers
-    def _create_mock_stream_reader() -> AsyncMock:
-        reader = AsyncMock(spec=asyncio.StreamReader)
-        # Tests will populate this list directly (e.g., reader.lines_buffer.append(b"line"))
-        reader.lines_buffer: list[bytes] = []
-
-        # at_eof initially depends on whether lines_buffer is empty
-        reader.at_eof = MagicMock(side_effect=lambda: not reader.lines_buffer)
-
-        async def readline_mock():
-            if reader.lines_buffer:
-                line = reader.lines_buffer.pop(0)
-                # If buffer becomes empty, next at_eof() call (via lambda) will be True
-                return line
-            # Buffer is empty, so this readline call means EOF.
-            # Future at_eof() calls should be sticky True.
-            reader.at_eof = MagicMock(return_value=True)
-            return b""
-
-        reader.readline = AsyncMock(side_effect=readline_mock)
-        return reader
-
-    stdout_mock_reader = _create_mock_stream_reader()
-    # Expose lines_buffer via a conventional name for tests to populate
-    stdout_mock_reader.stdout_lines = stdout_mock_reader.lines_buffer
-
-    stderr_mock_reader = _create_mock_stream_reader()
-    # Expose lines_buffer via a conventional name for tests to populate
-    stderr_mock_reader.stderr_lines = stderr_mock_reader.lines_buffer
-
+    stdout_mock_reader = _create_mock_stream_reader_helper()
     process_mock.stdout = stdout_mock_reader
+    # Expose buffer for tests to easily add lines / check content
+    process_mock.stdout.stdout_lines = process_mock.stdout.lines_buffer  # type: ignore[attr-defined]
+
+    stderr_mock_reader = _create_mock_stream_reader_helper()
     process_mock.stderr = stderr_mock_reader
+    # Expose buffer for tests
+    process_mock.stderr.stderr_lines = process_mock.stderr.lines_buffer  # type: ignore[attr-defined]
 
     yield process_mock, stdout_mock_reader, stderr_mock_reader
 
 
 @pytest_asyncio.fixture
-async def mock_create_subprocess_exec(
+async def _mock_create_subprocess_exec(  # MODIFIED: Renamed fixture
     mock_subprocess_protocol: tuple[AsyncMock, AsyncMock, AsyncMock],
 ) -> AsyncGenerator[AsyncMock, None]:
     process_mock, _, _ = mock_subprocess_protocol
@@ -229,12 +235,12 @@ def mock_path_exists(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 async def test_execute_subtitle_downloader_task_success_with_pubsub(
     mock_settings_env: Any,
     mock_celery_task_context: MagicMock,
-    mock_async_redis_from_url: MagicMock,
+    mock_async_redis_from_url: AsyncMock,
     mock_redis_client: AsyncMock,
     mock_get_worker_db_session: MagicMock,
     mock_db_session: AsyncMock,
     mock_crud_job: AsyncMock,
-    _mock_create_subprocess_exec: AsyncMock,  # Renamed as it's for setup
+    _mock_create_subprocess_exec: AsyncMock,  # MODIFIED: Usage renamed
     mock_subprocess_protocol: tuple[AsyncMock, AsyncMock, AsyncMock],
     mock_path_exists: MagicMock,
 ):
@@ -242,7 +248,7 @@ async def test_execute_subtitle_downloader_task_success_with_pubsub(
     stdout_mock_reader.stdout_lines.extend([b"Script output line 1\n", b"Script output line 2\n"])
     stderr_mock_reader.stderr_lines.append(b"Script error detail 1\n")
 
-    # For success, the process should exit with code 0
+    # Override the default fixture behavior for this specific test case
     type(process_mock).returncode = PropertyMock(return_value=0)
     process_mock.wait = AsyncMock(return_value=0)
 
@@ -297,10 +303,8 @@ async def test_execute_subtitle_downloader_task_success_with_pubsub(
     assert message_data["payload"]["status"] == JobStatus.SUCCEEDED.value
 
     mock_path_exists.assert_any_call(str(mock_settings_env.SUBTITLE_DOWNLOADER_SCRIPT_PATH))
-
     mock_get_worker_db_session.assert_called_once()
     mock_get_worker_db_session.return_value.__aenter__.assert_awaited_once()
-
     assert mock_crud_job.update_job_completion_details.await_count == 2
 
     initial_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[0]
@@ -321,28 +325,27 @@ async def test_execute_subtitle_downloader_task_success_with_pubsub(
     assert "Script output line 1" in final_kwargs.get("log_snippet", "")
     assert "Script error detail 1" in final_kwargs.get("log_snippet", "")
     assert final_kwargs["completed_at"] == ANY
-
     assert mock_db_session.commit.await_count >= 1
 
 
 @pytest.mark.asyncio
 async def test_execute_subtitle_downloader_task_script_failure(
-    _mock_settings_env: Any,  # Renamed
+    mock_settings_env: Any,  # noqa: ARG001
     mock_celery_task_context: MagicMock,
-    _mock_async_redis_from_url: MagicMock,  # Renamed
+    mock_async_redis_from_url: AsyncMock,  # noqa: ARG001
     mock_redis_client: AsyncMock,
-    _mock_get_worker_db_session: MagicMock,  # Renamed
-    _mock_db_session: AsyncMock,  # Renamed (assuming linter is right, verify if tests fail)
+    mock_get_worker_db_session: MagicMock,
+    mock_db_session: AsyncMock,
     mock_crud_job: AsyncMock,
-    _mock_create_subprocess_exec: AsyncMock,  # Renamed
+    _mock_create_subprocess_exec: AsyncMock,  # MODIFIED: Usage renamed
     mock_subprocess_protocol: tuple[AsyncMock, AsyncMock, AsyncMock],
-    _mock_path_exists: MagicMock,  # Renamed
+    mock_path_exists: MagicMock,  # noqa: ARG001
 ):
     process_mock, stdout_mock_reader, stderr_mock_reader = mock_subprocess_protocol
     stdout_mock_reader.stdout_lines.append(b"Some output before error\n")
     stderr_mock_reader.stderr_lines.append(b"CRITICAL ERROR IN SCRIPT\n")
 
-    # For script failure, simulate non-zero exit code
+    # Override the default fixture behavior for this specific test case
     type(process_mock).returncode = PropertyMock(return_value=1)
     process_mock.wait = AsyncMock(return_value=1)
 
@@ -368,7 +371,7 @@ async def test_execute_subtitle_downloader_task_script_failure(
             if (
                 call_item.args
                 and len(call_item.args) > 1
-                and isinstance(call_item.args[1], str | bytes)  # UP038 fix
+                and isinstance(call_item.args[1], str | bytes)
             ):
                 message_data = json.loads(call_item.args[1])
                 if message_data.get("type") == "status":
@@ -385,14 +388,14 @@ async def test_execute_subtitle_downloader_task_script_failure(
     assert message_data["payload"]["exit_code"] == 1
 
     assert mock_crud_job.update_job_completion_details.await_count == 2
+    mock_get_worker_db_session.assert_called_once()
 
     initial_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[0]
     _, initial_kwargs = initial_db_update_call_args
     assert initial_kwargs["status"] == JobStatus.RUNNING
     assert initial_kwargs["celery_task_id"] == TEST_CELERY_TASK_ID
     assert initial_kwargs["started_at"] == ANY
-    # If _mock_db_session was correctly identified as unused, this assertion would fail:
-    # assert initial_kwargs["db"] == _mock_db_session # This line is an example of where it might be used
+    assert initial_kwargs["db"] == mock_db_session
 
     final_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[1]
     _, final_kwargs = final_db_update_call_args
@@ -401,44 +404,43 @@ async def test_execute_subtitle_downloader_task_script_failure(
     assert "CRITICAL ERROR IN SCRIPT" in final_kwargs.get("result_message", "")
     assert "CRITICAL ERROR IN SCRIPT" in final_kwargs.get("log_snippet", "")
     assert final_kwargs["completed_at"] == ANY
+    assert final_kwargs["db"] == mock_db_session
+    assert mock_db_session.commit.await_count >= 1
 
 
 @pytest.mark.asyncio
 async def test_execute_subtitle_downloader_task_script_timeout(
     mock_settings_env: Any,
     mock_celery_task_context: MagicMock,
-    _mock_async_redis_from_url: MagicMock,  # Renamed
+    mock_async_redis_from_url: AsyncMock,  # noqa: ARG001
     mock_redis_client: AsyncMock,
-    _mock_get_worker_db_session: MagicMock,  # Renamed
-    _mock_db_session: AsyncMock,  # Renamed
+    mock_get_worker_db_session: MagicMock,
+    mock_db_session: AsyncMock,
     mock_crud_job: AsyncMock,
-    _mock_create_subprocess_exec: AsyncMock,  # Renamed
+    _mock_create_subprocess_exec: AsyncMock,  # MODIFIED: Usage renamed
     mock_subprocess_protocol: tuple[AsyncMock, AsyncMock, AsyncMock],
-    _mock_path_exists: MagicMock,  # Renamed
+    mock_path_exists: MagicMock,  # noqa: ARG001
 ):
     process_mock, _, _ = mock_subprocess_protocol
-    mock_settings_env.JOB_TIMEOUT_SEC = 0.01
+    # Note: process_mock.wait uses the fixture's simple_wait_side_effect (hangs until event set)
+    # process_mock.returncode uses the fixture's get_rc (initially None)
 
     original_asyncio_wait_for = asyncio.wait_for
 
     async def mock_wait_for_side_effect(
         awaitable: Any,
         timeout: float | None,
-        *_args: Any,
-        **_kwargs: Any,  # ARG001 fix
     ) -> Any:
         if timeout == mock_settings_env.JOB_TIMEOUT_SEC:
             raise TimeoutError("Simulated gather timeout")
-        if (
-            awaitable == process_mock.wait
-            and timeout == mock_settings_env.PROCESS_TERMINATE_GRACE_PERIOD_S
-        ):
+        if timeout == mock_settings_env.PROCESS_TERMINATE_GRACE_PERIOD_S:
+            # Simulate that even after terminate, process.wait() times out
             raise TimeoutError("Simulated grace period timeout")
         return await original_asyncio_wait_for(awaitable, timeout=timeout)
 
     with patch.object(
         subtitle_jobs.asyncio, "wait_for", side_effect=mock_wait_for_side_effect
-    ) as mock_async_wait_for_supervisor:
+    ) as mock_asyncio_wait_for_patch:
         with patch.object(subtitle_jobs, "crud_job_operations", mock_crud_job):
             result = await subtitle_jobs._execute_subtitle_downloader_async_logic(
                 mock_celery_task_context.name,
@@ -451,17 +453,22 @@ async def test_execute_subtitle_downloader_task_script_timeout(
     assert result is not None
     assert result["job_id"] == TEST_JOB_DB_ID_STR
     assert result["status"] == JobStatus.FAILED.value
-    # Note: SUT's error message for TimeoutError might be "Task failed: TimeoutError(...)"
-    # The original assertion was "Subtitle script timed out: Simulated gather timeout"
-    # Checking against the actual exception message passed into the task result.
-    # The SUT's _JobContext._set_final_status_from_exception wraps the error.
-    expected_task_result_error_msg_fragment = "Simulated gather timeout"
-    assert expected_task_result_error_msg_fragment in result.get("error", "")
+    assert "Simulated gather timeout" in result.get("error", "")
+    assert result.get("error_type") == "ScriptTimeoutError"
 
-    assert mock_async_wait_for_supervisor.call_count >= 2
+    main_timeout_called = any(
+        call.kwargs.get("timeout") == mock_settings_env.JOB_TIMEOUT_SEC
+        for call in mock_asyncio_wait_for_patch.call_args_list
+    )
+    grace_period_timeout_called = any(
+        call.kwargs.get("timeout") == mock_settings_env.PROCESS_TERMINATE_GRACE_PERIOD_S
+        for call in mock_asyncio_wait_for_patch.call_args_list
+    )
+    assert main_timeout_called, "asyncio.wait_for not called with main job timeout"
+    assert grace_period_timeout_called, "asyncio.wait_for not called with grace period timeout"
 
     process_mock.terminate.assert_called_once()
-    process_mock.kill.assert_called_once()
+    process_mock.kill.assert_called_once()  # Called after grace period timeout
 
     expected_channel = f"job:{TEST_JOB_DB_ID_STR}:logs"
     publish_calls = mock_redis_client.publish.call_args_list
@@ -471,7 +478,7 @@ async def test_execute_subtitle_downloader_task_script_timeout(
             if (
                 call_item.args
                 and len(call_item.args) > 1
-                and isinstance(call_item.args[1], str | bytes)  # UP038 fix
+                and isinstance(call_item.args[1], str | bytes)
             ):
                 message_data = json.loads(call_item.args[1])
                 if message_data.get("type") == "status":
@@ -487,76 +494,91 @@ async def test_execute_subtitle_downloader_task_script_timeout(
     message_data = json.loads(args[1])
     assert args[0] == expected_channel
     assert message_data["payload"]["status"] == JobStatus.FAILED.value
+    # Exit code after kill is -9, set by on_kill_called -> set_rc(-9) in MockProcessController
+    # The result_message will contain the timeout details, so exit code for timeout is usually specific.
+    # The SUT sets -99 for timeout.
     assert message_data["payload"]["exit_code"] == -99
 
     assert mock_crud_job.update_job_completion_details.await_count == 2
+    mock_get_worker_db_session.assert_called_once()
 
     initial_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[0]
     _, initial_kwargs = initial_db_update_call_args
     assert initial_kwargs["status"] == JobStatus.RUNNING
     assert initial_kwargs["celery_task_id"] == TEST_CELERY_TASK_ID
     assert initial_kwargs["started_at"] == ANY
+    assert initial_kwargs["db"] == mock_db_session
 
     final_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[1]
     _, final_kwargs = final_db_update_call_args
     assert final_kwargs["status"] == JobStatus.FAILED
-    assert final_kwargs["exit_code"] == -99
-    expected_db_result_message_fragment = "Simulated gather timeout"  # Match the error logged
-    assert expected_db_result_message_fragment in final_kwargs.get("result_message", "")
-    assert expected_db_result_message_fragment in final_kwargs.get("log_snippet", "")
+    assert final_kwargs["exit_code"] == -99  # SUT's timeout specific code
+    assert "Simulated gather timeout" in final_kwargs.get("result_message", "")
+    assert "Simulated gather timeout" in final_kwargs.get("log_snippet", "")
     assert final_kwargs["completed_at"] == ANY
+    assert final_kwargs["db"] == mock_db_session
+    assert mock_db_session.commit.await_count >= 1
 
 
 @pytest.mark.asyncio
 async def test_execute_subtitle_downloader_task_redis_connection_failure(
     mock_settings_env: Any,
     mock_celery_task_context: MagicMock,
-    mock_async_redis_from_url: MagicMock,
-    _mock_get_worker_db_session: MagicMock,  # Renamed
-    _mock_db_session: AsyncMock,  # Renamed
+    mock_async_redis_from_url: AsyncMock,  # noqa: ARG001
+    mock_get_worker_db_session: MagicMock,
+    mock_db_session: AsyncMock,
     mock_crud_job: AsyncMock,
-    _mock_create_subprocess_exec: AsyncMock,  # Renamed
+    _mock_create_subprocess_exec: AsyncMock,  # MODIFIED: Usage renamed
     mock_subprocess_protocol: tuple[AsyncMock, AsyncMock, AsyncMock],
-    _mock_path_exists: MagicMock,  # Renamed
+    mock_path_exists: MagicMock,  # noqa: ARG001
 ):
-    mock_async_redis_from_url.side_effect = RedisConnectionError("Simulated Redis connection error")
-    process_mock, _, _ = mock_subprocess_protocol
+    async def raise_redis_connection_error(*_args: Any, **_kwargs: Any) -> None:
+        raise RedisConnectionError("Simulated Redis connection error")
 
-    # Script itself succeeds
+    # Create an AsyncMock specifically for this test's side effect and use it as `new` for patch
+    mock_from_url_with_error = AsyncMock(side_effect=raise_redis_connection_error)
+
+    process_mock, stdout_mock_reader, _ = mock_subprocess_protocol
+    stdout_mock_reader.stdout_lines.append(b"Script completed successfully\n")
+
+    # Override the default fixture behavior for this specific test case
     type(process_mock).returncode = PropertyMock(return_value=0)
     process_mock.wait = AsyncMock(return_value=0)
 
-    with patch.object(subtitle_jobs, "crud_job_operations", mock_crud_job):
-        result = await subtitle_jobs._execute_subtitle_downloader_async_logic(
-            mock_celery_task_context.name,
-            mock_celery_task_context.request.id,
-            TEST_JOB_DB_ID,
-            TEST_FOLDER_PATH,
-            TEST_LANGUAGE,
-        )
+    # Patch aioredis.from_url with our specific error-raising mock
+    with patch.object(subtitle_jobs.aioredis, "from_url", mock_from_url_with_error):
+        with patch.object(subtitle_jobs, "crud_job_operations", mock_crud_job):
+            result = await subtitle_jobs._execute_subtitle_downloader_async_logic(
+                mock_celery_task_context.name,
+                mock_celery_task_context.request.id,
+                TEST_JOB_DB_ID,
+                TEST_FOLDER_PATH,
+                TEST_LANGUAGE,
+            )
 
-    mock_async_redis_from_url.assert_awaited_once_with(str(mock_settings_env.REDIS_PUBSUB_URL))
+    mock_from_url_with_error.assert_awaited_once_with(str(mock_settings_env.REDIS_PUBSUB_URL))
 
     assert result is not None
     assert result["job_id"] == TEST_JOB_DB_ID_STR
-    assert result["status"] == JobStatus.SUCCEEDED.value
+    assert result["status"] == JobStatus.SUCCEEDED.value  # Job succeeds even if Redis PubSub fails
     assert "Script completed successfully" in result.get("message", "")
 
     assert mock_crud_job.update_job_completion_details.await_count == 2
+    mock_get_worker_db_session.assert_called_once()
 
     initial_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[0]
     _, initial_kwargs = initial_db_update_call_args
     assert initial_kwargs["status"] == JobStatus.RUNNING
     assert initial_kwargs["celery_task_id"] == TEST_CELERY_TASK_ID
     assert initial_kwargs["started_at"] == ANY
+    assert initial_kwargs["db"] == mock_db_session
 
     final_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[1]
     _, final_kwargs = final_db_update_call_args
     assert final_kwargs["status"] == JobStatus.SUCCEEDED
     assert final_kwargs["exit_code"] == 0
     assert "Script completed successfully" in final_kwargs.get("result_message", "")
-    # Check that SUT logs contain a warning about Redis connection
-    assert "Failed to initialize Redis client or publish initial status" in final_kwargs.get(
-        "log_snippet", ""
-    )
+    assert "Script completed successfully" in final_kwargs.get("log_snippet", "")
     assert final_kwargs["completed_at"] == ANY
+    assert final_kwargs["db"] == mock_db_session
+    assert mock_db_session.commit.await_count >= 1

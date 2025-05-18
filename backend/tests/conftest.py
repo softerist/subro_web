@@ -1,8 +1,6 @@
 # backend/tests/conftest.py
-import asyncio
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator
 
-import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -25,15 +23,13 @@ if not settings.ASYNC_SQLALCHEMY_DATABASE_URL:
 TEST_DATABASE_URL = str(settings.ASYNC_SQLALCHEMY_DATABASE_URL)  # Make sure it's a string
 
 
-@pytest.fixture(scope="session")
-def event_loop(
-    _request: pytest.FixtureRequest,
-) -> Generator[
-    asyncio.AbstractEventLoop, None, None
-]:  # Changed request to _request and added type hint
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+# @pytest.fixture(scope="session")
+# def event_loop(request: pytest.FixtureRequest) -> Generator[asyncio.AbstractEventLoop, None, None]:
+#     """Create an instance of the default event loop for each test session."""
+#     loop = asyncio.get_event_loop_policy().new_event_loop()
+#     asyncio.set_event_loop(loop)
+#     yield loop
+#     loop.close()
 
 
 @pytest_asyncio.fixture(scope="function")
