@@ -1,11 +1,13 @@
 # backend/app/db/session.py
 import asyncio
-import contextlib  # <--- IMPORT THIS
+import contextlib
 import logging
 from collections.abc import AsyncGenerator, Generator
+from typing import TYPE_CHECKING  # <--- IMPORT TYPE_CHECKING
 
 from fastapi import Depends
-from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+
+# from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase # Moved to where it's used
 from sqlalchemy import Engine as SaEngine
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import (
@@ -18,7 +20,15 @@ from sqlalchemy.orm import Session as SyncSessionORM
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
-from app.db.models.user import User
+
+# from app.db.models.user import User # <--- REMOVE TOP-LEVEL IMPORT OF User
+
+# Conditionally import User for type hinting where needed
+if TYPE_CHECKING:
+    from fastapi_users_db_sqlalchemy import (
+        SQLAlchemyUserDatabase,  # Also for type hint if needed by get_user_db signature
+    )
+
 
 logger = logging.getLogger(__name__)
 
@@ -111,8 +121,15 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
 
 async def get_user_db(
     session: AsyncSession = Depends(get_async_session),
-) -> AsyncGenerator[SQLAlchemyUserDatabase, None]:
+) -> AsyncGenerator[
+    "SQLAlchemyUserDatabase", None
+]:  # Type hint using string if imported under TYPE_CHECKING
+    # Import SQLAlchemyUserDatabase here, inside the function, to avoid top-level import issues
+    # if it's not already handled by TYPE_CHECKING for the return type hint.
     from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+
+    # Import User here as well, as it's no longer at the top level
+    from app.db.models.user import User
 
     yield SQLAlchemyUserDatabase(session, User)
 
@@ -241,7 +258,7 @@ def dispose_worker_db_resources_sync():
         logger.info("CELERY_WORKER: No database engine to dispose for this worker process.")
 
 
-@contextlib.asynccontextmanager  # <--- ADD THIS DECORATOR
+@contextlib.asynccontextmanager
 async def get_worker_db_session() -> AsyncGenerator[AsyncSession, None]:
     if WorkerSessionLocal is None:
         logger.critical(
@@ -250,28 +267,16 @@ async def get_worker_db_session() -> AsyncGenerator[AsyncSession, None]:
         raise RuntimeError(
             "Database session factory (WorkerSessionLocal) not initialized for Celery worker."
         )
-
-    # The WorkerSessionLocal() call returns an AsyncSession instance.
-    # AsyncSession itself is an asynchronous context manager.
-    async with WorkerSessionLocal() as session:  # session: AsyncSession
+    async with WorkerSessionLocal() as session:
         try:
-            # Yield the session to the `async with get_worker_db_session() as db:` block
             yield session
-            # If the `with` block in the task completes without error, execution resumes here.
-            # Note: AsyncSession's context manager does not auto-commit by default.
-            # Commits should be explicit in the code using the session.
         except Exception:
-            # If an exception occurs in the code using the yielded session,
-            # it's caught here. The `async with WorkerSessionLocal() as session:`
-            # context manager will also see this exception (as it propagates)
-            # and will ensure `session.rollback()` and `session.close()` are called.
-            # Logging here can be useful for context.
             logger.error(
                 "CELERY_WORKER: Exception occurred in user code of get_worker_db_session. "
                 "Session rollback and close will be handled by AsyncSession's context manager.",
                 exc_info=True,
             )
-            raise  # Re-raise the exception to be handled by the caller and the outer context manager.
+            raise
 
 
 # --- FastAPI Lifespan Event Handler Integration ---

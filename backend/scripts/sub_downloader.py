@@ -78,9 +78,9 @@ def main():
     else:
         # Simulate some successful output
         print("SCRIPT_LOG: Beginning simulated file processing loop.", flush=True)
-        for i in range(3):
+        for i in range(60):  # MODIFIED - Run for 60 seconds
             print(
-                f"SCRIPT_LOG: Processing file {i+1}/3 in '{args.folder_path}'...", flush=True
+                f"SCRIPT_LOG: Processing file {i+1}/60 in '{args.folder_path}'...", flush=True
             )  # Use args.folder_path
             time.sleep(random.uniform(0.2, 0.5))
             print(f"SCRIPT_LOG: Subtitle found for file {i+1} (simulated).", flush=True)

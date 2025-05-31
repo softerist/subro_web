@@ -32,35 +32,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         lazy="selectin",
     )
 
-    # # --- Custom Fields for Your User Model ---
-    # role: Mapped[Literal["admin", "standard"]] = mapped_column(
-    #     String(50),
-    #     default="standard", # Python default for role is fine
-    #     nullable=False,
-    #     index=True,
-    # )
-
-    # created_at: Mapped[datetime] = mapped_column(
-    #     DateTime(timezone=True),
-    #     server_default=func.now(),
-    #     nullable=False,
-    # )
-
-    # updated_at: Mapped[datetime] = mapped_column(
-    #     DateTime(timezone=True),
-    #     server_default=func.now(),
-    #     onupdate=func.now(),
-    #     nullable=False,
-    # )
-
-    # # --- Relationships ---
-    # jobs: Mapped[List["Job"]] = relationship(
-    #     "app.db.models.job.Job",
-    #     back_populates="user",
-    #     cascade="all, delete-orphan",
-    #     lazy="selectin",
-    # )
-
     def __repr__(self) -> str:
         is_s_user = getattr(self, "is_superuser", "N/A")
         user_role = getattr(self, "role", "N/A")

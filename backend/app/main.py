@@ -56,6 +56,9 @@ from app.api.routers.auth import auth_router as custom_auth_router
 from app.api.routers.jobs import router as jobs_router
 from app.api.routers.users import router as users_router
 
+# *** NEW IMPORT FOR WEBSOCKET ROUTER ***
+from app.api.websockets.job_logs import router as job_logs_websocket_router
+
 # --- Imports for initial superuser creation & DB management ---
 from app.core.users import UserManager
 
@@ -279,6 +282,32 @@ api_v1_router.include_router(admin_router, prefix="/admin", tags=["Admins - Admi
 api_v1_router.include_router(
     jobs_router, prefix="/jobs", tags=["Jobs - Subtitle Download Management"]
 )
+
+# *** INCLUDE THE WEBSOCKET ROUTER HERE ***
+# Note: WebSocket routers are typically included directly on the `app` instance
+# or under a specific WebSocket prefix if you have many.
+# For consistency with your /api/v1 pattern for HTTP, you could also create a
+# separate WebSocket root router if you plan many different WebSocket types.
+# For a single job log streamer, attaching it to api_v1_router is fine,
+# or directly to `app` if you prefer a cleaner /ws root.
+
+# Option 1: Attach to the existing api_v1_router (will be /api/v1/ws/jobs/... )
+# This seems most consistent with your current structure.
+# We define the WebSocket path *within* job_logs.py as "/jobs/{job_id}/logs"
+# So if we prefix api_v1_router with /ws, the full path will be /api/v1/ws/jobs/{job_id}/logs
+# Let's create a sub-router for WebSockets under api_v1_router for clarity
+ws_api_v1_router = APIRouter()
+ws_api_v1_router.include_router(
+    job_logs_websocket_router,
+    # No prefix here, as the full path is defined in job_logs.py,
+    # and this sub-router is just for grouping.
+    # The prefix is already set in job_logs.py's own APIRouter if needed, or handled by its @router.websocket
+    tags=["WebSockets - Job Logs"],
+)
+api_v1_router.include_router(ws_api_v1_router, prefix="/ws")  # This adds the /ws segment
+
+# Option 2: Attach directly to `app` (would be /ws/jobs/... if job_logs_websocket_router had prefix="/ws")
+# app.include_router(job_logs_websocket_router, prefix="/ws", tags=["WebSockets - Job Logs"])
 
 
 @api_v1_router.get("/", tags=["API Root"], summary="API v1 Root Endpoint")
