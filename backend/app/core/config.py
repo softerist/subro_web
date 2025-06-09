@@ -2,8 +2,8 @@
 
 import json
 import logging
-import os  # For default values
-import sys  # For default PYTHON_EXECUTABLE_PATH
+import os
+import sys
 from typing import Literal
 
 from pydantic import (
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     DEBUG: bool = Field(default=False, validation_alias="DEBUG_MODE")
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO",
-        validation_alias="LOG_LEVEL",  # Added validation_alias
+        validation_alias="LOG_LEVEL",
     )
 
     # --- Server Configuration ---
@@ -85,9 +85,7 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = Field(default="subappdb", validation_alias="POSTGRES_DB")
     POSTGRES_PORT: int = Field(default=5432, validation_alias="POSTGRES_PORT")
     DB_ECHO: bool = Field(default=False, validation_alias="DB_ECHO")
-    DB_ECHO_WORKER: bool = Field(
-        default=False, validation_alias="DB_ECHO_WORKER"
-    )  # For worker specific DB echo
+    DB_ECHO_WORKER: bool = Field(default=False, validation_alias="DB_ECHO_WORKER")
 
     # --- Celery & Redis Settings ---
     REDIS_HOST: str = Field(default="redis", validation_alias="REDIS_HOST")
@@ -105,9 +103,7 @@ class Settings(BaseSettings):
     )
     TIMEZONE: str = Field(default="UTC", validation_alias="CELERY_TIMEZONE")
     CELERY_ACKS_LATE: bool = Field(default=True, validation_alias="CELERY_ACKS_LATE")
-    CELERY_RESULT_EXPIRES: int = Field(
-        default=3600, validation_alias="CELERY_RESULT_EXPIRES"
-    )  # Default to 1 hour (in seconds)
+    CELERY_RESULT_EXPIRES: int = Field(default=3600, validation_alias="CELERY_RESULT_EXPIRES")
 
     # --- Job Runner Settings ---
     PYTHON_EXECUTABLE_PATH: str = Field(
@@ -117,7 +113,10 @@ class Settings(BaseSettings):
         default="/app/scripts/sub_downloader.py",
         validation_alias="SUBTITLE_DOWNLOADER_SCRIPT_PATH",
     )
-    JOB_TIMEOUT_SEC: int = int(os.getenv("JOB_TIMEOUT_SEC", "900"))  # Default 15 minutes
+    JOB_TIMEOUT_SEC: int = int(os.getenv("JOB_TIMEOUT_SEC", "900"))
+    PROCESS_TERMINATE_GRACE_PERIOD_S: int = int(
+        os.getenv("PROCESS_TERMINATE_GRACE_PERIOD_S", "5")
+    )  # Added this, was missing from your new version
     JOB_MAX_RETRIES: int = Field(default=2, validation_alias="JOB_MAX_RETRIES")
     JOB_RESULT_MESSAGE_MAX_LEN: int = int(os.getenv("JOB_RESULT_MESSAGE_MAX_LEN", "500"))
     JOB_LOG_SNIPPET_MAX_LEN: int = int(os.getenv("JOB_LOG_SNIPPET_MAX_LEN", "5000"))
@@ -125,16 +124,28 @@ class Settings(BaseSettings):
         default=200, validation_alias="DEFAULT_PAGINATION_LIMIT_MAX"
     )
 
-    LOG_SNIPPET_PREVIEW_LEN: int = int(os.getenv("LOG_SNIPPET_PREVIEW_LEN", "2048"))
-    LOG_TRACEBACKS: bool = os.getenv("LOG_TRACEBACKS", "False").lower() in ("true", "1", "t")
-    LOG_TRACEBACKS_CELERY_WRAPPER: bool = os.getenv(
-        "LOG_TRACEBACKS_CELERY_WRAPPER", "True"
-    ).lower() in ("true", "1", "t")  # Often good to see in wrapper
-    LOG_TRACEBACKS_IN_JOB_LOGS: bool = os.getenv("LOG_TRACEBACKS_IN_JOB_LOGS", "False").lower() in (
+    # --- Logging & Debugging Specifics ---
+    LOG_SNIPPET_PREVIEW_LEN: int = int(
+        os.getenv("LOG_SNIPPET_PREVIEW_LEN", "200")
+    )  # Changed default from 2048 to 200
+    LOG_TRACEBACKS: bool = os.getenv("LOG_TRACEBACKS", "True").lower() in (
         "true",
         "1",
         "t",
-    )  # Control if full TB goes into job log snippet
+    )  # Default to True
+    LOG_TRACEBACKS_CELERY_WRAPPER: bool = os.getenv(
+        "LOG_TRACEBACKS_CELERY_WRAPPER", "True"
+    ).lower() in ("true", "1", "t")
+    LOG_TRACEBACKS_IN_JOB_LOGS: bool = os.getenv(
+        "LOG_TRACEBACKS_IN_JOB_LOGS", "True"
+    ).lower() in (  # Default to True
+        "true",
+        "1",
+        "t",
+    )
+    DEBUG_TASK_CANCELLATION_DELAY_S: int = int(
+        os.getenv("DEBUG_TASK_CANCELLATION_DELAY_S", "10")
+    )  # Default 10 seconds
 
     # --- Fields for complex parsing ---
     allowed_media_folders_env_str: str = Field(
@@ -161,8 +172,9 @@ class Settings(BaseSettings):
             if isinstance(loaded_items, list):
                 parsed_list = [str(item).strip() for item in loaded_items if str(item).strip()]
             elif isinstance(loaded_items, str) and loaded_items.strip():
+                # This case is less likely if default is JSON list, but good fallback
                 parsed_list = [item.strip() for item in loaded_items.split(",") if item.strip()]
-            else:
+            else:  # Not a list or a parsable string, try comma separation as last resort
                 logger.debug(
                     f"Input for {field_name_for_log} ('{input_str}') was valid JSON but not list/string. Trying comma separation."
                 )
@@ -173,7 +185,9 @@ class Settings(BaseSettings):
             )
             parsed_list = [item.strip() for item in input_str.split(",") if item.strip()]
 
-        if not parsed_list and input_str and input_str.strip():
+        if (
+            not parsed_list and input_str and input_str.strip()
+        ):  # Log if input was non-empty but parsing yielded empty
             logger.warning(
                 f"Env var {field_name_for_log} (value: '{input_str}') resulted in an empty parsed list."
             )
@@ -195,26 +209,25 @@ class Settings(BaseSettings):
             if not self.DB_ECHO:
                 logger.info("DEBUG mode is ON. Overriding DB_ECHO to True.")
                 self.DB_ECHO = True
-            # If DB_ECHO_WORKER is False and DB_ECHO is True (due to debug override), set DB_ECHO_WORKER to True as well.
             if not self.DB_ECHO_WORKER and self.DB_ECHO:
                 logger.info("DEBUG mode is ON & DB_ECHO is True. Setting DB_ECHO_WORKER to True.")
                 self.DB_ECHO_WORKER = True
-            if self.COOKIE_SECURE:
+            if self.COOKIE_SECURE:  # In debug mode, cookies might be insecure for http://localhost
                 logger.info("DEBUG mode is ON. Overriding COOKIE_SECURE to False.")
                 self.COOKIE_SECURE = False
-        elif self.ENVIRONMENT != "development" and not self.COOKIE_SECURE:
+        elif self.ENVIRONMENT != "development" and not self.COOKIE_SECURE:  # For prod/staging
+            # If not in dev and cookies are not secure, make them secure if HTTPS is intended
             if self.USE_HTTPS:
                 self.COOKIE_SECURE = True
             else:
                 logger.warning(
-                    "Non-development environment with USE_HTTPS=False, COOKIE_SECURE remains False."
+                    "Non-development environment with USE_HTTPS=False, COOKIE_SECURE remains False. Consider security implications."
                 )
 
-        if self.ROOT_PATH:
+        if self.ROOT_PATH and self.ROOT_PATH != "/":  # Avoid stripping if it's just "/"
             self.ROOT_PATH = self.ROOT_PATH.strip("/")
         return self
 
-    # --- Convenience Properties for public access to parsed fields ---
     @property
     def ALLOWED_MEDIA_FOLDERS(self) -> list[str]:
         return self._parsed_allowed_media_folders
@@ -223,21 +236,29 @@ class Settings(BaseSettings):
     def BACKEND_CORS_ORIGINS(self) -> list[str]:
         return self._parsed_backend_cors_origins
 
-    # --- Computed DSN Properties ---
     def _build_postgres_dsn(self, base_dsn: PostgresDsn | None, use_async: bool) -> PostgresDsn:
         driver_prefix = "postgresql+asyncpg://" if use_async else "postgresql://"
-        alt_driver_prefix = "postgresql://" if use_async else "postgresql+asyncpg://"
+        alt_driver_prefix = (
+            "postgresql://" if use_async else "postgresql+asyncpg://"
+        )  # The opposite driver
 
         if base_dsn:
             db_url_str = str(base_dsn)
-            if db_url_str.startswith(alt_driver_prefix):
-                db_url_str = db_url_str.replace(alt_driver_prefix, driver_prefix, 1)
-            elif not db_url_str.startswith(driver_prefix):
-                if "://" in db_url_str:
-                    db_url_str = driver_prefix + db_url_str.split("://", 1)[1]
-                else:
-                    raise ValueError(f"Malformed base DSN for DB: {db_url_str}")
-            return PostgresDsn(db_url_str)
+            # If base_dsn already has the correct driver, use it
+            if db_url_str.startswith(driver_prefix):
+                return base_dsn
+            # If base_dsn has the alternate driver, swap it
+            elif db_url_str.startswith(alt_driver_prefix):
+                return PostgresDsn(db_url_str.replace(alt_driver_prefix, driver_prefix, 1))
+            # If base_dsn has a scheme but not the one we want (e.g. just 'postgres://')
+            elif "://" in db_url_str:
+                # Rebuild with correct prefix and rest of URL
+                return PostgresDsn(driver_prefix + db_url_str.split("://", 1)[1])
+            else:
+                # This case implies a malformed DSN without a scheme.
+                # It's unlikely Pydantic would allow this for PostgresDsn, but defensive.
+                raise ValueError(f"Malformed base DSN for DB (missing scheme?): {db_url_str}")
+        # If no base_dsn, construct from components
         return PostgresDsn(
             f"{driver_prefix}{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
@@ -264,13 +285,13 @@ class Settings(BaseSettings):
     def CELERY_BROKER_URL(self) -> RedisDsn | None:
         if self.CELERY_BROKER_URL_ENV:
             return self.CELERY_BROKER_URL_ENV
-        if self.REDIS_HOST:
+        if self.REDIS_HOST:  # Construct if not provided explicitly
             try:
                 return RedisDsn(f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0")
-            except Exception as e:
-                logger.error(f"Failed to build CELERY_BROKER_URL: {e}")
+            except Exception as e:  # Catch Pydantic validation error or others
+                logger.error(f"Failed to build CELERY_BROKER_URL from components: {e}")
                 return None
-        return None
+        return None  # No explicit URL and no components to build from
 
     @property
     def CELERY_RESULT_BACKEND(self) -> RedisDsn | None:
@@ -278,9 +299,11 @@ class Settings(BaseSettings):
             return self.CELERY_RESULT_BACKEND_ENV
         if self.REDIS_HOST:
             try:
-                return RedisDsn(f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/1")
+                return RedisDsn(
+                    f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/1"
+                )  # Different DB for results
             except Exception as e:
-                logger.error(f"Failed to build CELERY_RESULT_BACKEND: {e}")
+                logger.error(f"Failed to build CELERY_RESULT_BACKEND from components: {e}")
                 return None
         return None
 
@@ -290,16 +313,17 @@ class Settings(BaseSettings):
             return self.REDIS_PUBSUB_URL_ENV
         if self.REDIS_HOST:
             try:
-                return RedisDsn(f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/2")
+                return RedisDsn(
+                    f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/2"
+                )  # Different DB for pubsub
             except Exception as e:
-                logger.error(f"Failed to build REDIS_PUBSUB_URL: {e}")
+                logger.error(f"Failed to build REDIS_PUBSUB_URL from components: {e}")
                 return None
         return None
 
 
 settings = Settings()
 
-# --- Debug prints for verification when running file directly ---
 if __name__ == "__main__":
     print("--- Loaded Settings (Debug from config.py) ---")
     print(
@@ -333,9 +357,17 @@ if __name__ == "__main__":
     print(f"PYTHON_EXECUTABLE_PATH: {settings.PYTHON_EXECUTABLE_PATH}")
     print(f"SUBTITLE_DOWNLOADER_SCRIPT_PATH: {settings.SUBTITLE_DOWNLOADER_SCRIPT_PATH}")
     print(f"JOB_TIMEOUT_SEC: {settings.JOB_TIMEOUT_SEC}")
+    print(f"PROCESS_TERMINATE_GRACE_PERIOD_S: {settings.PROCESS_TERMINATE_GRACE_PERIOD_S}")  # Added
     print(f"JOB_MAX_RETRIES: {settings.JOB_MAX_RETRIES}")
     print(f"JOB_RESULT_MESSAGE_MAX_LEN: {settings.JOB_RESULT_MESSAGE_MAX_LEN}")
     print(f"JOB_LOG_SNIPPET_MAX_LEN: {settings.JOB_LOG_SNIPPET_MAX_LEN}")
+    print(f"DEBUG_TASK_CANCELLATION_DELAY_S: {settings.DEBUG_TASK_CANCELLATION_DELAY_S}")  # Added
+
+    print("\n--- Logging & Debugging Specifics ---")
+    print(f"LOG_SNIPPET_PREVIEW_LEN: {settings.LOG_SNIPPET_PREVIEW_LEN}")
+    print(f"LOG_TRACEBACKS: {settings.LOG_TRACEBACKS}")
+    print(f"LOG_TRACEBACKS_CELERY_WRAPPER: {settings.LOG_TRACEBACKS_CELERY_WRAPPER}")
+    print(f"LOG_TRACEBACKS_IN_JOB_LOGS: {settings.LOG_TRACEBACKS_IN_JOB_LOGS}")
 
     print("\n--- Paths & Lists ---")
     print(f"ALLOWED_MEDIA_FOLDERS: {settings.ALLOWED_MEDIA_FOLDERS}")

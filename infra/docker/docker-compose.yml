@@ -50,9 +50,9 @@ services:
       # Checks if the API is responding on its internal port 8000
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s
-      timeout: 5s
+      timeout: 15s
       retries: 3
-      start_period: 10s # Give it time to start
+      start_period: 35s # Give it time to start
     restart: unless-stopped
 
   worker:

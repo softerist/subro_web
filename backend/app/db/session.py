@@ -3,11 +3,10 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import AsyncGenerator, Generator
-from typing import TYPE_CHECKING  # <--- IMPORT TYPE_CHECKING
+from typing import TYPE_CHECKING
 
+from celery.utils.log import get_task_logger
 from fastapi import Depends
-
-# from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase # Moved to where it's used
 from sqlalchemy import Engine as SaEngine
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import (
@@ -21,16 +20,16 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 
-# from app.db.models.user import User # <--- REMOVE TOP-LEVEL IMPORT OF User
+# Import the base exception class. The specific subclasses will be handled by `isinstance`.
+from app.exceptions import TaskSetupError
 
-# Conditionally import User for type hinting where needed
 if TYPE_CHECKING:
-    from fastapi_users_db_sqlalchemy import (
-        SQLAlchemyUserDatabase,  # Also for type hint if needed by get_user_db signature
-    )
+    from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
 
 logger = logging.getLogger(__name__)
+celery_logger = get_task_logger(__name__)
+
 
 # --- Asynchronous Engine and Session Setup (for FastAPI) ---
 fastapi_async_engine: AsyncEngine | None = None
@@ -111,6 +110,8 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     async with FastAPISessionLocal() as session:
         try:
             yield session
+            # Note: Explicit commit is generally handled by the calling CRUD function
+            # or endpoint logic, not in the session getter itself.
         except Exception:
             await session.rollback()
             logger.error(
@@ -121,14 +122,9 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
 
 async def get_user_db(
     session: AsyncSession = Depends(get_async_session),
-) -> AsyncGenerator[
-    "SQLAlchemyUserDatabase", None
-]:  # Type hint using string if imported under TYPE_CHECKING
-    # Import SQLAlchemyUserDatabase here, inside the function, to avoid top-level import issues
-    # if it's not already handled by TYPE_CHECKING for the return type hint.
+) -> AsyncGenerator["SQLAlchemyUserDatabase", None]:
     from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
-    # Import User here as well, as it's no longer at the top level
     from app.db.models.user import User
 
     yield SQLAlchemyUserDatabase(session, User)
@@ -193,11 +189,11 @@ WorkerSessionLocal: async_sessionmaker[AsyncSession] | None = None
 def initialize_worker_db_resources():
     global worker_async_engine, WorkerSessionLocal
     if worker_async_engine is None:
-        logger.info("CELERY_WORKER: Initializing database engine and session factory.")
+        celery_logger.info("CELERY_WORKER: Initializing database engine and session factory.")
         try:
             db_url_worker_obj = settings.ASYNC_SQLALCHEMY_DATABASE_URL_WORKER
             if not db_url_worker_obj:
-                logger.critical(
+                celery_logger.critical(
                     "CELERY_WORKER: ASYNC_SQLALCHEMY_DATABASE_URL_WORKER computed to None or empty."
                 )
                 raise ValueError(
@@ -219,18 +215,18 @@ def initialize_worker_db_resources():
             )
             worker_async_engine = current_worker_engine
             WorkerSessionLocal = current_worker_session_local
-            logger.info(
+            celery_logger.info(
                 f"CELERY_WORKER: Database engine ({db_url_worker_str.split('@')[0]}@...) and session factory initialized."
             )
         except Exception as e:
-            logger.critical(
+            celery_logger.critical(
                 f"CRITICAL: CELERY_WORKER: Failed to initialize database engine: {e}", exc_info=True
             )
             worker_async_engine = None
             WorkerSessionLocal = None
             raise RuntimeError(f"CELERY_WORKER: Failed to initialize database engine: {e}") from e
     else:
-        logger.info(
+        celery_logger.info(
             "CELERY_WORKER: Database engine and session factory already initialized for this process."
         )
 
@@ -238,48 +234,70 @@ def initialize_worker_db_resources():
 def dispose_worker_db_resources_sync():
     global worker_async_engine, WorkerSessionLocal
     if worker_async_engine:
-        logger.info("CELERY_WORKER: Disposing database engine (sync call).")
+        celery_logger.info("CELERY_WORKER: Disposing database engine (sync call).")
         try:
             asyncio.run(worker_async_engine.dispose())
         except RuntimeError as e:
-            logger.warning(
+            celery_logger.warning(
                 f"CELERY_WORKER: asyncio.run() failed during dispose: {e}. Common during shutdown."
             )
         except Exception as e:
-            logger.error(
+            celery_logger.error(
                 f"CELERY_WORKER: Unexpected exception during worker_async_engine.dispose(): {e}",
                 exc_info=True,
             )
         finally:
             worker_async_engine = None
             WorkerSessionLocal = None
-            logger.info("CELERY_WORKER: Database engine disposal process completed (or attempted).")
+            celery_logger.info(
+                "CELERY_WORKER: Database engine disposal process completed (or attempted)."
+            )
     else:
-        logger.info("CELERY_WORKER: No database engine to dispose for this worker process.")
+        celery_logger.info("CELERY_WORKER: No database engine to dispose for this worker process.")
 
 
 @contextlib.asynccontextmanager
 async def get_worker_db_session() -> AsyncGenerator[AsyncSession, None]:
     if WorkerSessionLocal is None:
-        logger.critical(
+        celery_logger.critical(
             "CELERY_WORKER: WorkerSessionLocal not initialized! DB init failed or signal not handled."
         )
         raise RuntimeError(
             "Database session factory (WorkerSessionLocal) not initialized for Celery worker."
         )
+
+    # Use a specific logger for this context manager to distinguish its logs
+    session_logger = get_task_logger("db_session_manager")
+
     async with WorkerSessionLocal() as session:
         try:
             yield session
-        except Exception:
-            logger.error(
-                "CELERY_WORKER: Exception occurred in user code of get_worker_db_session. "
-                "Session rollback and close will be handled by AsyncSession's context manager.",
-                exc_info=True,
-            )
-            raise
+            # Successful block exit: commit any changes made.
+            await session.commit()
+        except Exception as e:
+            # --- THIS IS THE INTEGRATED LOGIC ---
+            # Check if the exception is an "expected" control-flow exception
+            if isinstance(e, TaskSetupError):
+                session_logger.info(
+                    f"Controlled exception ({type(e).__name__}) caught. "
+                    "Rolling back transaction as a safeguard."
+                )
+            else:
+                # This is a genuinely unexpected error (e.g., SQLAlchemyError)
+                session_logger.error(
+                    "Unexpected exception in DB session block. Rolling back.",
+                    exc_info=True,
+                )
+
+            await session.rollback()
+            raise  # Always re-raise the exception for the task logic to handle.
+        finally:
+            # This block runs regardless of exceptions, ensuring the session is closed.
+            await session.close()
 
 
 # --- FastAPI Lifespan Event Handler Integration ---
+# (This part is unchanged)
 async def lifespan_db_manager(_app_instance, event_type: str):
     lifespan_logger = logging.getLogger("app.db.lifespan")
 

@@ -1,26 +1,27 @@
 # backend/app/crud/crud_job.py
 import logging
 from datetime import (
-    UTC,
-    datetime,
+    UTC,  # Keeping your import if you prefer it and are on Python 3.11+
+    datetime,  # Adding timezone for timezone.utc consistency
 )
+from typing import Any  # Added for type hint in _prepare_update_data
 from uuid import UUID
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.crud.base import CRUDBase  # Assuming CRUDBase is defined correctly
-from app.db.models.job import Job, JobStatus  # Import JobStatus enum from model
-from app.schemas.job import JobCreateInternal, JobUpdate  # Import JobUpdate schema
+from app.crud.base import CRUDBase
+from app.db.models.job import Job, JobStatus
+from app.schemas.job import (  # Assuming JobCreateInternal and JobUpdate are defined
+    JobCreateInternal,
+    JobUpdate,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
-    # The base class 'create' and 'get' methods are generally sufficient if
-    # JobCreateInternal and JobUpdate schemas are well-defined and handled by the API layer.
-
     async def get_multi_by_owner(
         self,
         db: AsyncSession,
@@ -69,7 +70,7 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
         logger.debug(f"Found {len(jobs)} total jobs.")
         return jobs
 
-    # MOVED METHODS START HERE (Indented to be part of CRUDJob class)
+    # MOVED METHODS START HERE (Indented to be part of CRUDJob class) - Preserving your comment
     async def update_job_completion_details(
         self,
         db: AsyncSession,
@@ -81,7 +82,7 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
         result_message: str | None = None,
         log_snippet: str | None = None,
         started_at: datetime | None = None,
-        celery_task_id: str | None = None,  # MODIFIED: Added parameter
+        celery_task_id: str | None = None,
     ) -> Job | None:
         """
         Updates job status and other completion or running details using JobUpdate schema.
@@ -92,21 +93,21 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
             f"Updating job {job_id} to status: {status.value if isinstance(status, JobStatus) else status}"
         )
 
-        db_job = await self.get(db, id=job_id)
+        db_job = await self.get(db, id=job_id)  # self.get is from CRUDBase
         if not db_job:
             logger.warning(f"Job {job_id} not found for update_job_completion_details.")
             return None
 
         # Create the update data dictionary with non-None values
-        update_data_dict = self._prepare_update_data(  # Now calls the method within the class
-            db_job,
+        update_data_dict = self._prepare_update_data(  # Calls instance method
+            db_job,  # Pass db_job instance
             status,
             completed_at,
             exit_code,
             result_message,
             log_snippet,
             started_at,
-            celery_task_id,  # MODIFIED: Pass celery_task_id
+            celery_task_id,
         )
 
         try:
@@ -115,28 +116,30 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
             logger.debug(
                 f"JobUpdate schema for job {job_id}: {update_schema.model_dump(exclude_unset=True)}"
             )
-            return await self.update(db, db_obj=db_job, obj_in=update_schema)
+            return await self.update(
+                db, db_obj=db_job, obj_in=update_schema
+            )  # self.update from CRUDBase
         except Exception as e:
             logger.error(f"Error creating JobUpdate schema for job {job_id}: {e}", exc_info=True)
             return None
 
     def _prepare_update_data(
-        self,  # This is now an instance method
-        db_job: Job,
+        self,
+        db_job: Job,  # Added db_job as it's used by helper methods
         status: JobStatus,
         completed_at: datetime | None,
         exit_code: int | None,
         result_message: str | None,
         log_snippet: str | None,
         started_at: datetime | None,
-        celery_task_id: str | None = None,  # MODIFIED: Added parameter
-    ) -> dict:
+        celery_task_id: str | None = None,
+    ) -> dict[str, Any]:  # Added type hint for return
         """
         Prepares update data dictionary based on the job status and provided parameters.
         Handles the automatic setting of started_at and completed_at timestamps.
         """
         # Initialize with required status
-        update_data = {"status": status}
+        update_data: dict[str, Any] = {"status": status}  # Explicit type
 
         # Add non-None fields
         if result_message is not None:
@@ -145,22 +148,70 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
             update_data["exit_code"] = exit_code
         if log_snippet is not None:
             update_data["log_snippet"] = log_snippet
-        if celery_task_id is not None:  # MODIFIED: Added condition to include celery_task_id
+        if celery_task_id is not None:
             update_data["celery_task_id"] = celery_task_id
 
-        current_time_utc = datetime.now(UTC)
+        current_time_utc = datetime.now(UTC)  # Changed from UTC to timezone.utc
 
         # Handle started_at timestamp
-        update_data = self._handle_started_at(  # Now calls the static method within the class
+        update_data = self._handle_started_at(  # Calls static method
             update_data, db_job, status, started_at, current_time_utc
         )
 
         # Handle completed_at timestamp
-        update_data = self._handle_completed_at(  # Now calls the static method within the class
+        update_data = self._handle_completed_at(  # Calls static method
             update_data, db_job, status, completed_at, current_time_utc
         )
 
         return update_data
+
+    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    # +++ NEW METHOD TO FIX AttributeError                                      +++
+    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    async def update_job_start_details(
+        self,
+        db: AsyncSession,
+        *,
+        job_id: UUID,
+        celery_task_id: str,
+        started_at: datetime | None = None,
+    ) -> Job | None:
+        """
+        Updates a job to set its start time, Celery task ID, and status to RUNNING.
+        """
+        # CRUDBase.get expects 'id' as the kwarg for the primary key.
+        db_obj = await self.get(db, id=job_id)  # Using self.get from CRUDBase
+        if not db_obj:
+            logger.warning(f"Job {job_id} not found for update_job_start_details.")
+            return None
+
+        if db_obj.status != JobStatus.PENDING:
+            logger.warning(
+                f"Job {job_id} attempted to start but was not in PENDING state (current: {db_obj.status}). Proceeding to set RUNNING."
+            )
+
+        db_obj.started_at = (
+            started_at if started_at is not None else datetime.now(UTC)
+        )  # Changed to timezone.utc
+        db_obj.status = JobStatus.RUNNING
+        db_obj.celery_task_id = celery_task_id
+        # db_obj.updated_at is handled by the database's onupdate mechanism if configured on the model,
+        # or needs to be set manually if not. Your Job model has onupdate=func.now() for updated_at.
+
+        db.add(db_obj)
+        # The caller (_setup_job_as_running in tasks/subtitle_jobs.py) is responsible for db.commit().
+        # Flushing here ensures that any database-generated values are populated back to db_obj
+        # and that any immediate database constraints are checked before the commit.
+        await db.flush()
+        await db.refresh(db_obj)
+        logger.info(
+            f"Job {job_id} start details updated. Status: RUNNING, Celery ID: {celery_task_id}."
+        )
+        return db_obj
+
+    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    # +++ END OF NEW METHOD                                                       +++
+    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
     @staticmethod
     def _handle_started_at(
@@ -208,7 +259,6 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
                 logger.debug(
                     f"Setting fallback started_at for job {db_job.id} to {update_data['started_at']}"
                 )
-
         return update_data
 
 
