@@ -88,10 +88,6 @@ A secure, role-based web application to trigger a local subtitle downloader scri
 
 - [Roadmap](./docs/roadmap.md)
 - [Architecture Vision](./docs/architecture_vision.md)
-- [Deployment Guide](./docs/deployment.md) ([Link to TBD])
-- [Testing Strategy](./docs/testing_strategy.md) ([Link to TBD])
-- [Security Model](./docs/security_model.md) ([Link to TBD])
-- [Architectural Decision Records (ADRs)](./docs/adr/) ([Link to TBD])
 
 ## Contributing
 
