@@ -23,7 +23,11 @@ services:
         "--reload",
         "--reload-dir",
         "/app",
+        "--reload-dir",
+        "/app",
       ]
+    environment:
+      - JWT_SECRET_KEY=testsecretkey
 
   worker:
     volumes:
@@ -86,6 +90,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  redis:
+    ports:
+      - "6379:6379"
 
 # Define networks used in this override file
 

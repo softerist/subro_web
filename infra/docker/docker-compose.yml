@@ -31,6 +31,9 @@ services:
     volumes:
       # Base volume mount (can be overridden) - maps built code into /app
       - ../../backend:/app # Mount source for reference, but override focuses on dev workflow
+      - /tmp:/tmp # Share /tmp between host and container
+      - /app/.venv # <--- ADD THIS LINE (It hides the host .venv)
+
     env_file:
       - ../../.env # Load shared environment variables from project root
     environment:
@@ -39,6 +42,9 @@ services:
       - POETRY_CACHE_DIR=/tmp/poetry_cache # Use a guaranteed writable location for cache
       - PYTHONPATH=/app # May still be needed
       - POSTGRES_SERVER=db # This would also work if devcontainer.json didn't set it
+      - 'ALLOWED_MEDIA_FOLDERS=["/tmp"]'
+      - FIRST_SUPERUSER_EMAIL=${FIRST_SUPERUSER_EMAIL:-admin@example.com}
+      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD:-securepassword123}
     networks:
       - app_network
     depends_on:
