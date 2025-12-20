@@ -82,7 +82,7 @@ def main():
     args = parser.parse_args()
 
     # Setup logging with the specified level - this takes over ALL logging
-    setup_logging(console_level_override=args.log_level)
+    setup_logging(console_level_override=args.log_level, include_timestamp=False)
 
     # Re-attach error tracker to root logger after setup_logging clears handlers
     logging.getLogger().addHandler(error_tracker)

@@ -27,17 +27,18 @@ def _clear_existing_handlers(logger):
             logger.removeHandler(handler)
 
 
-def _setup_console_handler(logger, console_log_level):
+def _setup_console_handler(logger, console_log_level, include_timestamp=True):
     """Configures and adds the console handler."""
     try:
         c_handler = logging.StreamHandler(sys.stdout)
         c_handler.setLevel(console_log_level)
 
         # Choose format based on verbosity
+        timestamp_format = "%(asctime)s " if include_timestamp else ""
         if console_log_level <= logging.DEBUG:
-            c_format_str = "%(asctime)s %(levelname)s: [%(name)s:%(lineno)d] %(message)s"
+            c_format_str = f"{timestamp_format}%(levelname)s: [%(name)s:%(lineno)d] %(message)s"
         else:
-            c_format_str = "%(asctime)s %(levelname)s: %(message)s"
+            c_format_str = f"{timestamp_format}%(levelname)s: %(message)s"
 
         c_format = logging.Formatter(c_format_str, datefmt="%Y-%m-%d %H:%M:%S")
         c_handler.setFormatter(c_format)
@@ -74,7 +75,7 @@ def _setup_file_handler(logger, log_file_path):
         logging.error(f"Failed to configure file logging to {log_file_path}: {e}", exc_info=True)
 
 
-def setup_logging(log_file_path=None, console_level_override=None):
+def setup_logging(log_file_path=None, console_level_override=None, include_timestamp=True):
     """
     Configures the root logger with console and optional rotating file handlers.
 
@@ -83,6 +84,7 @@ def setup_logging(log_file_path=None, console_level_override=None):
         console_level_override (str, optional): String name of the logging level
                                                  (e.g., 'DEBUG', 'INFO') to override
                                                  the default console level. Defaults to None.
+        include_timestamp (bool, optional): Whether to include timestamp in console logs. Defaults to True.
     """
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)  # Root level always lowest
@@ -103,7 +105,7 @@ def setup_logging(log_file_path=None, console_level_override=None):
                 file=sys.stderr,
             )
 
-    _setup_console_handler(logger, console_log_level)
+    _setup_console_handler(logger, console_log_level, include_timestamp=include_timestamp)
 
     if log_file_path:
         _setup_file_handler(logger, log_file_path)

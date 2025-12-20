@@ -290,6 +290,7 @@ async def create_job(
     job_create_internal = JobCreateInternal(
         folder_path=normalized_job_folder_path_str,
         language=job_in.language,
+        log_level=job_in.log_level,
         user_id=current_user.id,
         # celery_task_id will be set after DB creation using job.id
     )
