@@ -12,20 +12,8 @@ LOG_FILE_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 LOG_FILE_BACKUP_COUNT = 2  # Keep 2 backup logs
 
 
-def setup_logging(log_file_path, console_level_override=None):
-    """
-    Configures the root logger with console and rotating file handlers.
-
-    Args:
-        log_file_path (str): The full path to the log file.
-        console_level_override (str, optional): String name of the logging level
-                                                 (e.g., 'DEBUG', 'INFO') to override
-                                                 the default console level. Defaults to None.
-    """
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)  # Root level always lowest
-
-    # --- Clear Existing Handlers ---
+def _clear_existing_handlers(logger):
+    """Removes all existing handlers from the logger."""
     existing_handlers = logger.handlers[:]
     if existing_handlers:
         logging.debug(f"Removing {len(existing_handlers)} existing root logger handlers.")
@@ -38,45 +26,31 @@ def setup_logging(log_file_path, console_level_override=None):
                 print(f"Warning: Error closing existing log handler: {e}", file=sys.stderr)
             logger.removeHandler(handler)
 
-    # --- Determine Console Level ---
-    console_log_level = DEFAULT_CONSOLE_LOG_LEVEL
-    if console_level_override:
-        level_override_name = console_level_override.upper()
-        level_override_val = getattr(logging, level_override_name, None)
-        if isinstance(level_override_val, int):
-            console_log_level = level_override_val
-            # Use print before logging is fully set up for this message
-            print(f"Note: Console log level overridden to {level_override_name}", file=sys.stderr)
-        else:
-            print(
-                f"Warning: Invalid console log level override '{console_level_override}'. Using default {logging.getLevelName(DEFAULT_CONSOLE_LOG_LEVEL)}.",
-                file=sys.stderr,
-            )
 
-    # --- Console Handler ---
+def _setup_console_handler(logger, console_log_level):
+    """Configures and adds the console handler."""
     try:
         c_handler = logging.StreamHandler(sys.stdout)
-        c_handler.setLevel(console_log_level)  # Use determined level
+        c_handler.setLevel(console_log_level)
 
         # Choose format based on verbosity
         if console_log_level <= logging.DEBUG:
-            # User request: "add to debug also these tags [OnlineFetcher]" + "No more spaces"
-            # We will ensure the logger name is shown in debug.
             c_format_str = "%(asctime)s %(levelname)s: [%(name)s:%(lineno)d] %(message)s"
         else:
-            # User request: "2025-12-19 20:21:02 INFO: <rest of the log message>"
             c_format_str = "%(asctime)s %(levelname)s: %(message)s"
 
         c_format = logging.Formatter(c_format_str, datefmt="%Y-%m-%d %H:%M:%S")
         c_handler.setFormatter(c_format)
         logger.addHandler(c_handler)
-        # Log initial message AFTER adding handler if level allows
+
         if console_log_level <= logging.DEBUG:
             logging.debug("Console logging handler added.")
     except Exception as e:
         print(f"CRITICAL: Failed to configure console logging: {e}", file=sys.stderr)
 
-    # --- Rotating File Handler (Always DEBUG) ---
+
+def _setup_file_handler(logger, log_file_path):
+    """Configures and adds the rotating file handler."""
     try:
         log_dir = Path(log_file_path).parent
         log_dir.mkdir(parents=True, exist_ok=True)
@@ -94,18 +68,52 @@ def setup_logging(log_file_path, console_level_override=None):
         )
         f_handler.setFormatter(f_format)
         logger.addHandler(f_handler)
-        logging.debug("Rotating file logging handler added.")  # This will go to file
+        logging.debug("Rotating file logging handler added.")
 
     except Exception as e:
-        # Log error to console if possible
         logging.error(f"Failed to configure file logging to {log_file_path}: {e}", exc_info=True)
 
+
+def setup_logging(log_file_path=None, console_level_override=None):
+    """
+    Configures the root logger with console and optional rotating file handlers.
+
+    Args:
+        log_file_path (str, optional): The full path to the log file. If None, file logging is skipped.
+        console_level_override (str, optional): String name of the logging level
+                                                 (e.g., 'DEBUG', 'INFO') to override
+                                                 the default console level. Defaults to None.
+    """
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)  # Root level always lowest
+
+    _clear_existing_handlers(logger)
+
+    # --- Determine Console Level ---
+    console_log_level = DEFAULT_CONSOLE_LOG_LEVEL
+    if console_level_override:
+        level_override_name = console_level_override.upper()
+        level_override_val = getattr(logging, level_override_name, None)
+        if isinstance(level_override_val, int):
+            console_log_level = level_override_val
+            print(f"Note: Console log level overridden to {level_override_name}", file=sys.stderr)
+        else:
+            print(
+                f"Warning: Invalid console log level override '{console_level_override}'. Using default {logging.getLevelName(DEFAULT_CONSOLE_LOG_LEVEL)}.",
+                file=sys.stderr,
+            )
+
+    _setup_console_handler(logger, console_log_level)
+
+    if log_file_path:
+        _setup_file_handler(logger, log_file_path)
+
     # --- Initial Log Messages ---
-    # Ensure these messages are logged after handlers are added
     logging.info(
-        f"Logging initialized. Console Level: {logging.getLevelName(console_log_level)}, File Level: {logging.getLevelName(DEFAULT_FILE_LOG_LEVEL)}"
+        f"Logging initialized. Console Level: {logging.getLevelName(console_log_level)}, File Level: {logging.getLevelName(DEFAULT_FILE_LOG_LEVEL) if log_file_path else 'N/A'}"
     )
-    logging.info(f"Log file path: {log_file_path}")
+    if log_file_path:
+        logging.info(f"Log file path: {log_file_path}")
     logging.debug("Root logger setup complete.")
 
 

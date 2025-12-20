@@ -21,12 +21,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(line_buffering=True)
 
 
-class FlushingStreamHandler(logging.StreamHandler):
-    """A StreamHandler that flushes after every emit for real-time log streaming."""
-
-    def emit(self, record):
-        super().emit(record)
-        self.flush()
+# Create error tracker (before imports that might log)
 
 
 class ErrorTrackingHandler(logging.Handler):
@@ -39,39 +34,6 @@ class ErrorTrackingHandler(logging.Handler):
     def emit(self, record):
         if record.levelno >= logging.ERROR:
             self.has_errors = True
-
-
-def setup_logging(log_level_str: str = "INFO"):
-    """
-    Configure logging to ensure ALL loggers output to stdout with flushing.
-    This must completely take over logging to ensure real-time streaming.
-    """
-    log_level = getattr(logging, log_level_str.upper(), logging.INFO)
-
-    # Create the flushing handler
-    stdout_handler = FlushingStreamHandler(sys.stdout)
-    stdout_handler.setLevel(log_level)
-    # Simple format: just level and message (log viewer adds timestamp)
-    stdout_handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
-
-    # Get the root logger and clear any existing handlers
-    root_logger = logging.getLogger()
-    root_logger.handlers.clear()
-
-    # Add our stdout handler to root logger
-    root_logger.addHandler(stdout_handler)
-    root_logger.setLevel(log_level)
-
-    # Also add error tracker
-    root_logger.addHandler(error_tracker)
-
-    # Force all existing loggers to propagate to root and not use their own handlers
-    for name in logging.Logger.manager.loggerDict:
-        existing_logger = logging.getLogger(name)
-        existing_logger.handlers.clear()
-        existing_logger.propagate = True
-
-    return root_logger
 
 
 # Create error tracker (before imports that might log)
@@ -88,6 +50,7 @@ from app.modules.subtitle.core.processor import (  # noqa: E402
     process_movie_folder,
     process_tv_show_folder,
 )
+from app.modules.subtitle.utils.logging_config import setup_logging  # noqa: E402
 
 logger = logging.getLogger("sub_downloader")
 
@@ -119,7 +82,10 @@ def main():
     args = parser.parse_args()
 
     # Setup logging with the specified level - this takes over ALL logging
-    setup_logging(args.log_level)
+    setup_logging(console_level_override=args.log_level)
+
+    # Re-attach error tracker to root logger after setup_logging clears handlers
+    logging.getLogger().addHandler(error_tracker)
 
     folder_path = args.folder_path
 
