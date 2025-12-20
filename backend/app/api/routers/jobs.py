@@ -281,9 +281,13 @@ async def create_job(
     current_user: Annotated[User, Depends(current_active_user)],
     request: Request = None,  # Required for SlowAPI  # noqa: ARG001
 ) -> Job:
+    # Fetch dynamic allowed paths from DB
+    db_paths = await crud.storage_path.get_multi(db)
+    allowed_folders = list(set(settings.ALLOWED_MEDIA_FOLDERS + [p.path for p in db_paths]))
+
     # Ensure settings.ALLOWED_MEDIA_FOLDERS is the correct config variable name
     resolved_input_path = await _validate_and_resolve_job_path(
-        job_in.folder_path, settings.ALLOWED_MEDIA_FOLDERS, current_user.email
+        job_in.folder_path, allowed_folders, current_user.email
     )
     normalized_job_folder_path_str = str(resolved_input_path)
 
@@ -346,9 +350,12 @@ async def list_jobs(
     description="Returns the list of directories allowed for subtitle download jobs.",
 )
 async def get_allowed_folders(
+    db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(current_active_user)],  # noqa: ARG001
 ) -> list[str]:
-    return settings.ALLOWED_MEDIA_FOLDERS
+    db_paths = await crud.storage_path.get_multi(db)
+    combined = list(set(settings.ALLOWED_MEDIA_FOLDERS + [p.path for p in db_paths]))
+    return sorted(combined)
 
 
 @router.get(

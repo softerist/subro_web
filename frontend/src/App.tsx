@@ -8,6 +8,7 @@ import { useAuthStore } from "@/store/authStore";
 import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
 import { UsersPage } from "@/features/admin/pages/UsersPage";
+import { PathsPage } from "@/features/paths/routes/PathsPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
 // Protected Route Wrapper
@@ -48,6 +49,7 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/paths" element={<PathsPage />} />
           <Route path="/admin/users" element={<UsersPage />} />
         </Route>
         {/* Default redirect */}

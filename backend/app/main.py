@@ -58,6 +58,7 @@ from app.api.routers.admin import admin_router
 from app.api.routers.auth import auth_router as custom_auth_router
 from app.api.routers.dashboard import router as dashboard_router
 from app.api.routers.jobs import router as jobs_router
+from app.api.routers.storage_paths import router as storage_paths_router
 from app.api.routers.users import router as users_router
 
 # *** NEW IMPORT FOR WEBSOCKET ROUTER ***
@@ -296,6 +297,7 @@ api_v1_router.include_router(
 api_v1_router.include_router(
     dashboard_router, prefix="/dashboard", tags=["Dashboard - External Services"]
 )
+api_v1_router.include_router(storage_paths_router, prefix="/storage-paths", tags=["Storage Paths"])
 
 # *** INCLUDE THE WEBSOCKET ROUTER HERE ***
 # Note: WebSocket routers are typically included directly on the `app` instance

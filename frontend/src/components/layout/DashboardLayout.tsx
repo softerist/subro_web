@@ -1,5 +1,11 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, LogOut, UploadCloud, Users } from "lucide-react";
+import {
+  LayoutDashboard,
+  LogOut,
+  UploadCloud,
+  Users,
+  Folder,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
@@ -18,6 +24,7 @@ export default function DashboardLayout() {
 
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Paths", href: "/paths", icon: Folder },
     ...(isAdmin ? [{ name: "Users", href: "/admin/users", icon: Users }] : []),
   ];
 
