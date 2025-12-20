@@ -95,6 +95,7 @@ This application adopts a modern, containerized web architecture centered around
 ## Core Component Interaction Diagram (Mermaid)
 
 ```mermaid
+
 graph TD
     subgraph "User Browser"
         B[React SPA]
@@ -132,8 +133,9 @@ graph TD
     W -- Publish Logs --> R
 
     FE_Nginx -- Serves JS/CSS/HTML --> B
+````
 
-
+```mermaid
 graph TD
     subgraph "User Browser"
         B[React SPA]
