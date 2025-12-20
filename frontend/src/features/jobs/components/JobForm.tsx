@@ -22,9 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
+// Removed Input import as it is no longer used
+// import { Input } from "@/components/ui/input";
 
 import { jobsApi } from "../api/jobs";
+import { LANGUAGES } from "../constants/languages";
 
 // Validation Schema
 const formSchema = z.object({
@@ -56,7 +58,7 @@ export function JobForm() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       folder_path: "",
-      language: "eng",
+      language: "ro",
       log_level: "INFO",
     },
   });
@@ -126,10 +128,21 @@ export function JobForm() {
             name="language"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Language Code (ISO 639-2)</FormLabel>
-                <FormControl>
-                  <Input placeholder="eng" {...field} />
-                </FormControl>
+                <FormLabel>Language</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select language..." />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {LANGUAGES.map((lang) => (
+                      <SelectItem key={lang.value} value={lang.value}>
+                        {lang.label} ({lang.value})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Eye, Loader2, Trash2 } from "lucide-react";
@@ -11,6 +12,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { jobsApi } from "../api/jobs";
 import { JobStatusBadge } from "./JobStatusBadge";
@@ -25,6 +34,7 @@ export function JobHistoryList({
   onSelectJob,
   selectedJobId,
 }: JobHistoryListProps) {
+  const [jobToDelete, setJobToDelete] = useState<Job | null>(null);
   const queryClient = useQueryClient();
   const {
     data: jobs,
@@ -41,20 +51,21 @@ export function JobHistoryList({
     onSuccess: () => {
       toast.success("Job cancelled/deleted successfully");
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      setJobToDelete(null);
     },
     onError: (error: Error) => {
       toast.error(`Failed to cancel job: ${error.message}`);
     },
   });
 
-  const handleCancelClick = (e: React.MouseEvent, jobId: string) => {
+  const handleDeleteClick = (e: React.MouseEvent, job: Job) => {
     e.stopPropagation();
-    if (
-      confirm(
-        "Are you sure? This will stop the job (if running) and remove it immediately.",
-      )
-    ) {
-      cancelMutation.mutate(jobId);
+    setJobToDelete(job);
+  };
+
+  const confirmDelete = () => {
+    if (jobToDelete) {
+      cancelMutation.mutate(jobToDelete.id);
     }
   };
 
@@ -71,71 +82,114 @@ export function JobHistoryList({
   }
 
   return (
-    <div className="rounded-md border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Target Folder</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Created At</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {!jobs || jobs.length === 0 ? (
+    <>
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={4} className="h-24 text-center">
-                No jobs found.
-              </TableCell>
+              <TableHead>Target Folder</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Created At</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-          ) : (
-            jobs.map((job) => (
-              <TableRow
-                key={job.id}
-                className={selectedJobId === job.id ? "bg-muted/50" : ""}
-                onClick={() => onSelectJob(job)}
-              >
-                <TableCell className="font-medium">{job.folder_path}</TableCell>
-                <TableCell>
-                  <JobStatusBadge status={job.status} />
-                </TableCell>
-                <TableCell>
-                  {format(new Date(job.submitted_at), "MMM d, HH:mm")}
-                </TableCell>
-                <TableCell className="text-right space-x-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectJob(job);
-                    }}
-                    title="View Logs"
-                  >
-                    <Eye className="h-4 w-4" />
-                    <span className="sr-only">View Logs</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => handleCancelClick(e, job.id)}
-                    disabled={cancelMutation.isPending}
-                    title="Remove Job"
-                  >
-                    {cancelMutation.isPending &&
-                    cancelMutation.variables === job.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    )}
-                    <span className="sr-only">Remove Job</span>
-                  </Button>
+          </TableHeader>
+          <TableBody>
+            {!jobs || jobs.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="h-24 text-center">
+                  No jobs found.
                 </TableCell>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </div>
+            ) : (
+              jobs.map((job) => (
+                <TableRow
+                  key={job.id}
+                  className={selectedJobId === job.id ? "bg-muted/50" : ""}
+                  onClick={() => onSelectJob(job)}
+                >
+                  <TableCell className="font-medium">
+                    {job.folder_path}
+                  </TableCell>
+                  <TableCell>
+                    <JobStatusBadge status={job.status} />
+                  </TableCell>
+                  <TableCell>
+                    {format(new Date(job.submitted_at), "MMM d, HH:mm")}
+                  </TableCell>
+                  <TableCell className="text-right space-x-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectJob(job);
+                      }}
+                      title="View Logs"
+                    >
+                      <Eye className="h-4 w-4" />
+                      <span className="sr-only">View Logs</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => handleDeleteClick(e, job)}
+                      disabled={
+                        cancelMutation.isPending &&
+                        cancelMutation.variables === job.id
+                      }
+                      title="Remove Job"
+                    >
+                      {cancelMutation.isPending &&
+                      cancelMutation.variables === job.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      )}
+                      <span className="sr-only">Remove Job</span>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog
+        open={!!jobToDelete}
+        onOpenChange={(open) => !open && setJobToDelete(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Job</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this job? This action cannot be
+              undone.
+              {jobToDelete?.status === "RUNNING" &&
+                " The job is currently running and will be stopped."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setJobToDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={cancelMutation.isPending}
+            >
+              {cancelMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
