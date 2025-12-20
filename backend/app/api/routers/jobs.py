@@ -8,13 +8,22 @@ from typing import Annotated  # List for Python < 3.9 compatibility with list[]
 from uuid import UUID
 
 # FastAPI imports
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+    Request,  # Ensure Request is imported
+    status,
+)
 from fastapi import Path as FastApiPath  # Renamed to avoid conflict with pathlib.Path
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud  # Assuming crud.job is available
 from app.core.config import settings
+from app.core.rate_limit import limiter  # Import limiter
 from app.core.security import current_active_user  # Your user dependency
 from app.db.models.job import Job, JobStatus
 from app.db.models.user import User  # Assuming User model for type hinting
@@ -264,10 +273,12 @@ async def _enqueue_celery_task_and_handle_errors(
         "A job record is created, and a task is enqueued for asynchronous processing."
     ),
 )
+@limiter.limit("10/minute")
 async def create_job(
     job_in: Annotated[JobCreate, Body(...)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(current_active_user)],
+    request: Request = None,  # Required for SlowAPI  # noqa: ARG001
 ) -> Job:
     # Ensure settings.ALLOWED_MEDIA_FOLDERS is the correct config variable name
     resolved_input_path = await _validate_and_resolve_job_path(
@@ -327,6 +338,18 @@ async def list_jobs(
 
 
 @router.get(
+    "/allowed-folders",
+    response_model=list[str],
+    summary="Get allowed media folders",
+    description="Returns the list of directories allowed for subtitle download jobs.",
+)
+async def get_allowed_folders(
+    current_user: Annotated[User, Depends(current_active_user)],  # noqa: ARG001
+) -> list[str]:
+    return settings.ALLOWED_MEDIA_FOLDERS
+
+
+@router.get(
     "/{job_id}",
     response_model=JobRead,
     summary="Get details for a specific job",
@@ -362,125 +385,77 @@ async def get_job_details(
 
 @router.delete(
     "/{job_id}",
-    response_model=JobRead,
+    response_model=JobRead,  # Note: if deleted, this might need to be Optional or specific response. But for 200 OK, we can return the deleted object state or empty.
+    # Actually, if deleted, returning the object is fine as "last known state". Or 204.
+    # But for backward compatibility with "Cancel" returning the updated job, let's keep it responding with JobRead.
+    # But if deleted, we can't refresh it.
+    # Let's return the job object *before* deletion if deleted?
+    # Or just return detailed message?
+    # The frontend expects JobRead or similar?
+    # The frontend cancelMutation expects data.
+    # If I verify JobHistoryList, it invalidates query.
+    # Let's try to return the job object.
     status_code=status.HTTP_200_OK,
-    summary="Request to cancel a job",
+    summary="Cancel or Delete a job",
     description=(
-        "Allows an authenticated user to request cancellation of their own job, or an admin to cancel any job. "
-        "The job must be in a PENDING or RUNNING state. "
-        "This initiates the cancellation process; the job status is set to CANCELLING. "
-        "The background worker task is responsible for updating the status to CANCELLED upon successful termination."
+        "If the job is PENDING or RUNNING, it initiates cancellation (stops the task). "
+        "If the job is already in a terminal state (SUCCEEDED, FAILED, CANCELLED, CANCELLING), "
+        "it deletes the job record from the database."
     ),
-    responses={
-        status.HTTP_403_FORBIDDEN: {"description": "Not authorized to cancel this job"},
-        status.HTTP_404_NOT_FOUND: {"description": "Job not found"},
-        status.HTTP_409_CONFLICT: {
-            "description": "Job is not in a cancellable state (must be PENDING or RUNNING)"
-        },
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {
-            "description": "Error sending cancellation signal or updating database"
-        },
-    },
 )
-async def request_cancel_job(
-    job_id: Annotated[UUID, FastApiPath(description="The ID of the job to cancel")],
+async def delete_or_cancel_job(
+    job_id: Annotated[UUID, FastApiPath(description="The ID of the job to cancel or delete")],
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ) -> Job:
-    logger.info(f"User '{current_user.email}' attempting to cancel job '{job_id}'.")
+    logger.info(f"User '{current_user.email}' attempting to cancel/delete job '{job_id}'.")
 
-    job = await crud.job.get(db, id=job_id)  # Fetch the job
+    job = await crud.job.get(db, id=job_id)
     if not job:
         logger.warning(
-            f"Cancel request for non-existent job '{job_id}' by user '{current_user.email}'."
+            f"Cancel/Delete request for non-existent job '{job_id}' by user '{current_user.email}'."
         )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="JOB_NOT_FOUND")
 
     # Authorization check
     if not current_user.is_superuser and job.user_id != current_user.id:
-        logger.warning(
-            f"User '{current_user.email}' (role: {current_user.role}) unauthorized to cancel job '{job_id}' owned by user_id '{job.user_id}'."
-        )
+        logger.warning(f"User '{current_user.email}' unauthorized to modify job '{job_id}'.")
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="NOT_AUTHORIZED_TO_CANCEL_JOB"
+            status_code=status.HTTP_403_FORBIDDEN, detail="NOT_AUTHORIZED_TO_MODIFY_JOB"
         )
 
-    logger.info(
-        f"User '{current_user.email}' authorized to cancel job '{job_id}'. Current job status: {job.status.value}"
-    )
-
-    # Job state check
-    cancellable_statuses = [JobStatus.PENDING, JobStatus.RUNNING]
-    if job.status not in cancellable_statuses:
-        logger.warning(
-            f"Job '{job_id}' is in status '{job.status.value}', which is not cancellable. Request by '{current_user.email}'."
-        )
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Job in status '{job.status.value}' cannot be cancelled. Only PENDING or RUNNING jobs can be cancelled.",
-        )
-
+    # Job state check for Revocation
     celery_task_id_to_revoke = job.celery_task_id
 
-    # If job is PENDING and somehow celery_task_id isn't set (e.g., failure between DB create and task_id set),
-    # we can still mark it as CANCELLED directly as no task is running.
-    if job.status == JobStatus.PENDING and not celery_task_id_to_revoke:
-        logger.warning(
-            f"Job '{job_id}' is PENDING but has no celery_task_id. Marking as CANCELLED directly."
-        )
-        job.status = JobStatus.CANCELLED
-        job.result_message = "Job cancelled by user while in PENDING state (no active task)."
-        job.completed_at = datetime.now(UTC)  # Or datetime.now(timezone.utc)
-        # updated_at will be handled by DB trigger
-    else:
-        if not celery_task_id_to_revoke:
-            # This case (e.g. RUNNING but no celery_task_id) would be an inconsistency.
-            logger.error(
-                f"Job '{job_id}' is in status {job.status.value} but has no celery_task_id. Cannot send revoke signal."
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="JOB_INCONSISTENCY_MISSING_CELERY_ID_FOR_CANCELLATION",
-            )
-
+    if celery_task_id_to_revoke:
         logger.info(
-            f"Sending revoke signal (SIGTERM) to Celery task_id '{celery_task_id_to_revoke}' for job '{job_id}'."
+            f"Job '{job_id}' being deleted has active task '{celery_task_id_to_revoke}'. Sending revoke signal."
         )
         try:
+            # We send SIGTERM to the worker process.
+            # Since we are deleting the DB record immediately after, the worker's subsequent
+            # attempts to update the DB will fail (or handle "Job Not Found").
+            # This is the expected "Force Remove" behavior.
             celery_app.control.revoke(celery_task_id_to_revoke, terminate=True, signal="SIGTERM")
-            logger.info(f"Revoke command sent for Celery task_id '{celery_task_id_to_revoke}'.")
-            job.status = JobStatus.CANCELLING
-            job.result_message = "Cancellation requested by user. Waiting for task termination."
-            # updated_at will be handled by DB trigger
         except Exception as e:
             logger.error(
-                f"Failed to send revoke command for Celery task_id '{celery_task_id_to_revoke}': {e}",
-                exc_info=True,
+                f"Failed to send revoke command for Celery task_id '{celery_task_id_to_revoke}': {e}"
             )
-            # Even if revoke command fails to send, we might still want to mark as CANCELLING if that's policy.
-            # Or, raise 500 and don't change DB state if sending revoke is critical.
-            # For now, let's assume if revoke send fails, it's a server error and we don't change job status yet.
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="CELERY_REVOKE_COMMAND_SEND_ERROR",
-            ) from e
+            # We proceed to delete anyway, as the user requested removal.
 
+    # Always Delete
     try:
-        db.add(job)  # Mark the job object for saving its new status/message
+        logger.info(f"Removing job '{job_id}' from database.")
+        await db.delete(job)
         await db.commit()
-        await db.refresh(job)
-        logger.info(
-            f"Job '{job_id}' status updated to '{job.status.value}' in DB. User: '{current_user.email}'."
-        )
+        # Returns the job object as it was before deletion (with old status)
+        # or we could return a specific message.
+        # Returning the object is fine for now; frontend just invalidates list.
+        return job
     except SQLAlchemyError as e:
         await db.rollback()
-        logger.error(
-            f"Database error while updating job {job.id} status for cancellation: {e}",
-            exc_info=True,
-        )
+        logger.error(f"Database error while deleting job {job_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="JOB_CANCELLATION_DB_UPDATE_ERROR",
+            detail="JOB_DELETION_DB_ERROR",
         ) from e
-
-    return job

@@ -1,0 +1,25 @@
+FROM alpine:3.19
+
+# Install tools
+# postgresql16-client for pg_dump
+# redis for redis-cli (if needed)
+# age for encryption
+# aws-cli for S3 upload
+# bash for scripting
+RUN apk add --no-cache \
+    postgresql16-client \
+    redis \
+    age \
+    aws-cli \
+    bash \
+    curl \
+    gzip
+
+# Create backup directory
+WORKDIR /backups
+
+# Add script
+COPY backup.sh /usr/local/bin/backup.sh
+RUN chmod +x /usr/local/bin/backup.sh
+
+CMD ["sleep", "infinity"]

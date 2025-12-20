@@ -19,6 +19,18 @@ A secure, role-based web application to trigger a local subtitle downloader scri
 - Containerized deployment using Docker Compose.
 - Automatic HTTPS via Caddy.
 
+## 🏗 System Architecture
+
+### Backend API & Job Processing
+
+The backend utilizes a **FastAPI** application for HTTP endpoints and a **Celery** worker for asynchronous processing.
+
+- **Job Submission:** Jobs are submitted via REST API, validated, and stored in **PostgreSQL**.
+- **Execution:** A dedicated Celery worker executes the subtitle downloader script as a subprocess, ensuring isolation and stability.
+- **Real-Time Logs:** The worker captures `stdout`/`stderr` line-by-line and publishes them to **Redis Pub/Sub**.
+- **Live Streaming:** The API provides a **WebSocket** endpoint (`/api/v1/ws/jobs/{id}/logs`) that streams these logs to the client in real-time.
+- **Security:** Authenticated via JWT; Jobs are protected by strict Role-Based Access Control (RBAC).
+
 ## Technology Stack
 
 - **Backend API:** FastAPI (Python 3.12)
@@ -87,6 +99,7 @@ A secure, role-based web application to trigger a local subtitle downloader scri
 ## Documentation
 
 - [Roadmap](./docs/roadmap.md)
+- [WebSocket API](./docs/api/websockets.md)
 - [Architecture Vision](./docs/architecture_vision.md)
 - [Deployment Guide](./docs/deployment.md) ([Link to TBD])
 - [Testing Strategy](./docs/testing_strategy.md) ([Link to TBD])

@@ -47,17 +47,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi_users.exceptions import UserNotExists
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import Routers
 from app.api.routers.admin import admin_router
 from app.api.routers.auth import auth_router as custom_auth_router
+from app.api.routers.dashboard import router as dashboard_router
 from app.api.routers.jobs import router as jobs_router
 from app.api.routers.users import router as users_router
 
 # *** NEW IMPORT FOR WEBSOCKET ROUTER ***
 from app.api.websockets.job_logs import router as job_logs_websocket_router
+from app.core.rate_limit import limiter  # Import the limiter instance
 
 # --- Imports for initial superuser creation & DB management ---
 from app.core.users import UserManager
@@ -205,6 +210,11 @@ app = FastAPI(
     },
 )
 
+# --- Rate Limiting Setup ---
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 # --- Middleware ---
 # (Your existing CORS middleware logic looks fine)
 if settings.BACKEND_CORS_ORIGINS:
@@ -281,6 +291,10 @@ api_v1_router.include_router(users_router, prefix="/users", tags=["Users - User 
 api_v1_router.include_router(admin_router, prefix="/admin", tags=["Admins - Admin Management"])
 api_v1_router.include_router(
     jobs_router, prefix="/jobs", tags=["Jobs - Subtitle Download Management"]
+)
+
+api_v1_router.include_router(
+    dashboard_router, prefix="/dashboard", tags=["Dashboard - External Services"]
 )
 
 # *** INCLUDE THE WEBSOCKET ROUTER HERE ***

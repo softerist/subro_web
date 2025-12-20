@@ -9,7 +9,7 @@ from app.schemas.user import UserRead, UserUpdate  # Pydantic schemas for User
 # from app.core.users import current_active_user # Not strictly needed here unless defining custom routes
 
 router = APIRouter(
-    prefix="/users",  # All routes here will be under /api/users/... (when combined with main app's /api prefix)
+    # prefix="/users",  # REMOVED: Managed by include_router in main.py to avoid double prefixing (/users/users/...)
     tags=["Users - User Management"],  # Tag for OpenAPI documentation, more specific tag
 )
 

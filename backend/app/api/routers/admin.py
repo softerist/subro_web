@@ -15,7 +15,7 @@ from app.core.users import (
 )
 from app.db.models.user import User  # For ORM operations and type hinting
 from app.db.session import get_async_session
-from app.schemas.user import AdminUserUpdate, UserRead  # Pydantic schemas
+from app.schemas.user import AdminUserUpdate, UserCreate, UserRead  # Pydantic schemas
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +89,31 @@ async def get_user_by_id_admin(
     """Retrieves details for a specific user by their ID."""
     logger.info(f"Admin retrieved details for user_id: {target_user.id}")
     return target_user
+
+
+@admin_router.post(
+    "/users",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new user (Admin only)",
+    description="Creates a new user with specified role and attributes.",
+)
+async def create_user_admin(
+    user_create: UserCreate,
+    user_manager: UserManager = Depends(get_user_manager),
+):
+    """
+    Creates a new user.
+    """
+    try:
+        created_user = await user_manager.create(user_create, safe=True)
+        return created_user
+    except Exception as e:
+        logger.error(f"Error creating user by admin: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"USER_CREATION_FAILED: {e!s}",
+        ) from e
 
 
 @admin_router.patch(

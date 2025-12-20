@@ -31,11 +31,14 @@ WORKDIR ${APP_HOME} # Use the ENV variable
 # Install Poetry globally using the build argument
 # Also update pip first
 RUN pip install --upgrade pip && pip install poetry==${POETRY_VERSION}
-RUN mkdir -p /mnt/sata0/Media
+
 
 # Create a non-root user and group early for consistent permissions
 # Use the WORKDIR path for the home directory (-d)
 RUN groupadd -r appuser && useradd --no-log-init -r -g appuser -d ${APP_HOME} appuser
+
+# Create media directory and set permissions
+RUN mkdir -p /mnt/sata0/Media && chown appuser:appuser /mnt/sata0/Media
 
 # --- Create scripts directory structure ---
 RUN mkdir -p /app/scripts && chown appuser:appuser /app/scripts

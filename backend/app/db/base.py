@@ -15,6 +15,7 @@
 # This is crucial for Alembic's autogenerate feature to discover the models
 # and compare them against the current database schema.
 from app.db.base_class import Base  # noqa: F401
+from app.db.models.dashboard import DashboardTile  # noqa: F401
 from app.db.models.job import Job  # noqa: F401  <--- MAKE SURE THIS IS PRESENT TOO!
 from app.db.models.user import User  # noqa: F401
 # Example for future models:

@@ -1,4 +1,3 @@
-````markdown
 # WebSocket API Documentation
 
 ## Log Streaming Endpoint
@@ -39,9 +38,8 @@ All messages sent by the server are JSON objects with a standard structure:
   }
 }
 ```
-````
 
-#### 1. Log Message (`type: "log"`)
+#### 1. Log Message (type: "log")
 
 Represents a line of output from the running script.
 
@@ -56,7 +54,7 @@ Represents a line of output from the running script.
 }
 ```
 
-#### 2. Status Update (`type: "status"`)
+#### 2. Status Update (type: "status")
 
 Indicates a transition in the job's lifecycle.
 
@@ -69,7 +67,7 @@ Indicates a transition in the job's lifecycle.
     "status": "RUNNING",
     "ts": "2023-10-27T10:30:00.000Z",
     "job_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "started_at": "2023-10-27T10:30:00.000Z"
+    # Additional context usually provided on start
   }
 }
 ```
@@ -82,10 +80,7 @@ Indicates a transition in the job's lifecycle.
   "payload": {
     "status": "SUCCEEDED",
     "ts": "2023-10-27T10:35:00.000Z",
-    "job_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "completed_at": "2023-10-27T10:35:00.000Z",
-    "exit_code": 0,
-    "result_message": "Download complete."
+    # ... other job completion details
   }
 }
 ```
@@ -98,11 +93,8 @@ Indicates a transition in the job's lifecycle.
   "payload": {
     "status": "FAILED",
     "ts": "2023-10-27T10:35:00.000Z",
-    "job_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "completed_at": "2023-10-27T10:35:00.000Z",
-    "exit_code": 1,
     "error_message": "Network timeout connecting to provider.",
-    "log_snippet": "Error: Connection refused..."
+    "exit_code": 1
   }
 }
 ```
@@ -115,15 +107,13 @@ Indicates a transition in the job's lifecycle.
   "payload": {
     "status": "CANCELLED",
     "ts": "2023-10-27T10:32:00.000Z",
-    "job_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "completed_at": "2023-10-27T10:32:00.000Z",
-    "exit_code": -100,
-    "result_message": "Job cancelled by user request."
+    "message": "Job cancelled by user request.",
+    "exit_code": -100
   }
 }
 ```
 
-#### 3. Info Message (`type: "info"`)
+#### 3. Info Message (type: "info")
 
 General information about the execution environment (e.g., process PID).
 
@@ -132,14 +122,12 @@ General information about the execution environment (e.g., process PID).
   "type": "info",
   "payload": {
     "message": "Subtitle downloader process (PID: 1234) started execution.",
-    "ts": "2023-10-27T10:30:00.500Z",
-    "pid": 1234,
-    "command": "python script.py ..."
+    "ts": "2023-10-27T10:30:00.500Z"
   }
 }
 ```
 
-#### 4. System Message (`type: "system"`)
+#### 4. System Message (type: "system")
 
 Sent immediately upon successful connection.
 
@@ -148,13 +136,12 @@ Sent immediately upon successful connection.
   "type": "system",
   "payload": {
     "message": "Log streaming started.",
-    "job_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "ts": "2023-10-27T10:29:59.000Z"
+    "job_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
   }
 }
 ```
 
-#### 5. Error Message (`type: "error"`)
+#### 5. Error Message (type: "error")
 
 Sent if a protocol-level error occurs before the connection closes.
 
@@ -162,8 +149,7 @@ Sent if a protocol-level error occurs before the connection closes.
 {
   "type": "error",
   "payload": {
-    "message": "Job not found or access denied.",
-    "ts": "2023-10-27T10:29:59.000Z"
+    "message": "Job not found or access denied."
   }
 }
 ```
@@ -171,9 +157,5 @@ Sent if a protocol-level error occurs before the connection closes.
 ### Client Implementation Guidelines
 
 1.  **Reconnection:** Clients should implement automatic reconnection with exponential backoff if the connection drops unexpectedly.
-2.  **State Sync:** When connecting, clients should first fetch the job details via HTTP GET `/api/v1/jobs/{id}` to get the current state, then connect WebSocket for _updates_.
+2.  **State Sync:** When connecting, clients should first fetch the job details via HTTP GET `/api/v1/jobs/{id}` to get the current state, then connect WebSocket for updates.
 3.  **Terminal States:** Once a `SUCCEEDED`, `FAILED`, or `CANCELLED` status message is received, the client should expect the connection to close shortly after (or can close it manually).
-
-```
-
-```

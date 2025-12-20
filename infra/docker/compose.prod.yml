@@ -1,0 +1,72 @@
+services:
+  api:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+      target: production-api
+    restart: always
+    expose:
+      - "8000"
+    volumes:
+      - /mnt/sata0/Media:/mnt/sata0/Media
+      - /tmp:/tmp
+    env_file:
+      - ../../.env.prod
+    networks:
+      - internal_net
+    # Depends on DB/Redis which are external now (in Data stack)
+    # We can't use 'depends_on' for external services easily without 'external_links' or just network reachability.
+    # We remove explicit depends_on service condition, or keep it if we merge stacks.
+    # For independent stacks, we remove it and rely on healthcheck of the App itself fail/wait.
+    # Entrypoint script checks for DB anyway.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+      target: production-worker
+    restart: always
+    volumes:
+      - /mnt/sata0/Media:/mnt/sata0/Media
+      - /tmp:/tmp
+    env_file:
+      - ../../.env.prod
+    networks:
+      - internal_net
+    # Entrypoint waits for DB.
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.tasks.celery_app", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      target: production
+    restart: always
+    expose:
+      - "8080" # Nginx default port
+    # No volume needed
+    env_file:
+      - ../../.env.prod
+    networks:
+      - internal_net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  internal_net:
+    external: true
+    name: infra_internal_net

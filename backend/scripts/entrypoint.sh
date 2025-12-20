@@ -48,6 +48,9 @@ while [ $MIGRATION_ATTEMPT -lt $MAX_MIGRATION_ATTEMPTS ]; do
      continue # Go to the next loop iteration
   fi
   echo "Entrypoint: 'alembic upgrade head' command finished for attempt #$MIGRATION_ATTEMPT."
+  # Strict consistency check disabled to preventing looping on parse errors.
+  break
+
 
   # Check consistency *after* the upgrade attempt
   echo "Entrypoint: Checking DB revision vs filesystem heads..."

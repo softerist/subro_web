@@ -72,6 +72,7 @@ services:
     volumes:
       # Base volume mount (can be overridden)
       - ../../backend:/app # Mount source for reference
+      - /tmp:/tmp # Share /tmp between host and container
     env_file:
       - ../../.env
     environment:
@@ -80,6 +81,8 @@ services:
       - POETRY_CACHE_DIR=/tmp/poetry_cache
       - PYTHONPATH=/app
       - POSTGRES_SERVER=db # This would also work if devcontainer.json didn't set it
+      - FIRST_SUPERUSER_EMAIL=${FIRST_SUPERUSER_EMAIL:-admin@example.com}
+      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD:-securepassword123}
     networks:
       - app_network
     depends_on:

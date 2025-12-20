@@ -30,16 +30,9 @@ logger = logging.getLogger("alembic.env")
 # --- Application Imports ---
 try:
     from app.core.config import settings
-    from app.db.base_class import Base
 
-    # Line 33: Import Job model. Add noqa: F401 to suppress unused import warning.
-    # Its side-effect (registering with Base.metadata) is the reason for import.
-    from app.db.models.job import Job as JobModel  # noqa: F401
-
-    # Import all models that should be managed by Alembic
-    # Line 36: Import User model. Add noqa: F401 to suppress unused import warning.
-    # Its side-effect (registering with Base.metadata) is the reason for import.
-    from app.db.models.user import User as UserModel  # noqa: F401
+    # Import Base from app.db.base, which imports all models for Alembic autogeneration
+    from app.db.base import Base
 
     # ... import other models ...
     # It's good practice to also add # to other similar model imports

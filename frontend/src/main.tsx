@@ -1,15 +1,29 @@
-// frontend/src/main.tsx
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
-import "./index.css"; // Assuming you have index.css from Vite init
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import App from "./App.tsx";
+import "./index.css";
 
-const container = document.getElementById("root");
-if (!container) {
-  throw new Error("Root element not found");
-}
-ReactDOM.createRoot(container).render(
+// Create a client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
+
+import { ThemeProvider } from "@/components/providers/theme-provider";
+import { Toaster } from "sonner";
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
+        <App />
+        <Toaster />
+      </ThemeProvider>
+    </QueryClientProvider>
   </React.StrictMode>,
 );

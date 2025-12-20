@@ -9,6 +9,7 @@ from fastapi_users.authentication import JWTStrategy
 from jose import JWTError, jwt
 
 from app.core.config import settings
+from app.core.rate_limit import limiter  # Import limiter
 from app.core.users import (
     UserManager,
     cookie_transport,
@@ -69,6 +70,7 @@ auth_router = APIRouter(
 
 # --- Custom Login Endpoint ---
 @auth_router.post("/login", response_model=Token, summary="Login for access and refresh tokens")
+@limiter.limit("5/minute")
 async def custom_login(
     response: Response,
     credentials: OAuth2PasswordRequestForm = Depends(),
@@ -77,6 +79,7 @@ async def custom_login(
     access_token_strategy: JWTStrategy = Depends(get_access_token_jwt_strategy),  # <<< CORRECTED
     # If you created a separate refresh token strategy:
     # refresh_token_strategy: JWTStrategy = Depends(get_refresh_token_jwt_strategy),
+    request: Request = None,  # Required for SlowAPI  # noqa: ARG001
 ):
     logger.debug(f"Login attempt for user: {credentials.username}")
     user = await user_manager.authenticate(credentials)  # Returns DB Model instance or None

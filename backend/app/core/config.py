@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     )
     COOKIE_SECURE: bool = Field(default=True, validation_alias="COOKIE_SECURE")
     COOKIE_SAMESITE: Literal["lax", "strict", "none"] = Field(
-        default="lax", validation_alias="COOKIE_SAMESITE"
+        default="strict", validation_alias="COOKIE_SAMESITE"
     )
     OPEN_SIGNUP: bool = Field(default=True, validation_alias="OPEN_SIGNUP")
 

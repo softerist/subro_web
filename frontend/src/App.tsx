@@ -1,42 +1,59 @@
-// frontend/src/App.tsx
-import { useState } from "react";
-import "./App.css"; // Assuming you have a basic App.css from Vite init
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+import { useAuthStore } from "@/store/authStore";
+import LoginPage from "@/pages/LoginPage";
+import DashboardPage from "@/pages/DashboardPage";
+import { UsersPage } from "@/features/admin/pages/UsersPage";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+
+// Protected Route Wrapper
+const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
+
+// Public Route Wrapper (redirects to dashboard if already logged in)
+const PublicRoute = ({ children }: { children: JSX.Element }) => {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+};
 
 function App() {
-  const [count, setCount] = useState(0);
-
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>Subtitle Downloader App Frontend</h1>
-        <p>Vite + React + TypeScript is Running!</p>
-        <p>
-          <button onClick={() => setCount((count) => count + 1)}>
-            Count is: {count}
-          </button>
-        </p>
-        <p>
-          Edit <code>frontend/src/App.tsx</code> and save to test HMR.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
+    <Router>
+      <Routes>
+        <Route
+          path="/login"
+          element={
+            <PublicRoute>
+              <LoginPage />
+            </PublicRoute>
+          }
+        />
+        <Route
+          element={
+            <ProtectedRoute>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
         >
-          Learn React
-        </a>
-        {" | "}
-        <a
-          className="App-link"
-          href="https://vitejs.dev/guide/features.html"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Vite Docs
-        </a>
-      </header>
-    </div>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/admin/users" element={<UsersPage />} />
+        </Route>
+        {/* Default redirect */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </Router>
   );
 }
 
