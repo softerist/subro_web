@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-
 # Architecture Vision: Subtitle Downloader Web Application (FastAPI Stack)
 
 ## Narrative Description
@@ -174,5 +172,3 @@ graph TD
 
     FE_Nginx -- Serves JS/CSS/HTML --> B
 ````
-
-> > > > > > > bbdeb9f (Chapter - 2 - commit of subro_web app)
