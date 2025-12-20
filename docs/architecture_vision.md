@@ -64,7 +64,7 @@ graph TD
     W -- Publish Logs --> R
 
     FE_Nginx -- Serves JS/CSS/HTML --> B
-
+````
 =======
 # Architecture Vision: Subtitle Downloader Web Application (FastAPI Stack)
 
