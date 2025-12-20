@@ -76,7 +76,16 @@ async def _publish_to_redis_pubsub_async(
     message_data = {"type": message_type, "payload": payload}
     try:
         json_message = json.dumps(message_data)
+
+        # Publish to live channel
         await redis_client.publish(channel, json_message)
+
+        # Also push to history list for late subscribers
+        # We store all messages to preserve complete context
+        history_key = f"job:{job_db_id_str}:history"
+        await redis_client.rpush(history_key, json_message)
+        # Refresh expiry on every push (sliding window) - 24h
+        await redis_client.expire(history_key, 86400)
 
         if message_type == "status":
             logger.info(
@@ -214,6 +223,7 @@ async def _execute_subtitle_downloader_async_logic(
     job_db_id: UUID,
     folder_path: str,
     language: str | None,
+    log_level: str = "INFO",
 ) -> dict:
     """
     Main orchestrator for the async task logic. It no longer manages a single
@@ -253,6 +263,7 @@ async def _execute_subtitle_downloader_async_logic(
             script_path=str(script_path),
             folder_path=folder_path,
             language=language,
+            log_level=log_level,
             job_timeout_sec=float(settings.JOB_TIMEOUT_SEC),
             task_log_prefix=task_log_prefix,
             redis_client=redis_client,
@@ -719,6 +730,7 @@ async def _execute_subtitle_script(
     script_path: str,
     folder_path: str,
     language: str | None,
+    log_level: str,
     job_timeout_sec: float,
     task_log_prefix: str,
     redis_client: aioredis.Redis | None,
@@ -731,7 +743,16 @@ async def _execute_subtitle_script(
     This function has been simplified to focus only on subprocess management.
     It no longer contains any database logic.
     """
-    cmd_args = [str(settings.PYTHON_EXECUTABLE_PATH), script_path, "--folder-path", folder_path]
+    # Use -u flag for unbuffered Python output to enable real-time log streaming
+    cmd_args = [
+        str(settings.PYTHON_EXECUTABLE_PATH),
+        "-u",
+        script_path,
+        "--folder-path",
+        folder_path,
+        "--log-level",
+        log_level.lower(),
+    ]
     if language:
         cmd_args.extend(["--language", language])
 
@@ -1250,6 +1271,7 @@ async def _run_script_and_get_output(
     script_path: str,
     folder_path: str,
     language: str | None,
+    log_level: str,
     job_timeout_sec: float,
     task_log_prefix: str,
     redis_client: aioredis.Redis | None,
@@ -1263,7 +1285,16 @@ async def _run_script_and_get_output(
     Returns the script's exit code.
     Raises TimeoutError, asyncio.CancelledError, or RuntimeError (with exit_code attribute for setup issues).
     """
-    cmd_args = [str(settings.PYTHON_EXECUTABLE_PATH), script_path, "--folder-path", folder_path]
+    # Use -u flag for unbuffered Python output to enable real-time log streaming
+    cmd_args = [
+        str(settings.PYTHON_EXECUTABLE_PATH),
+        "-u",
+        script_path,
+        "--folder-path",
+        folder_path,
+        "--log-level",
+        log_level.lower(),
+    ]
     if language:
         cmd_args.extend(["--language", language])
 
@@ -1812,7 +1843,11 @@ async def _handle_terminated_job_in_db(
     acks_late=settings.CELERY_ACKS_LATE,
 )
 def execute_subtitle_downloader_task(  # noqa: C901
-    self: CeleryTaskDef, job_db_id_str: str, folder_path: str, language: str | None
+    self: CeleryTaskDef,
+    job_db_id_str: str,
+    folder_path: str,
+    language: str | None,
+    log_level: str = "INFO",
 ):
     celery_task_id = str(self.request.id) if self.request.id else "unknown-celery-id"
     task_name_for_log = self.name
@@ -1820,7 +1855,7 @@ def execute_subtitle_downloader_task(  # noqa: C901
         f"[CeleryTaskWrapper:{task_name_for_log} CeleryID:{celery_task_id} DBJobID:{job_db_id_str}]"
     )
     logger.info(
-        f"{wrapper_log_prefix} SYNC WRAPPER ENTERED for job on folder '{folder_path}', lang '{language}'."
+        f"{wrapper_log_prefix} SYNC WRAPPER ENTERED for job on folder '{folder_path}', lang '{language}', log_level '{log_level}'."
     )
 
     job_db_id: UUID
@@ -1838,7 +1873,7 @@ def execute_subtitle_downloader_task(  # noqa: C901
         logger.info(f"{wrapper_log_prefix} Invoking asyncio.run() for async logic.")
         final_result_from_async_logic = asyncio.run(
             _execute_subtitle_downloader_async_logic(
-                task_name_for_log, celery_task_id, job_db_id, folder_path, language
+                task_name_for_log, celery_task_id, job_db_id, folder_path, language, log_level
             )
         )
         logger.info(

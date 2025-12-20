@@ -54,6 +54,7 @@ class Job(Base):
 
     folder_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     language: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    log_level: Mapped[str] = mapped_column(String(10), nullable=False, default="INFO")
 
     status: Mapped[JobStatus] = mapped_column(
         SQLAlchemyEnum(  # Using the aliased import

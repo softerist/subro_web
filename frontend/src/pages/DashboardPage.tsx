@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Job } from "@/features/jobs/types";
 import { TileGrid } from "@/features/dashboard/components/TileGrid";
 import { useAuthStore } from "@/store/authStore";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function DashboardPage() {
   const user = useAuthStore((state) => state.user);
@@ -27,9 +28,9 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="flex flex-col space-y-4 h-full">
-      {/* Dashboard Tiles Section */}
-      <Card>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Dashboard Tiles Section - Fixed height, shrinks to fit */}
+      <Card className="shrink-0">
         <CardHeader className="pb-2 flex flex-row items-center justify-between">
           <CardTitle>Launchpad</CardTitle>
           {isAdmin && (
@@ -50,11 +51,12 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="flex flex-col lg:flex-row gap-4 h-full">
+      {/* Main content area - fills remaining space */}
+      <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 mt-4">
         {/* Left Column: Form & List */}
-        <div className="w-full lg:w-1/3 flex flex-col gap-4">
-          {/* New Job Form */}
-          <Card>
+        <div className="w-full lg:w-1/3 flex flex-col gap-4 min-h-0">
+          {/* New Job Form - Fixed height */}
+          <Card className="shrink-0">
             <CardHeader>
               <CardTitle>New Job</CardTitle>
               <CardDescription>
@@ -66,33 +68,31 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Job History */}
-          <Card className="flex-1 flex flex-col min-h-[400px]">
-            <CardHeader>
+          {/* Job History - Takes remaining space with scroll */}
+          <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <CardHeader className="shrink-0">
               <CardTitle>Job History</CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 p-0 overflow-hidden">
-              {/* We can wrap JobHistoryList in a scroll area if needed,
-                         or JobHistoryList can handle its own scrolling.
-                         Table component usually scrolls horizontally.
-                     */}
-              <div className="h-full overflow-auto p-4 pt-0">
-                <JobHistoryList
-                  onSelectJob={handleSelectJob}
-                  selectedJobId={selectedJobId || undefined}
-                />
-              </div>
+            <CardContent className="flex-1 p-0 min-h-0 overflow-hidden">
+              <ScrollArea className="h-full">
+                <div className="p-4 pt-0">
+                  <JobHistoryList
+                    onSelectJob={handleSelectJob}
+                    selectedJobId={selectedJobId || undefined}
+                  />
+                </div>
+              </ScrollArea>
             </CardContent>
           </Card>
         </div>
 
-        {/* Right Column: Log Viewer */}
-        <div className="w-full lg:w-2/3 flex flex-col">
-          <Card className="h-full flex flex-col">
-            <CardHeader className="py-4">
+        {/* Right Column: Log Viewer - Takes remaining space */}
+        <div className="w-full lg:w-2/3 flex flex-col min-h-0">
+          <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <CardHeader className="py-4 shrink-0">
               <CardTitle>Log Viewer</CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 p-0">
+            <CardContent className="flex-1 p-0 min-h-0 overflow-hidden">
               <LogViewer
                 jobId={selectedJobId}
                 className="h-full border-0 rounded-none"

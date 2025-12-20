@@ -30,14 +30,16 @@ services:
       - JWT_SECRET_KEY=testsecretkey
 
   worker:
+    user: root # Run as root to write to root-owned media folders
     volumes:
       # CORRECTED PATH: Mount project's backend code into /app
       - ../../backend:/app
+      - /mnt/usb3/Media/Movies:/mnt/usb3/Media/Movies # Media folder mount
     # PYTHONPATH is inherited from the base docker-compose.yml
     # environment:
     #   - PYTHONPATH=/app
-    # Command to run celery worker. '-P solo' is useful for local debugging (disables concurrency).
-    # Remove '-P solo' if you need to test concurrency.
+    # Command to run celery worker with concurrency for parallel job processing
+    # Use --concurrency to control how many tasks can run simultaneously
     command:
       [
         "poetry",
@@ -47,8 +49,7 @@ services:
         "app.tasks.celery_app",
         "worker",
         "--loglevel=info",
-        "-P",
-        "solo",
+        "--concurrency=4",
       ]
 
   frontend:

@@ -119,7 +119,7 @@ class Settings(BaseSettings):
     )  # Added this, was missing from your new version
     JOB_MAX_RETRIES: int = Field(default=2, validation_alias="JOB_MAX_RETRIES")
     JOB_RESULT_MESSAGE_MAX_LEN: int = int(os.getenv("JOB_RESULT_MESSAGE_MAX_LEN", "500"))
-    JOB_LOG_SNIPPET_MAX_LEN: int = int(os.getenv("JOB_LOG_SNIPPET_MAX_LEN", "5000"))
+    JOB_LOG_SNIPPET_MAX_LEN: int = int(os.getenv("JOB_LOG_SNIPPET_MAX_LEN", "50000"))
     DEFAULT_PAGINATION_LIMIT_MAX: int = Field(
         default=200, validation_alias="DEFAULT_PAGINATION_LIMIT_MAX"
     )
@@ -147,10 +147,70 @@ class Settings(BaseSettings):
         os.getenv("DEBUG_TASK_CANCELLATION_DELAY_S", "10")
     )  # Default 10 seconds
 
+    # --- Subtitle Tool Configuration ---
+    # API Keys
+    OMDB_API_KEY: str | None = Field(default=None, validation_alias="OMDB_API_KEY")
+    TMDB_API_KEY: str | None = Field(default=None, validation_alias="TMDB_API_KEY")
+    OPENSUBTITLES_API_KEY: str | None = Field(
+        default=None, validation_alias="OPENSUBTITLES_API_KEY"
+    )
+    DEEPL_API_KEYS_ENV_STR: str | None = Field(
+        default=None, validation_alias="DEEPL_API_KEYS"
+    )  # JSON list of keys
+
+    # User Credentials
+    OPENSUBTITLES_USERNAME: str | None = Field(
+        default=None, validation_alias="OPENSUBTITLES_USERNAME"
+    )
+    OPENSUBTITLES_PASSWORD: str | None = Field(
+        default=None, validation_alias="OPENSUBTITLES_PASSWORD"
+    )
+
+    # qBittorrent Settings
+    QBITTORRENT_HOST: str = Field(default="localhost", validation_alias="QBITTORRENT_HOST")
+    QBITTORRENT_PORT: int = Field(default=8080, validation_alias="QBITTORRENT_PORT")
+    QBITTORRENT_USERNAME: str = Field(default="admin", validation_alias="QBITTORRENT_USERNAME")
+    QBITTORRENT_PASSWORD: str | None = Field(default=None, validation_alias="QBITTORRENT_PASSWORD")
+
+    # Google Cloud Translate Settings
+    GOOGLE_PROJECT_ID: str | None = Field(default=None, validation_alias="GOOGLE_PROJECT_ID")
+    GOOGLE_CREDENTIALS_PATH: str | None = Field(
+        default=None, validation_alias="GOOGLE_CREDENTIALS_PATH"
+    )
+
+    # Translation Settings
+    DEEPL_CHARACTER_QUOTA: int = Field(default=500000, validation_alias="DEEPL_CHARACTER_QUOTA")
+    GOOGLE_CHARACTER_QUOTA: int = Field(default=500000, validation_alias="GOOGLE_CHARACTER_QUOTA")
+
+    # Application Settings (Subtitle Tool Specific)
+    USER_AGENT_APP_NAME: str = Field(
+        default="SubtitleDownloader", validation_alias="USER_AGENT_APP_NAME"
+    )
+    USER_AGENT_APP_VERSION: str = Field(default="1.0", validation_alias="USER_AGENT_APP_VERSION")
+    LOG_FILE_NAME_PATTERN: str = Field(
+        default="{base_name}.log", validation_alias="LOG_FILE_NAME_PATTERN"
+    )
+
+    # Sync Tool Paths
+    FFSUBSYNC_PATH: str = Field(default="ffsubsync", validation_alias="FFSUBSYNC_PATH")
+    ALASS_CLI_PATH: str = Field(default="alass-cli", validation_alias="ALASS_CLI_PATH")
+    SUP2SRT_PATH: str = Field(default="sup2srt", validation_alias="SUP2SRT_PATH")
+
+    # Other Subtitle Settings
+    NETWORK_MAX_RETRIES: int = Field(default=5, validation_alias="NETWORK_MAX_RETRIES")
+    NETWORK_BACKOFF_FACTOR: int = Field(default=1, validation_alias="NETWORK_BACKOFF_FACTOR")
+    FUZZY_MATCH_THRESHOLD: int = Field(default=80, validation_alias="FUZZY_MATCH_THRESHOLD")
+    SUBTITLE_SYNC_OFFSET_THRESHOLD: int = Field(
+        default=1, validation_alias="SUBTITLE_SYNC_OFFSET_THRESHOLD"
+    )
+    FFSUBSYNC_CHECK_TIMEOUT: int = Field(default=90, validation_alias="FFSUBSYNC_CHECK_TIMEOUT")
+    FFSUBSYNC_TIMEOUT: int = Field(default=600, validation_alias="FFSUBSYNC_TIMEOUT")
+    ALASS_TIMEOUT: int = Field(default=600, validation_alias="ALASS_TIMEOUT")
+
     # --- Fields for complex parsing ---
     allowed_media_folders_env_str: str = Field(
         default='["/mnt/sata0/Media","/mnt/sata1/Media"]',
-        validation_alias="ALLOWED_MEDIA_FOLDERS",
+        validation_alias="ALLOWED_MEDIA_FOLDERS_ENV",
     )
     backend_cors_origins_env_str: str | None = Field(
         default='["http://localhost:5173","http://localhost:8000","https://localhost"]',
@@ -160,6 +220,11 @@ class Settings(BaseSettings):
     # --- Private storage for parsed values ---
     _parsed_allowed_media_folders: list[str] = []
     _parsed_backend_cors_origins: list[str] = []
+    _parsed_deepl_api_keys: list[str] = []
+
+    @property
+    def DEEPL_API_KEYS(self) -> list[str]:
+        return self._parsed_deepl_api_keys
 
     def _parse_string_list_input_helper(
         self, input_str: str | None, field_name_for_log: str
@@ -200,6 +265,9 @@ class Settings(BaseSettings):
         )
         self._parsed_backend_cors_origins = self._parse_string_list_input_helper(
             self.backend_cors_origins_env_str, "BACKEND_CORS_ORIGINS"
+        )
+        self._parsed_deepl_api_keys = self._parse_string_list_input_helper(
+            self.DEEPL_API_KEYS_ENV_STR, "DEEPL_API_KEYS"
         )
 
         if self.DEBUG:

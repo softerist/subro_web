@@ -30,9 +30,17 @@ import { jobsApi } from "../api/jobs";
 const formSchema = z.object({
   folder_path: z.string().min(1, "Target folder is required"),
   language: z.string().optional(),
+  log_level: z.enum(["DEBUG", "INFO", "WARNING", "ERROR"]),
 });
 
 type FormValues = z.infer<typeof formSchema>;
+
+const LOG_LEVELS = [
+  { value: "DEBUG", label: "Debug (Verbose)" },
+  { value: "INFO", label: "Info (Default)" },
+  { value: "WARNING", label: "Warning" },
+  { value: "ERROR", label: "Error (Minimal)" },
+] as const;
 
 export function JobForm() {
   const queryClient = useQueryClient();
@@ -49,6 +57,7 @@ export function JobForm() {
     defaultValues: {
       folder_path: "",
       language: "eng",
+      log_level: "INFO",
     },
   });
 
@@ -80,7 +89,7 @@ export function JobForm() {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Target Folder</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a folder..." />
@@ -121,6 +130,34 @@ export function JobForm() {
                 <FormControl>
                   <Input placeholder="eng" {...field} />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="log_level"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Log Level</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select log level..." />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {LOG_LEVELS.map((level) => (
+                      <SelectItem key={level.value} value={level.value}>
+                        {level.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  Controls verbosity of logs shown during processing.
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}

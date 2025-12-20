@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--mock-stdout-lines", type=int, default=3, help="Lines to print to stdout")
     parser.add_argument("--mock-stderr-lines", type=int, default=0, help="Lines to print to stderr")
 
-    args, unknown = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
 
     # 3. Simulate initialization
     print(f"[MOCK] Starting subtitle download for: {args.folder_path}")

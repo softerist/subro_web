@@ -73,7 +73,8 @@ WORKDIR ${APP_HOME}
 # Install curl (needed for docker-compose healthcheck)
 # And netcat-openbsd (needed for the entrypoint script's DB check)
 # And any dev-specific system dependencies (like git if needed by poetry plugins)
-RUN apt-get update && apt-get install -y curl netcat-openbsd --no-install-recommends && \
+# Also install cargo for alass-cli
+RUN apt-get update && apt-get install -y curl netcat-openbsd build-essential ffmpeg unrar-free cargo --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy Poetry files, ensuring correct ownership
@@ -82,6 +83,13 @@ COPY --chown=appuser:appuser pyproject.toml poetry.lock ./
 # Install ALL dependencies including dev group using Poetry
 # The venv will be created at /opt/pysetup/.venv
 RUN poetry install --verbose --sync --no-cache
+
+# Install ffsubsync for subtitle synchronization
+RUN pip install ffsubsync
+
+# Install alass-cli for subtitle synchronization (via cargo)
+RUN cargo install alass-cli && \
+    ln -sf /root/.cargo/bin/alass-cli /usr/local/bin/alass-cli
 
 # Copy application code (less critical now due to volume mount, but good practice)
 COPY --chown=appuser:appuser . .

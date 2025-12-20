@@ -17,6 +17,11 @@ class JobBase(BaseModel):
         default=None,
         description="Optional language code (e.g., 'en', 'es-ES')",
     )
+    log_level: str = Field(
+        default="INFO",
+        description="Logging level for the job (DEBUG, INFO, WARNING, ERROR)",
+        pattern="^(DEBUG|INFO|WARNING|ERROR)$",
+    )
 
 
 # Schema for creating a new job (input from API consumer)

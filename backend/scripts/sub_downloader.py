@@ -1,96 +1,196 @@
-# backend/app/scripts/sub_downloader.py
+#!/usr/bin/env python3
+"""
+Subtitle Downloader CLI Worker Script
+
+This script is called by the Celery worker to process subtitle downloads.
+All logging goes to stdout for real-time streaming to the web UI.
+"""
+
 import argparse
-import random
+import logging
+import os
 import sys
-import time
-from datetime import datetime
+from pathlib import Path
+
+# Force unbuffered output for real-time log streaming
+# This MUST be done before any other imports that might buffer output
+os.environ["PYTHONUNBUFFERED"] = "1"
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(line_buffering=True)
+
+
+class FlushingStreamHandler(logging.StreamHandler):
+    """A StreamHandler that flushes after every emit for real-time log streaming."""
+
+    def emit(self, record):
+        super().emit(record)
+        self.flush()
+
+
+class ErrorTrackingHandler(logging.Handler):
+    """Custom handler to track if any ERROR level logs were emitted."""
+
+    def __init__(self):
+        super().__init__()
+        self.has_errors = False
+
+    def emit(self, record):
+        if record.levelno >= logging.ERROR:
+            self.has_errors = True
+
+
+def setup_logging(log_level_str: str = "INFO"):
+    """
+    Configure logging to ensure ALL loggers output to stdout with flushing.
+    This must completely take over logging to ensure real-time streaming.
+    """
+    log_level = getattr(logging, log_level_str.upper(), logging.INFO)
+
+    # Create the flushing handler
+    stdout_handler = FlushingStreamHandler(sys.stdout)
+    stdout_handler.setLevel(log_level)
+    # Simple format: just level and message (log viewer adds timestamp)
+    stdout_handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+
+    # Get the root logger and clear any existing handlers
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+
+    # Add our stdout handler to root logger
+    root_logger.addHandler(stdout_handler)
+    root_logger.setLevel(log_level)
+
+    # Also add error tracker
+    root_logger.addHandler(error_tracker)
+
+    # Force all existing loggers to propagate to root and not use their own handlers
+    for name in logging.Logger.manager.loggerDict:
+        existing_logger = logging.getLogger(name)
+        existing_logger.handlers.clear()
+        existing_logger.propagate = True
+
+    return root_logger
+
+
+# Create error tracker (before imports that might log)
+error_tracker = ErrorTrackingHandler()
+
+# Now do the app imports (after setting up basic unbuffered output)
+# Add backend directory to sys.path to allow imports from app.*
+backend_path = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(backend_path))
+
+# These imports may trigger logging, so we set up logging right after
+from app.modules.subtitle.core.processor import (  # noqa: E402
+    determine_content_type_for_path,
+    process_movie_folder,
+    process_tv_show_folder,
+)
+
+logger = logging.getLogger("sub_downloader")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Placeholder Subtitle Downloader Script")
-    # Consistent with Celery task's _run_script_and_get_output call
-    parser.add_argument("--folder-path", required=True, help="Path to the media folder")
+    """Main function to orchestrate the subtitle tool."""
+    # Immediate print to verify output capture
+    print("=== SUBTITLE DOWNLOADER SCRIPT STARTED ===", flush=True)
+
+    parser = argparse.ArgumentParser(
+        description="Subtitle Downloader CLI Worker", formatter_class=argparse.RawTextHelpFormatter
+    )
+    parser.add_argument("--folder-path", required=True, help="Path to the folder containing media")
+    parser.add_argument("--language", help="Target language code (e.g., 'ro')", default="ro")
     parser.add_argument(
-        "--language", help="Language code for subtitles (e.g., 'en', 'es')"
-    )  # Consistent
-    parser.add_argument("--simulate-error", action="store_true", help="Simulate a script error")
-    parser.add_argument(
-        "--simulate-long-run", action="store_true", help="Simulate a longer running task"
+        "--log-level",
+        type=str.upper,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Set logging level (default: INFO)",
     )
     parser.add_argument(
-        "--simulate-no-output",
-        action="store_true",
-        help="Simulate a script that produces no stdout/stderr",
+        "--skip-translation", action="store_true", help="Skip the automatic translation step"
+    )
+    parser.add_argument(
+        "--skip-sync", action="store_true", help="Skip the subtitle synchronization step"
     )
 
     args = parser.parse_args()
 
-    if args.simulate_no_output:
-        # This block is for testing how the system handles scripts with no output
-        if args.simulate_error:
-            sys.exit(77)  # Arbitrary non-zero exit code for no-output error
+    # Setup logging with the specified level - this takes over ALL logging
+    setup_logging(args.log_level)
+
+    folder_path = args.folder_path
+
+    logger.info("=== Subtitle Downloader Started ===")
+    logger.info(f"Folder path: {folder_path}")
+    logger.info(f"Language: {args.language}")
+    logger.info(f"Log level: {args.log_level}")
+    logger.info(f"Skip translation: {args.skip_translation}")
+    logger.info(f"Skip sync: {args.skip_sync}")
+
+    if not Path(folder_path).exists():
+        logger.error(f"Folder path does not exist: {folder_path}")
+        print("=== SUBTITLE DOWNLOADER SCRIPT ENDED (error) ===", flush=True)
+        sys.exit(1)
+
+    # Build processing options
+    processing_options = {
+        "skip_translation": args.skip_translation,
+        "skip_sync": args.skip_sync,
+    }
+
+    # Determine content type
+    logger.info(f"Analyzing content type for: {folder_path}")
+    content_type = determine_content_type_for_path(folder_path)
+    logger.info(f"Detected content type: {content_type}")
+
+    # If path is a file, default to movie processing
+    if Path(folder_path).is_file():
+        content_type = "movie"
+        logger.info("Input is a file, treating as movie.")
+
+    success_count = 0
+    try:
+        if content_type == "movie":
+            logger.info(f"Processing as MOVIE: {folder_path}")
+            success_count = process_movie_folder(folder_path, options=processing_options)
+        elif content_type == "tvshow":
+            logger.info(f"Processing as TV SHOW: {folder_path}")
+            success_count = process_tv_show_folder(folder_path, options=processing_options)
         else:
-            sys.exit(0)  # Exit successfully with no output
+            logger.warning(
+                f"Could not determine content type for: {folder_path}. Defaulting to movie processing."
+            )
+            success_count = process_movie_folder(folder_path, options=processing_options)
+    except Exception as e:
+        logger.error(f"Error during processing: {e}", exc_info=True)
+        print("=== SUBTITLE DOWNLOADER SCRIPT ENDED (error) ===", flush=True)
+        sys.exit(1)
 
-    print(
-        f"[{datetime.now().isoformat()}] SCRIPT_LOG: Placeholder script starting execution.",
-        flush=True,
-    )
-    print(f"SCRIPT_LOG: Target Folder Path: {args.folder_path}", flush=True)  # Use args.folder_path
-    if args.language:  # Use args.language
-        print(f"SCRIPT_LOG: Requested Language: {args.language}", flush=True)
-    else:
-        print("SCRIPT_LOG: No specific language requested (will attempt all/default).", flush=True)
+    logger.info("=== Processing Complete ===")
+    logger.info(f"Subtitles processed successfully: {success_count}")
 
-    if args.simulate_long_run:
-        print("SCRIPT_LOG: Simulating a longer task (10 seconds)...", flush=True)
-        for i in range(10):
-            print(f"SCRIPT_LOG: Long run progress - {i+1}/10", flush=True)
-            time.sleep(1)
-        print("SCRIPT_LOG: Long task simulation complete.", flush=True)
-    else:
-        print("SCRIPT_LOG: Simulating standard work (2 seconds)...", flush=True)
-        time.sleep(1)
-        print("SCRIPT_LOG: Standard work half-way point.", flush=True)
-        time.sleep(1)
-        print("SCRIPT_LOG: Standard work simulation complete.", flush=True)
+    # If we successfully processed at least one subtitle, consider it a success
+    # even if there were some non-fatal errors logged during processing
+    if success_count > 0:
+        if error_tracker.has_errors:
+            logger.info(
+                "Some non-fatal errors occurred during processing, but subtitles were processed successfully."
+            )
+        print("=== SUBTITLE DOWNLOADER SCRIPT ENDED (success) ===", flush=True)
+        sys.exit(0)
 
-    if args.simulate_error:
-        print("SCRIPT_ERROR: Simulating an error condition...", file=sys.stderr, flush=True)
-        print(
-            f"SCRIPT_ERROR: Failed to download subtitles for '{args.folder_path}' "  # Use args.folder_path
-            f"(Language: {args.language or 'any'}).",  # Use args.language
-            file=sys.stderr,
-            flush=True,
-        )
-        print("SCRIPT_ERROR: This is a simulated error log line 1.", file=sys.stderr, flush=True)
-        print(
-            "SCRIPT_ERROR: This is a detailed error message that might span multiple lines.",
-            file=sys.stderr,
-            flush=True,
-        )
-        print("SCRIPT_ERROR: Another simulated error log line 2.", file=sys.stderr, flush=True)
-        print(
-            f"[{datetime.now().isoformat()}] SCRIPT_LOG: Placeholder script finished with SIMULATED ERROR.",
-            flush=True,
-        )
-        sys.exit(1)  # Standard error exit code
-    else:
-        # Simulate some successful output
-        print("SCRIPT_LOG: Beginning simulated file processing loop.", flush=True)
-        for i in range(60):  # MODIFIED - Run for 60 seconds
-            print(
-                f"SCRIPT_LOG: Processing file {i+1}/60 in '{args.folder_path}'...", flush=True
-            )  # Use args.folder_path
-            time.sleep(random.uniform(0.2, 0.5))
-            print(f"SCRIPT_LOG: Subtitle found for file {i+1} (simulated).", flush=True)
+    # Check if any errors were logged during processing with no success
+    if error_tracker.has_errors:
+        logger.warning("Errors occurred during processing and no subtitles were processed.")
+        print("=== SUBTITLE DOWNLOADER SCRIPT ENDED (with errors) ===", flush=True)
+        sys.exit(1)
 
-        print("SCRIPT_LOG: All files processed. Subtitles 'downloaded' successfully.", flush=True)
-        print(
-            f"[{datetime.now().isoformat()}] SCRIPT_LOG: Placeholder script finished successfully.",
-            flush=True,
-        )
-        sys.exit(0)  # Standard success exit code
+    # No errors but also no subtitles found - still success (nothing to do)
+    print("=== SUBTITLE DOWNLOADER SCRIPT ENDED (success) ===", flush=True)
+    sys.exit(0)
 
 
 if __name__ == "__main__":

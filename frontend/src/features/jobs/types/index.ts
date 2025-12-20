@@ -22,6 +22,7 @@ export interface Job {
 export interface JobCreate {
   folder_path: string;
   language?: string;
+  log_level?: "DEBUG" | "INFO" | "WARNING" | "ERROR";
 }
 
 export interface LogMessage {

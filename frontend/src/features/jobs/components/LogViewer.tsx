@@ -67,7 +67,7 @@ export function LogViewer({ jobId, className }: LogViewerProps) {
       </div>
 
       {/* Log Content */}
-      <ScrollArea className="flex-1 p-4 h-[400px]">
+      <ScrollArea className="flex-1 p-4">
         <div className="space-y-1">
           {logs.length === 0 && (
             <div className="text-gray-500 italic">Waiting for logs...</div>

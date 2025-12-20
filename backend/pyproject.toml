@@ -41,6 +41,24 @@ passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 nest-asyncio = "^1.6.0"
 # python-multipart = "^0.0.20"
 # python-multipart = "^0.0.9" # More common stable version
+# --- Subtitle Tool Dependencies ---
+qbittorrent-api = "^2024.10.68"
+imdbpy = "^2022.7.9"
+deepl = "^1.19.1"
+google-cloud-translate = "^3.17.0"
+beautifulsoup4 = "^4.12.3"
+lxml = "^5.3.0"
+rapidfuzz = "^3.6.2"
+chardet = "^5.2.0"
+rarfile = "^4.2"
+nltk = "^3.9.1"
+langdetect = "^1.0.9"
+# ffsubsync, alass-cli, sup2srt are typically system tools or cli tools, check if they have pypi packages or are external binaries.
+# requirements.txt listed them as pip installable, assuming they have python bindings or are python packages.
+ffsubsync = "^0.4.26"
+# alass-cli, sup2srt might not be standard pypi packages, checking...
+# If they are not in pypi, they should be system installed or handled differently.
+# Assuming they are pypi packages as per requirements.txt provided by user.
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.0"
 pytest-cov = "^5.0.0" # Code coverage

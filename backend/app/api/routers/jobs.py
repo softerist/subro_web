@@ -220,6 +220,7 @@ async def _enqueue_celery_task_and_handle_errors(
                 str(job_to_enqueue.id),  # Pass Job ID to the task
                 job_to_enqueue.folder_path,
                 job_to_enqueue.language,
+                job_to_enqueue.log_level,  # Pass log level to the task
             ],
             task_id=job_to_enqueue.celery_task_id,  # Use the pre-set celery_task_id
         )

@@ -270,7 +270,7 @@ async def _handle_websocket_flow_exception(
         await websocket.close(code=exc.code, reason=exc.reason)
 
 
-async def _run_streaming_session(
+async def _run_streaming_session(  # noqa: C901
     websocket: WebSocket, job_id: UUID, current_user: User, db: AsyncSession
 ):
     """Manages the core log streaming session including tasks and Redis listener."""
@@ -290,6 +290,26 @@ async def _run_streaming_session(
                     "payload": {"message": "Log streaming started.", "job_id": str(job_id)},
                 }
             )
+
+            # Fetch and send history from Redis list for late subscribers
+            try:
+                history_redis = AsyncRedis.from_url(
+                    str(settings.REDIS_PUBSUB_URL), encoding="utf-8", decode_responses=False
+                )
+                try:
+                    history_key = f"job:{job_id}:history"
+                    history_items = await history_redis.lrange(history_key, 0, -1)
+                    if history_items:
+                        logger.debug(
+                            f"Sending {len(history_items)} historical log items for job {job_id}"
+                        )
+                        for item in history_items:
+                            # Direct send_text as items are already JSON strings
+                            await websocket.send_text(item.decode("utf-8"))
+                finally:
+                    await history_redis.aclose()
+            except Exception as e_hist:
+                logger.error(f"Failed to fetch log history for job {job_id}: {e_hist}")
 
             monitor_task = asyncio.create_task(
                 _websocket_monitor_task(websocket, job_id), name=f"monitor-{job_id}"
