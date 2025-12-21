@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # Your application imports (app.core, app.db, app.schemas)
 from app.core.config import settings
 from app.core.users import UserManager
+from app.db import session as db_session
 from app.db.models.user import User as UserModel
-from app.db.session import AsyncSessionLocal
+from app.db.session import _initialize_fastapi_db_resources_sync
 from app.schemas.user import UserCreate
 
 # --- BEGIN EARLY PATH MODIFICATION ---
@@ -105,8 +106,14 @@ async def main() -> None:
     """Main asynchronous function to set up dependencies and run database initialization."""
     logger.info("Initializing service for initial_data script...")
 
+    # Initialize DB resources
+    _initialize_fastapi_db_resources_sync()
+
     # Use a context manager for the session
-    async with AsyncSessionLocal() as session:
+    if db_session.FastAPISessionLocal is None:
+        raise RuntimeError("FastAPISessionLocal is None after initialization.")
+
+    async with db_session.FastAPISessionLocal() as session:
         try:
             await init_db(session)  # Pass the session to init_db
             await session.commit()  # Commit transactions made within init_db

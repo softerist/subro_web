@@ -60,5 +60,6 @@ volumes:
 
 networks:
   internal_net:
-    external: true
-    name: infra_internal_net
+    # Defined in compose.gateway.yml (when running as one project 'infra')
+    # If running independently, would need external: true.
+    # But current deploy script combines them.

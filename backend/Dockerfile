@@ -3,7 +3,7 @@
 # --- Base Stage ---
 
 # Define the Poetry version as a build argument
-ARG POETRY_VERSION=2.1.2 # Using a slightly older stable version for example
+ARG POETRY_VERSION=2.1.2
 
 # Use the official Python image.
 FROM python:3.12-slim AS base
@@ -19,11 +19,10 @@ ENV APP_HOME=/app \
     POETRY_VERSION=${POETRY_VERSION} \
     POETRY_HOME="/opt/poetry" \
     POETRY_VIRTUALENVS_CREATE=true \
-    POETRY_VIRTUALENVS_IN_PROJECT=false \
-    POETRY_VIRTUALENVS_PATH="/opt/pysetup/.venv" \
+    POETRY_VIRTUALENVS_IN_PROJECT=true \
     POETRY_NO_INTERACTION=1 \
     # Path settings - Add venv bin and poetry bin to PATH
-    PATH="/opt/pysetup/.venv/bin:$POETRY_HOME/bin:/usr/local/bin:$PATH"
+    PATH="/app/.venv/bin:$POETRY_HOME/bin:/usr/local/bin:$PATH"
 
 # Set working directory
 WORKDIR ${APP_HOME} # Use the ENV variable
@@ -51,17 +50,14 @@ FROM base AS builder
 WORKDIR ${APP_HOME}
 
 # Install build-time system dependencies if needed (e.g., for psycopg)
-# Example for psycopg - uncomment if you use psycopg2-binary instead of psycopg[binary]
-# RUN apt-get update && apt-get install -y --no-install-recommends build-essential libpq-dev gcc && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential libpq-dev gcc && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency definition files FIRST, ensuring correct ownership
-# This leverages Docker cache more effectively
 COPY --chown=appuser:appuser pyproject.toml poetry.lock ./
 
 # Install ONLY runtime dependencies using Poetry
-# Use --no-cache to avoid potential poetry caching issues inside build
-# The venv will be created at /opt/pysetup/.venv due to ENV vars in base
-RUN poetry install --no-dev --no-root --sync --no-cache
+# We use --only main. If issues arise, we might switch to full install or use dev stage.
+RUN poetry install --only main --no-root --sync --no-cache
 
 # --- Development Stage ---
 # Optimized for local development with hot-reloading
@@ -81,11 +77,19 @@ RUN apt-get update && apt-get install -y curl netcat-openbsd build-essential ffm
 COPY --chown=appuser:appuser pyproject.toml poetry.lock ./
 
 # Install ALL dependencies including dev group using Poetry
-# The venv will be created at /opt/pysetup/.venv
+# The venv will be created at /app/.venv
 RUN poetry install --verbose --sync --no-cache
 
 # Install ffsubsync for subtitle synchronization
 RUN pip install ffsubsync
+
+# Create NLTK data directory with proper ownership and download punkt tokenizer
+RUN mkdir -p /app/nltk_data && \
+    chown -R appuser:appuser /app/nltk_data && \
+    python -m nltk.downloader -d /app/nltk_data punkt punkt_tab || true
+
+# Set NLTK data path for runtime
+ENV NLTK_DATA=/app/nltk_data
 
 # Install alass-cli for subtitle synchronization (via cargo)
 RUN cargo install alass-cli && \
@@ -130,7 +134,6 @@ EXPOSE 8000
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
 
 # Define the default command for development
-# This is what entrypoint.sh executes via 'exec "$@"' after its tasks
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 
@@ -139,24 +142,47 @@ FROM base AS production-api
 
 WORKDIR ${APP_HOME}
 
-# Copy installed runtime dependencies (venv) from builder stage
-# Make sure the destination exists (though /opt/pysetup should from base)
-RUN mkdir -p /opt/pysetup && chown appuser:appuser /opt/pysetup
-COPY --chown=appuser:appuser --from=builder /opt/pysetup/.venv /opt/pysetup/.venv
+# Install runtime dependencies
+# curl: healthcheck, netcat-openbsd: entrypoint wait
+# ffmpeg: required by ffsubsync for subtitle sync
+# unrar-free: extract subtitle archives
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    netcat-openbsd \
+    ffmpeg \
+    unrar-free \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed runtime dependencies (venv) from DEVELOPMENT stage (fallback strategy)
+# Using /app/.venv as configured by POETRY_VIRTUALENVS_IN_PROJECT=true
+COPY --chown=appuser:appuser --from=development /app/.venv /app/.venv
+
+# Copy configuration and migration files
+COPY --chown=appuser:appuser pyproject.toml alembic.ini ./
+COPY --chown=appuser:appuser alembic ./alembic
 
 # Copy only the application code needed for runtime
 COPY --chown=appuser:appuser app ./app
 
-# Ensure scripts directory exists and copy necessary scripts
+# Ensure scripts directory exists and copy all scripts from development stage
 RUN mkdir -p /app/scripts
-COPY --chown=appuser:appuser --from=development /app/scripts/entrypoint.sh /app/scripts/entrypoint.sh
-RUN chmod +x /app/scripts/entrypoint.sh
+COPY --chown=appuser:appuser --from=development /app/scripts /app/scripts
+RUN chmod +x /app/scripts/*.sh /app/scripts/*.py 2>/dev/null || true
+
+# Copy alass-cli binary from development (built via cargo)
+COPY --from=development /root/.cargo/bin/alass-cli /usr/local/bin/alass-cli
+RUN chmod +x /usr/local/bin/alass-cli
+
+# Copy NLTK data from development (downloaded at build time)
+COPY --chown=appuser:appuser --from=development /app/nltk_data /app/nltk_data
+ENV NLTK_DATA=/app/nltk_data
 
 USER appuser
 EXPOSE 8000
 
 # Use the venv Python via the updated PATH
-CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-w", "4", "-b", "0.0.0.0:8000", "app.main:app"]
+# Using uvicorn from PATH
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 
 # --- Production Stage (Worker) ---
@@ -164,4 +190,4 @@ FROM production-api AS production-worker
 # Inherits everything from production-api (user, venv, code, WORKDIR, USER, PATH)
 
 # Use the venv Python via the updated PATH
-CMD ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=INFO"] # Add pool/concurrency as needed e.g. "-P gevent -c 4"
+CMD ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=INFO"]

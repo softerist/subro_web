@@ -14,6 +14,15 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 # Build stage
 FROM base as build
 COPY . .
+
+# Accept build args for Vite environment variables
+ARG VITE_API_BASE_URL
+ARG VITE_WS_BASE_URL
+
+# Set as environment variables for the build process
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_WS_BASE_URL=${VITE_WS_BASE_URL}
+
 RUN npm run build
 
 # Production stage

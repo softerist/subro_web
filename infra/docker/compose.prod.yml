@@ -9,6 +9,7 @@ services:
       - "8000"
     volumes:
       - /mnt/sata0/Media:/mnt/sata0/Media
+      - /mnt/usb3/Media:/mnt/usb3/Media
       - /tmp:/tmp
     env_file:
       - ../../.env.prod
@@ -34,6 +35,7 @@ services:
     restart: always
     volumes:
       - /mnt/sata0/Media:/mnt/sata0/Media
+      - /mnt/usb3/Media:/mnt/usb3/Media
       - /tmp:/tmp
     env_file:
       - ../../.env.prod
@@ -52,6 +54,9 @@ services:
       context: ../../frontend
       dockerfile: Dockerfile
       target: production
+      args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+        - VITE_WS_BASE_URL=${VITE_WS_BASE_URL}
     restart: always
     expose:
       - "8080" # Nginx default port

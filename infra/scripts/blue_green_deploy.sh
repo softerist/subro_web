@@ -16,14 +16,13 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# 0. Create networks if they don't exist
-echo "--- Ensuring Networks Exist ---"
-docker network create infra_internal_net 2>/dev/null || echo "Network infra_internal_net already exists"
-docker network create infra_caddy_net 2>/dev/null || echo "Network infra_caddy_net already exists"
+# 0. Clean up potential conflicting manual networks (optional, for safety)
+# docker network rm infra_internal_net infra_caddy_net 2>/dev/null || true
+# We rely on compose to create them correctly.
 
 # 1. Ensure Infrastructure (Gateway + Data) is running
-echo "--- Ensuring Infrastructure is Up ---"
-docker compose -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d
+echo "--- Ensuring Infrastucture is Up ---"
+docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --build
 
 # 1. Determine Active Color
 # We check if 'blue-api-1' is running. If so, next is green.
@@ -42,7 +41,7 @@ echo "Deploying New Color: $NEW_COLOR"
 # 2. Deploy New Color
 echo "--- Starting $NEW_COLOR Stack ---"
 # We define project name as the color
-docker compose -p "$NEW_COLOR" -f "$COMPOSE_APP" up --build -d
+docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" up --build -d
 
 # 3. Wait for Health
 echo "--- Waiting for Health Checks ($NEW_COLOR) ---"
@@ -70,7 +69,7 @@ if [ "$HEALTHY" = false ]; then
     echo "Logs:"
     docker logs --tail 50 "$API_CONTAINER"
     # Cleanup new deployment
-    docker compose -p "$NEW_COLOR" -f "$COMPOSE_APP" down
+    docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" down
     exit 1
 fi
 
@@ -79,9 +78,9 @@ echo "--- New Color ($NEW_COLOR) is Healthy ---"
 # 3.5 Run Database Migrations
 echo "--- Running Database Migrations ---"
 # We run migration using the new API container
-if ! docker compose -p "$NEW_COLOR" -f "$COMPOSE_APP" exec -T api poetry run alembic upgrade head; then
+if ! docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" exec -T api poetry run alembic upgrade head; then
     echo "Error: Database migration failed. Aborting."
-    docker compose -p "$NEW_COLOR" -f "$COMPOSE_APP" down
+    docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" down
     exit 1
 fi
 echo "--- Migrations Completed ---"
@@ -103,14 +102,6 @@ TEMPLATE="$DOCK_DIR/Caddyfile.template"
 if [ ! -f "$TEMPLATE" ]; then
     echo "Creating Caddyfile.template from Caddyfile.prod..."
     cp "$CADDYFILE_PROD" "$TEMPLATE"
-    # Replace hardcoded 'api:8000' and 'frontend:8080' with placeholders if necessary,
-    # OR just use the current Caddyfile.prod (which has api:8000) as base is risky if it was already modified?
-    # Actually, Caddyfile.prod has 'api:8000'.
-    # If I deploy 'blue', I want 'blue-api-1:8000'.
-    # So the template should ideally have placeholders.
-    # Let's assume the user will commit Caddyfile.prod as the "Source of Truth" with generic names?
-    # No, generic names don't work for specific container targeting.
-    # Logic: I will overwrite Caddyfile.prod with a version that points to NEW_COLOR.
 fi
 
 # Prepare new Caddyfile content
@@ -118,7 +109,7 @@ fi
 sed "s/{{UPSTREAM_API}}/$NEW_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$NEW_COLOR-frontend-1/g" "$TEMPLATE" > "$CADDYFILE_PROD"
 
 # Reload Caddy (in infra project)
-docker compose -p infra -f "$COMPOSE_GATEWAY" exec caddy caddy reload
+docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec caddy caddy reload --config /etc/caddy/Caddyfile.prod
 
 echo "--- Traffic Switched ---"
 
@@ -127,7 +118,7 @@ if [ -n "$CURRENT_COLOR" ]; then
     # Double check we are not killing the new color
     if [ "$CURRENT_COLOR" != "$NEW_COLOR" ]; then
         echo "--- Stopping Old Color ($CURRENT_COLOR) ---"
-        docker compose -p "$CURRENT_COLOR" -f "$COMPOSE_APP" down
+        docker compose --env-file "$ENV_FILE" -p "$CURRENT_COLOR" -f "$COMPOSE_APP" down
     fi
 fi
 
