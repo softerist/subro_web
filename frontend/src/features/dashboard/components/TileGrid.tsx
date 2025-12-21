@@ -126,7 +126,7 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
             items={localTiles.map((t) => t.id)}
             strategy={rectSortingStrategy}
           >
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
               {localTiles.map((tile) => (
                 <SortableTile
                   key={tile.id}
@@ -150,7 +150,7 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
           </SortableContext>
         </DndContext>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
           {!localTiles?.length ? (
             <div className="col-span-full text-center text-muted-foreground py-8">
               No tiles available.

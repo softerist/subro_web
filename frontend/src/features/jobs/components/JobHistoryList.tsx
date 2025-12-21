@@ -83,14 +83,14 @@ export function JobHistoryList({
 
   return (
     <>
-      <div className="rounded-md border">
+      <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Target Folder</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Created At</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="min-w-[200px] h-8">Target Folder</TableHead>
+              <TableHead className="h-8">Status</TableHead>
+              <TableHead className="h-8">Created At</TableHead>
+              <TableHead className="text-right h-8">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -107,16 +107,19 @@ export function JobHistoryList({
                   className={selectedJobId === job.id ? "bg-muted/50" : ""}
                   onClick={() => onSelectJob(job)}
                 >
-                  <TableCell className="font-medium">
+                  <TableCell
+                    className="font-medium max-w-[200px] truncate py-2"
+                    title={job.folder_path}
+                  >
                     {job.folder_path}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="py-2">
                     <JobStatusBadge status={job.status} />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="py-2">
                     {format(new Date(job.submitted_at), "MMM d, HH:mm")}
                   </TableCell>
-                  <TableCell className="text-right space-x-1">
+                  <TableCell className="text-right space-x-1 py-2">
                     <Button
                       variant="ghost"
                       size="icon"

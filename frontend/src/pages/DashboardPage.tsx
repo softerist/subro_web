@@ -14,7 +14,6 @@ import { Label } from "@/components/ui/label";
 import { Job } from "@/features/jobs/types";
 import { TileGrid } from "@/features/dashboard/components/TileGrid";
 import { useAuthStore } from "@/store/authStore";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function DashboardPage() {
   const user = useAuthStore((state) => state.user);
@@ -28,14 +27,17 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Dashboard Tiles Section - Fixed height, shrinks to fit */}
-      <Card className="shrink-0">
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+    <div className="space-y-6 pb-8">
+      {/* Dashboard Tiles Section */}
+      <Card>
+        <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
           <CardTitle>Launchpad</CardTitle>
           {isAdmin && (
             <div className="flex items-center space-x-2">
-              <Label htmlFor="edit-mode" className="text-sm font-medium">
+              <Label
+                htmlFor="edit-mode"
+                className="text-sm font-medium text-slate-400"
+              >
                 Edit Layout
               </Label>
               <Switch
@@ -51,15 +53,15 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Main content area - fills remaining space */}
-      <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 mt-4">
+      {/* Main content area */}
+      <div className="flex flex-col xl:flex-row gap-6">
         {/* Left Column: Form & List */}
-        <div className="w-full lg:w-1/3 flex flex-col gap-4 min-h-0">
-          {/* New Job Form - Fixed height */}
-          <Card className="shrink-0">
+        <div className="w-full xl:w-1/3 space-y-6">
+          {/* New Job Form */}
+          <Card>
             <CardHeader>
               <CardTitle>New Job</CardTitle>
-              <CardDescription>
+              <CardDescription className="text-slate-400">
                 Start a new subtitle download task.
               </CardDescription>
             </CardHeader>
@@ -68,31 +70,33 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Job History - Takes remaining space with scroll */}
-          <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <CardHeader className="shrink-0">
+          {/* Job History */}
+          <Card className="flex flex-col overflow-hidden">
+            <CardHeader>
               <CardTitle>Job History</CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 p-0 min-h-0 overflow-hidden">
-              <ScrollArea className="h-full">
+            <CardContent className="p-0 overflow-hidden">
+              <div className="max-h-[500px] lg:max-h-none overflow-y-auto overflow-x-hidden">
                 <div className="p-4 pt-0">
                   <JobHistoryList
                     onSelectJob={handleSelectJob}
                     selectedJobId={selectedJobId || undefined}
                   />
                 </div>
-              </ScrollArea>
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Right Column: Log Viewer - Takes remaining space */}
-        <div className="w-full lg:w-2/3 flex flex-col min-h-0">
-          <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {/* Right Column: Log Viewer */}
+        <div className="w-full xl:w-2/3">
+          <Card className="h-full flex flex-col overflow-hidden">
             <CardHeader className="py-4 shrink-0">
               <CardTitle>Log Viewer</CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 p-0 min-h-0 overflow-hidden">
+            <CardContent
+              className={`flex-1 p-0 overflow-hidden ${selectedJobId ? "min-h-[400px]" : "min-h-[100px]"} lg:min-h-0`}
+            >
               <LogViewer
                 jobId={selectedJobId}
                 className="h-full border-0 rounded-none"
