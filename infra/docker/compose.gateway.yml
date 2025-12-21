@@ -2,6 +2,7 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: always
+    command: caddy run --config /etc/caddy/Caddyfile.prod --adapter caddyfile
     ports:
       - "8080:80"
       - "8443:443"

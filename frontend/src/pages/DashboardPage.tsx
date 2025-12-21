@@ -27,7 +27,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-6 pb-8 xl:flex xl:flex-col xl:h-full xl:pb-0 xl:overflow-hidden">
       {/* Dashboard Tiles Section */}
       <Card>
         <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
@@ -53,10 +53,10 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Main content area */}
-      <div className="flex flex-col xl:flex-row gap-6">
-        {/* Left Column: Form & List */}
-        <div className="w-full xl:w-1/3 space-y-6">
+      {/* Main content area - on xl, fills remaining viewport height */}
+      <div className="flex flex-col xl:flex-row gap-6 xl:flex-1 xl:min-h-0">
+        {/* Left Column: Form & List - scrolls independently on xl */}
+        <div className="w-full xl:w-1/3 space-y-6 xl:overflow-y-auto">
           {/* New Job Form */}
           <Card>
             <CardHeader>
@@ -71,32 +71,26 @@ export default function DashboardPage() {
           </Card>
 
           {/* Job History */}
-          <Card className="flex flex-col overflow-hidden">
+          <Card>
             <CardHeader>
               <CardTitle>Job History</CardTitle>
             </CardHeader>
-            <CardContent className="p-0 overflow-hidden">
-              <div className="max-h-[500px] lg:max-h-none overflow-y-auto overflow-x-hidden">
-                <div className="p-4 pt-0">
-                  <JobHistoryList
-                    onSelectJob={handleSelectJob}
-                    selectedJobId={selectedJobId || undefined}
-                  />
-                </div>
-              </div>
+            <CardContent>
+              <JobHistoryList
+                onSelectJob={handleSelectJob}
+                selectedJobId={selectedJobId || undefined}
+              />
             </CardContent>
           </Card>
         </div>
 
-        {/* Right Column: Log Viewer */}
-        <div className="w-full xl:w-2/3">
-          <Card className="h-full flex flex-col overflow-hidden">
+        {/* Right Column: Log Viewer - fills height and scrolls internally on xl */}
+        <div className="w-full xl:w-2/3 xl:flex xl:flex-col xl:min-h-0">
+          <Card className="xl:flex-1 xl:flex xl:flex-col xl:min-h-0 xl:overflow-hidden">
             <CardHeader className="py-4 shrink-0">
               <CardTitle>Log Viewer</CardTitle>
             </CardHeader>
-            <CardContent
-              className={`flex-1 p-0 overflow-hidden ${selectedJobId ? "min-h-[400px]" : "min-h-[100px]"} lg:min-h-0`}
-            >
+            <CardContent className="p-0 min-h-[300px] xl:flex-1 xl:min-h-0 xl:overflow-hidden">
               <LogViewer
                 jobId={selectedJobId}
                 className="h-full border-0 rounded-none"

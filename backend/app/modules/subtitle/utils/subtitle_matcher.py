@@ -213,7 +213,7 @@ def score_candidate(candidate, media_tokens, media_basename, media_s, media_e, r
             # Add any generic bonus passed in the candidate dict (e.g., for exact match)
             score += candidate.get("score_bonus", 0)
 
-        if source == "subsro":
+        elif source == "subsro":
             if extracted_path and Path(extracted_path).exists():
                 # Score based on the extracted filename
                 extracted_filename = Path(extracted_path).name

@@ -9,12 +9,10 @@
   "editor.minimap.enabled": false, // Less clutter
   "editor.tabSize": 2, // Consistent with frontend
   "editor.formatOnSave": true,
-
   // File associations
   "files.associations": {
     "*.env.*": "dotenv"
   },
-
   // Better search/exclude patterns
   "search.exclude": {
     "**/node_modules": true,
@@ -25,15 +23,12 @@
     "**/.pytest_cache": true,
     "**/coverage": true
   },
-
   // Git integration
   "git.autofetch": true,
   "git.confirmSync": false,
-
   // Terminal configuration
   "terminal.integrated.defaultProfile.linux": "bash",
   "terminal.integrated.cwd": "${workspaceFolder}",
-
   // Python Specific Settings (using Ruff)
   "python.analysis.typeCheckingMode": "basic", // Basic type checking
   "python.analysis.diagnosticMode": "workspace", // Analyze entire workspace
@@ -44,14 +39,12 @@
     ".backend", // Include backend source for analysis
     ".frontend" // Include frontend source for analysis
   ],
-
   "python.defaultInterpreterPath": "/home/user/subro_web/backend/.venv/bin/python", // Set interpreter for Dev Container
   "python.testing.pytestArgs": [
     "backend/tests" // Point pytest to the tests directory
   ],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,
-
   // Python formatting with Ruff
   "[python]": {
     "editor.formatOnSave": true,
@@ -61,7 +54,6 @@
       "source.organizeImports.ruff": "explicit"
     }
   },
-
   // Frontend Specific Settings (ESLint & Prettier)
   "eslint.workingDirectories": [
     {
@@ -75,10 +67,9 @@
     "typescript",
     "typescriptreact"
   ],
-
   // Frontend formatting with Prettier and ESLint
   "[typescript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.defaultFormatter": "vscode.typescript-language-features",
     "editor.codeActionsOnSave": {
       "source.fixAll.eslint": "explicit"
     }
@@ -122,7 +113,6 @@
   "[html]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-
   // Tailwind CSS Integration
   "tailwindCSS.includeLanguages": {
     "typescript": "javascript",
@@ -131,7 +121,6 @@
   "tailwindCSS.experimental.classRegex": [
     ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"] // For class-variance-authority
   ],
-
   // Docker Integration
   "docker.commands.composeUp": "docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml --project-name subapp_dev up -d --build",
   "docker.commands.composeDown": "docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml --project-name subapp_dev down -v --remove-orphans",

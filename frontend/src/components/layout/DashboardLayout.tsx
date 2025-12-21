@@ -35,9 +35,9 @@ export default function DashboardLayout() {
   ];
 
   return (
-    <div className="flex h-screen w-full flex-col md:flex-row">
+    <div className="flex h-screen w-full flex-col md:flex-row overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-full border-b md:w-64 md:border-b-0 md:border-r bg-muted/20">
+      <aside className="w-full shrink-0 border-b md:w-64 md:border-b-0 md:border-r bg-muted/20">
         <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
           <Link to="/" className="flex items-center gap-2 font-semibold">
             <UploadCloud className="h-6 w-6" />
@@ -66,7 +66,7 @@ export default function DashboardLayout() {
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
           <div className="w-full flex-1">

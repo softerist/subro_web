@@ -68,7 +68,7 @@ services:
     networks:
       - internal_net
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080"]
       interval: 30s
       timeout: 5s
       retries: 3

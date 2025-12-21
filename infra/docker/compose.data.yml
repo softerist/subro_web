@@ -11,7 +11,7 @@ services:
     networks:
       - internal_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,15 +44,22 @@ services:
       - ../../.env.prod
     networks:
       - internal_net
+    labels:
+      # Ofelia job labels - runs daily backup at 2 AM
+      ofelia.enabled: "true"
+      ofelia.job-exec.backup.schedule: "0 2 * * *"
+      ofelia.job-exec.backup.command: "/usr/local/bin/backup.sh"
 
   scheduler:
     image: mcuadros/ofelia:latest
     restart: always
-    command: job-run --schedule "@daily" --container "infra-backup-1" /usr/local/bin/backup.sh
+    command: daemon --docker
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - internal_net # Needs to be on network to see others? Actually communicates via socket.
+      - internal_net
+    depends_on:
+      - backup
 
 volumes:
   postgres_data:
