@@ -377,17 +377,17 @@ export default function SettingsPage() {
                                     }
                                   }
                                 }}
-                                className="flex-1 min-w-[200px] max-w-md bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-violet-500 font-mono text-sm"
+                                className="flex-1 min-w-0 max-w-md bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-violet-500 font-mono text-sm"
                               />
                             ) : (
-                              <div className="flex-1 min-w-[200px] max-w-md px-3 py-2 bg-slate-800 border border-slate-600 rounded-md font-mono text-sm text-slate-300">
+                              <div className="flex-1 min-w-0 max-w-md px-3 py-2 bg-slate-800 border border-slate-600 rounded-md font-mono text-sm text-slate-300 overflow-hidden text-ellipsis whitespace-nowrap">
                                 {isMasked
                                   ? key
                                   : `${"•".repeat(Math.max(0, key.length - 4))}${key.slice(-4)}`}
                               </div>
                             )}
 
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 flex-shrink-0">
                               {/* Edit Button */}
                               <Button
                                 type="button"
