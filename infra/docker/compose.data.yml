@@ -31,17 +31,28 @@ services:
 
   backup:
     build:
-      context: backup
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: infra/docker/backup/Dockerfile
     image: subro_backup:latest
+    container_name: infra-backup-1
     restart: always
+    # We want it to just sit there until triggered by scheduler or exec
+    command: ["sleep", "infinity"]
     volumes:
       - /backups:/backups
-      - ../../scripts/backup.sh:/usr/local/bin/backup.sh
     env_file:
       - ../../.env.prod
     networks:
       - internal_net
+
+  scheduler:
+    image: mcuadros/ofelia:latest
+    restart: always
+    command: job-run --schedule "@daily" --container "infra-backup-1" /usr/local/bin/backup.sh
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - internal_net # Needs to be on network to see others? Actually communicates via socket.
 
 volumes:
   postgres_data:

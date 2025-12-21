@@ -16,10 +16,9 @@ RUN apk add --no-cache \
     gzip
 
 # Create backup directory
-WORKDIR /backups
-
 # Add script
-COPY backup.sh /usr/local/bin/backup.sh
+# Context is repo root
+COPY infra/scripts/backup.sh /usr/local/bin/backup.sh
 RUN chmod +x /usr/local/bin/backup.sh
 
 CMD ["sleep", "infinity"]

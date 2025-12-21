@@ -16,7 +16,12 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# 0. Ensure Infrastructure (Gateway + Data) is running
+# 0. Create networks if they don't exist
+echo "--- Ensuring Networks Exist ---"
+docker network create infra_internal_net 2>/dev/null || echo "Network infra_internal_net already exists"
+docker network create infra_caddy_net 2>/dev/null || echo "Network infra_caddy_net already exists"
+
+# 1. Ensure Infrastructure (Gateway + Data) is running
 echo "--- Ensuring Infrastructure is Up ---"
 docker compose -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d
 
@@ -59,6 +64,7 @@ while [ $COUNT -lt $MAX_RETRIES ]; do
     COUNT=$((COUNT+1))
 done
 
+
 if [ "$HEALTHY" = false ]; then
     echo "Error: New deployment ($NEW_COLOR) failed health check. Aborting."
     echo "Logs:"
@@ -69,6 +75,16 @@ if [ "$HEALTHY" = false ]; then
 fi
 
 echo "--- New Color ($NEW_COLOR) is Healthy ---"
+
+# 3.5 Run Database Migrations
+echo "--- Running Database Migrations ---"
+# We run migration using the new API container
+if ! docker compose -p "$NEW_COLOR" -f "$COMPOSE_APP" exec -T api poetry run alembic upgrade head; then
+    echo "Error: Database migration failed. Aborting."
+    docker compose -p "$NEW_COLOR" -f "$COMPOSE_APP" down
+    exit 1
+fi
+echo "--- Migrations Completed ---"
 
 # 4. Switch Traffic (Update Caddy)
 echo "--- Switching Traffic to $NEW_COLOR ---"
@@ -98,11 +114,8 @@ if [ ! -f "$TEMPLATE" ]; then
 fi
 
 # Prepare new Caddyfile content
-# We replace 'api:8000' with '$NEW_COLOR-api-1:8000'
-# We replace 'frontend:8080' with '$NEW_COLOR-frontend-1:8080'
-# We use the TEMPLATE source.
-
-sed "s/api:8000/$NEW_COLOR-api-1:8000/g; s/frontend:8080/$NEW_COLOR-frontend-1:8080/g" "$TEMPLATE" > "$CADDYFILE_PROD"
+# We replace placeholders with actual container names
+sed "s/{{UPSTREAM_API}}/$NEW_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$NEW_COLOR-frontend-1/g" "$TEMPLATE" > "$CADDYFILE_PROD"
 
 # Reload Caddy (in infra project)
 docker compose -p infra -f "$COMPOSE_GATEWAY" exec caddy caddy reload
