@@ -26,7 +26,7 @@ This application adopts a modern, containerized web architecture centered around
 
 ## Core Component Interaction Diagram (Mermaid)
 
-````mermaid
+```mermaid
 graph TD
     subgraph "User Browser"
         B[React SPA]
@@ -64,7 +64,7 @@ graph TD
     W -- Publish Logs --> R
 
     FE_Nginx -- Serves JS/CSS/HTML --> B
-````
+```
 
 # Architecture Vision: Subtitle Downloader Web Application (FastAPI Stack)
 

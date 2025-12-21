@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decrypt_value, encrypt_value, mask_sensitive_value
 from app.db.models.app_settings import AppSettings
+from app.db.models.deepl_usage import DeepLUsage
 from app.schemas.app_settings import SettingsRead, SettingsUpdate
 
 logger = logging.getLogger(__name__)
@@ -203,7 +204,7 @@ class CRUDAppSettings:
                 db_settings, env_settings, "opensubtitles_password"
             ),
             deepl_api_keys=active_deepl_keys,
-            deepl_usage=self._get_deepl_usage_stats(active_deepl_keys),
+            deepl_usage=await self._get_deepl_usage_stats(db, active_deepl_keys),
             qbittorrent_host=self._get_effective_plain(
                 db_settings, env_settings, "qbittorrent_host"
             )
@@ -289,37 +290,27 @@ class CRUDAppSettings:
             return env_val if isinstance(env_val, list) else [str(env_val)]
         return []
 
-    def _get_deepl_usage_stats(self, configured_keys: list[str]) -> list[dict]:
-        """Read DeepL usage stats from log file and merge with configured keys."""
-        from pathlib import Path
+    async def _get_deepl_usage_stats(
+        self, db: AsyncSession, configured_keys: list[str]
+    ) -> list[dict]:
+        """Read DeepL usage stats from Database and merge with configured keys."""
+        # Fetch all usage records from DB
+        result = await db.execute(select(DeepLUsage))
+        usage_records = result.scalars().all()
 
-        log_paths = [
-            Path("logs/translation_log.json"),
-            Path("translation_log.json"),
-            Path(__file__).resolve().parent.parent.parent / "logs" / "translation_log.json",
-        ]
-        log_file = next((p for p in log_paths if p.exists()), None)
-        usage_map = {}
-        if log_file:
-            try:
-                with log_file.open(encoding="utf-8") as f:
-                    data = json.load(f)
-                    snapshot = data.get("deepl_keys_snapshot", {})
-                    for alias, info in snapshot.items():
-                        suffix = alias[-4:] if len(alias) >= 4 else alias
-                        usage_map[suffix] = {
-                            "key_alias": f"...{alias}"
-                            if not alias.startswith("...") and len(alias) < 10
-                            else alias,
-                            "character_count": info.get("count", 0),
-                            "character_limit": info.get("limit", 0),
-                            "valid": info.get("valid", True),
-                        }
-            except Exception as e:
-                logger.warning(f"Failed to read DeepL usage logs: {e}")
+        usage_map = {
+            record.key_identifier: {
+                "key_alias": f"...{record.key_identifier}",
+                "character_count": record.character_count,
+                "character_limit": record.character_limit,
+                "valid": record.valid,
+            }
+            for record in usage_records
+        }
 
         final_stats = []
         for key_str in configured_keys:
+            # We use the suffix as the identifier
             suffix = key_str[-4:] if len(key_str) >= 4 else key_str
             if suffix in usage_map:
                 final_stats.append(usage_map[suffix])
@@ -328,7 +319,7 @@ class CRUDAppSettings:
                     {
                         "key_alias": f"...{suffix}",
                         "character_count": 0,
-                        "character_limit": 0,
+                        "character_limit": 500000,
                         "valid": True,
                     }
                 )

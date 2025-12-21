@@ -164,7 +164,7 @@ export default function SettingsPage() {
                 Masked values indicate configured credentials.
               </CardDescription>
 
-              <div className="mt-4 border border-slate-700 rounded-md overflow-hidden bg-slate-900/40">
+              <div className="mt-4 max-w-md border border-slate-700 rounded-md overflow-hidden bg-slate-900/40">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-800 text-slate-400 font-medium">
                     <tr>
@@ -210,10 +210,17 @@ export default function SettingsPage() {
                   </h3>
                 </div>
                 <div className="pl-10 space-y-4">
-                  <div className="group relative rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
-                    <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
-                      TMDB API Key
-                    </Label>
+                  <div className="group relative max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Label className="text-xs uppercase tracking-wider text-slate-500 block">
+                        TMDB API Key
+                      </Label>
+                      {settings?.tmdb_api_key && (
+                        <span className="text-xs text-emerald-400">
+                          ● Configured
+                        </span>
+                      )}
+                    </div>
                     <Input
                       placeholder={settings?.tmdb_api_key || "Enter API key..."}
                       value={formData.tmdb_api_key || ""}
@@ -222,16 +229,18 @@ export default function SettingsPage() {
                       }
                       className="max-w-md bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-cyan-500"
                     />
-                    {settings?.tmdb_api_key && (
-                      <span className="absolute top-3 right-3 text-xs text-emerald-400">
-                        ● Configured
-                      </span>
-                    )}
                   </div>
-                  <div className="group relative rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
-                    <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
-                      OMDB API Key
-                    </Label>
+                  <div className="group relative max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Label className="text-xs uppercase tracking-wider text-slate-500 block">
+                        OMDB API Key
+                      </Label>
+                      {settings?.omdb_api_key && (
+                        <span className="text-xs text-emerald-400">
+                          ● Configured
+                        </span>
+                      )}
+                    </div>
                     <Input
                       placeholder={settings?.omdb_api_key || "Enter API key..."}
                       value={formData.omdb_api_key || ""}
@@ -240,11 +249,6 @@ export default function SettingsPage() {
                       }
                       className="max-w-md bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-cyan-500"
                     />
-                    {settings?.omdb_api_key && (
-                      <span className="absolute top-3 right-3 text-xs text-emerald-400">
-                        ● Configured
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>
@@ -265,7 +269,7 @@ export default function SettingsPage() {
                   )}
                 </div>
                 <div className="pl-10 space-y-4">
-                  <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
+                  <div className="max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
                     <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
                       API Key
                     </Label>
@@ -280,7 +284,7 @@ export default function SettingsPage() {
                       className="max-w-md bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
                     />
                   </div>
-                  <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
+                  <div className="max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
                     <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
                       Username
                     </Label>
@@ -295,7 +299,7 @@ export default function SettingsPage() {
                       className="max-w-md bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
                     />
                   </div>
-                  <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
+                  <div className="max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
                     <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
                       Password
                     </Label>

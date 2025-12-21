@@ -60,11 +60,17 @@ via an external loader (like Pydantic settings) or within the
 try:
     # Example: Using a hypothetical settings object
     from app.core.config import settings
+    from app.db.models.deepl_usage import DeepLUsage
+    from app.db.session import SyncSessionLocal
 
     CONFIG_LOADER_AVAILABLE = True
+    DATABASE_AVAILABLE = True
 except ImportError:
     settings = None
+    SyncSessionLocal = None
+    DeepLUsage = None
     CONFIG_LOADER_AVAILABLE = False
+    DATABASE_AVAILABLE = False
     # In a real application, handle missing config loader more robustly.
 
 try:
@@ -1750,6 +1756,7 @@ class TranslationManager:
             google_chars=google_billed,
             file_name=input_file,
             service_details=list(set(service_summary_parts)),  # Unique raw services used
+            billing_details=batch_billing_details,  # NEW: Pass detailed billing
         )
 
         total_duration = time.monotonic() - start_time
@@ -1984,13 +1991,86 @@ class TranslationManager:
             return "no_action"
 
     def _log_usage(  # noqa: C901
-        self, deepl_chars: int, google_chars: int, file_name: str, service_details: list[str]
+        self,
+        deepl_chars: int,
+        google_chars: int,
+        file_name: str,
+        service_details: list[str],
+        billing_details: list[dict] | None = None,
     ):
-        """Logs translation usage details to the JSON log file."""
-        global TRANSLATION_LOG_FILE
+        """Logs translation usage details to the JSON log file and Database."""
+        global TRANSLATION_LOG_FILE, DATABASE_AVAILABLE, SyncSessionLocal, DeepLUsage
         if not TRANSLATION_LOG_FILE:
             logger.error("Translation log file path not set. Skipping usage logging.")
             return
+
+        # 1. Update Database (New)
+        if DATABASE_AVAILABLE and SyncSessionLocal and DeepLUsage:
+            try:
+                with SyncSessionLocal() as db:
+                    # Update counts for each key used
+                    if billing_details:
+                        # Aggregate by service
+                        deepl_usage_updates = {}  # {key_suffix: {"count": int, "limit": int, "valid": bool}}
+
+                        for detail in billing_details:
+                            service = detail.get("service", "")
+                            if service.startswith("deepl_key_"):
+                                try:
+                                    idx = int(service.replace("deepl_key_", "")) - 1
+                                    if 0 <= idx < len(self.deepl_keys):
+                                        key_str = self.deepl_keys[idx]
+                                        suffix = key_str[-4:] if len(key_str) >= 4 else key_str
+
+                                        # Get latest info from cache or just use billed chars
+                                        info = self.deepl_usage_cache.get(idx, {})
+                                        count_incr = detail.get("chars", 0)
+
+                                        if suffix not in deepl_usage_updates:
+                                            deepl_usage_updates[suffix] = {
+                                                "count_incr": 0,
+                                                "limit": info.get("limit", 500000),
+                                                "valid": info.get("valid", True),
+                                            }
+                                        deepl_usage_updates[suffix]["count_incr"] += count_incr
+                                        # Update limit/validity if we have more recent info in cache
+                                        if info.get("limit"):
+                                            deepl_usage_updates[suffix]["limit"] = info["limit"]
+                                        if "valid" in info:
+                                            deepl_usage_updates[suffix]["valid"] = info["valid"]
+                                except (ValueError, IndexError):
+                                    continue
+
+                        for suffix, data in deepl_usage_updates.items():
+                            usage_record = (
+                                db.query(DeepLUsage)
+                                .filter(DeepLUsage.key_identifier == suffix)
+                                .first()
+                            )
+                            if not usage_record:
+                                usage_record = DeepLUsage(
+                                    key_identifier=suffix,
+                                    character_count=data["count_incr"],
+                                    character_limit=data["limit"],
+                                    valid=data["valid"],
+                                )
+                                db.add(usage_record)
+                                logger.debug(f"Created new DeepL usage record for suffix: {suffix}")
+                            else:
+                                usage_record.character_count += data["count_incr"]
+                                # Only update limit if it changed and we have a valid value
+                                if data["limit"] and data["limit"] != 500000:
+                                    usage_record.character_limit = data["limit"]
+                                usage_record.valid = data["valid"]
+                                logger.debug(
+                                    f"Updated DeepL usage for suffix {suffix}: +{data['count_incr']} chars"
+                                )
+
+                    db.commit()
+            except Exception as e:
+                logger.error(f"Failed to update DeepL usage in database: {e}", exc_info=True)
+
+        # 2. Update JSON Log (Maintain for backward compatibility/backup)
         try:
             log_data = {
                 "log_schema_version": "1.1",  # Add versioning
