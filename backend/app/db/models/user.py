@@ -26,7 +26,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
     jobs: Mapped[list["Job"]] = relationship(
-        "app.db.models.job.Job",
+        "Job",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",

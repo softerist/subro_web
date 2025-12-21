@@ -47,7 +47,7 @@ localhost {
 
 	# 1. Handle API requests (including WebSockets at /api/v1/ws/...)
 	route @api {
-		reverse_proxy blue-api-1:8000 {
+		reverse_proxy {{UPSTREAM_API}}:8000 {
 			header_up Host {http.request.host}
 			header_up X-Real-IP {http.request.remote}
 		}
@@ -55,7 +55,7 @@ localhost {
 
 	# 2. Handle WebSocket requests
 	route @websockets {
-		reverse_proxy blue-api-1:8000 {
+		reverse_proxy {{UPSTREAM_API}}:8000 {
 			header_up Host {http.request.host}
 			header_up X-Real-IP {http.request.remote}
 			header_up Connection {http.request.header.Connection}
@@ -68,7 +68,7 @@ localhost {
 		# Serve static files from /srv (needs to be mounted/copied in prod Dockerfile)
 		# OR reverse proxy to a node server if using SSR / separate frontend container
 		# Since we have a 'frontend' service in docker-compose.prod which is likely nginx or similar:
-		reverse_proxy blue-frontend-1:8080 {
+		reverse_proxy {{UPSTREAM_FRONTEND}}:8080 {
 			header_up Connection {http.request.header.Connection}
 			header_up Upgrade {http.request.header.Upgrade}
 		}

@@ -1,18 +1,18 @@
 # Base stage
-FROM node:20-alpine as base
+FROM node:20-alpine AS base
 WORKDIR /app
 COPY package*.json ./
 # Install dependencies including devDependencies
 RUN npm ci
 
 # Development stage
-FROM base as development
+FROM base AS development
 # Copy source code (though usually mounted via volume in dev)
 COPY . .
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
 # Build stage
-FROM base as build
+FROM base AS build
 COPY . .
 
 # Accept build args for Vite environment variables
@@ -26,7 +26,7 @@ ENV VITE_WS_BASE_URL=${VITE_WS_BASE_URL}
 RUN npm run build
 
 # Production stage
-FROM nginx:stable-alpine as production
+FROM nginx:stable-alpine AS production
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
