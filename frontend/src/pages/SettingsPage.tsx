@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,10 +14,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   getSettings,
   updateSettings,
-  testDeepLKey,
   SettingsUpdate,
   SettingsRead,
-  DeepLTestResult,
 } from "@/lib/settingsApi";
 
 type SettingsTab = "integrations" | "qbittorrent" | "paths";
@@ -34,10 +33,6 @@ export default function SettingsPage() {
 
   // DeepL Key Management State
   const [deeplKeys, setDeeplKeys] = useState<string[]>([]);
-  const [isTestingKey, setIsTestingKey] = useState<number | null>(null);
-  const [keyTestResults, setKeyTestResults] = useState<
-    Record<number, DeepLTestResult>
-  >({});
   const [editingKeyIndex, setEditingKeyIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -161,10 +156,11 @@ export default function SettingsPage() {
               <CardTitle className="text-white">External Services</CardTitle>
               <CardDescription className="text-slate-400">
                 Configure API keys for metadata providers and subtitle services.
-                Masked values indicate configured credentials.
+                Masked values indicate configured credentials from env.prod
+                file.
               </CardDescription>
 
-              <div className="mt-4 max-w-md border border-slate-700 rounded-md overflow-hidden bg-slate-900/40">
+              <div className="mt-4 ml-10 max-w-md border border-slate-700 rounded-md overflow-hidden bg-slate-900/40">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-800 text-slate-400 font-medium">
                     <tr>
@@ -350,16 +346,16 @@ export default function SettingsPage() {
                     {deeplKeys.map((key, index) => {
                       const isEditing = editingKeyIndex === index;
                       const isMasked = key.includes("***");
-                      const testResult = keyTestResults[index];
 
                       return (
                         <div key={index} className="space-y-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {isEditing ? (
                               <Input
                                 type="text"
                                 placeholder="Enter DeepL API key..."
                                 autoFocus
+                                value={key}
                                 onChange={(e) => {
                                   const newKeys = [...deeplKeys];
                                   newKeys[index] = e.target.value;
@@ -370,147 +366,85 @@ export default function SettingsPage() {
                                       k.trim(),
                                     ),
                                   }));
-                                  setKeyTestResults((prev) => {
-                                    const updated = { ...prev };
-                                    delete updated[index];
-                                    return updated;
-                                  });
                                 }}
-                                className="max-w-sm bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-violet-500 font-mono text-sm"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    setEditingKeyIndex(null);
+                                    // Auto-save if there are changes
+                                    if (Object.keys(formData).length > 0) {
+                                      handleSave();
+                                    }
+                                  }
+                                }}
+                                className="flex-1 min-w-[200px] max-w-md bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-violet-500 font-mono text-sm"
                               />
                             ) : (
-                              <div className="max-w-sm flex-1 px-3 py-2 bg-slate-800 border border-slate-600 rounded-md font-mono text-sm text-slate-300">
+                              <div className="flex-1 min-w-[200px] max-w-md px-3 py-2 bg-slate-800 border border-slate-600 rounded-md font-mono text-sm text-slate-300">
                                 {isMasked
                                   ? key
                                   : `${"•".repeat(Math.max(0, key.length - 4))}${key.slice(-4)}`}
                               </div>
                             )}
 
-                            {/* Edit/Done Button */}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                setEditingKeyIndex(isEditing ? null : index)
-                              }
-                              className="text-xs border-slate-600 hover:bg-slate-700"
-                            >
-                              {isEditing ? "Done" : "Edit"}
-                            </Button>
-
-                            {/* Test Button */}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={
-                                isTestingKey === index ||
-                                !key.trim() ||
-                                isMasked
-                              }
-                              onClick={async () => {
-                                if (!key.trim() || isMasked) return;
-                                setIsTestingKey(index);
-                                try {
-                                  const result = await testDeepLKey(key);
-                                  setKeyTestResults((prev) => ({
-                                    ...prev,
-                                    [index]: result,
-                                  }));
-                                } catch {
-                                  setKeyTestResults((prev) => ({
-                                    ...prev,
-                                    [index]: {
-                                      valid: false,
-                                      error: "Test failed",
-                                    },
-                                  }));
-                                } finally {
-                                  setIsTestingKey(null);
+                            <div className="flex items-center gap-1">
+                              {/* Edit Button */}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  setEditingKeyIndex(isEditing ? null : index)
                                 }
-                              }}
-                              className="text-xs border-slate-600 hover:bg-slate-700"
-                              title={
-                                isMasked
-                                  ? "Enter full key to test"
-                                  : "Test key validity"
-                              }
-                            >
-                              {isTestingKey === index ? "Testing..." : "Test"}
-                            </Button>
+                                title={isEditing ? "Done editing" : "Edit key"}
+                              >
+                                <Pencil className="h-4 w-4" />
+                                <span className="sr-only">
+                                  {isEditing ? "Done" : "Edit"}
+                                </span>
+                              </Button>
 
-                            {/* Remove Button */}
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                const newKeys = deeplKeys.filter(
-                                  (_, i) => i !== index,
-                                );
-                                setDeeplKeys(newKeys);
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  deepl_api_keys: newKeys.filter((k) =>
-                                    k.trim(),
-                                  ),
-                                }));
-                                setEditingKeyIndex(null);
-                              }}
-                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                            >
-                              Remove
-                            </Button>
-                          </div>
-
-                          {/* Inline Usage Stats after test */}
-                          {testResult && (
-                            <div className="ml-0 max-w-sm">
-                              {testResult.valid ? (
-                                <div className="bg-slate-900/50 rounded p-2 border border-slate-700">
-                                  <div className="flex justify-between items-center mb-1">
-                                    <span className="text-xs text-emerald-400">
-                                      ✓ Valid ({testResult.key_type})
-                                    </span>
-                                    <span className="text-xs text-slate-400">
-                                      {testResult.character_count?.toLocaleString()}{" "}
-                                      /{" "}
-                                      {testResult.character_limit?.toLocaleString()}{" "}
-                                      chars
-                                    </span>
-                                  </div>
-                                  <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                    <div
-                                      className={`h-full transition-all duration-500 ${(testResult.usage_percent || 0) >= 100 ? "bg-red-500" : "bg-blue-500"}`}
-                                      style={{
-                                        width: `${testResult.usage_percent || 0}%`,
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="text-xs text-red-400 bg-red-500/10 px-2 py-1 rounded">
-                                  ✗ {testResult.error}
-                                </div>
-                              )}
+                              {/* Remove Button */}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  const newKeys = deeplKeys.filter(
+                                    (_, i) => i !== index,
+                                  );
+                                  setDeeplKeys(newKeys);
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    deepl_api_keys: newKeys.filter((k) =>
+                                      k.trim(),
+                                    ),
+                                  }));
+                                  setEditingKeyIndex(null);
+                                }}
+                                title="Remove key"
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                                <span className="sr-only">Remove</span>
+                              </Button>
                             </div>
-                          )}
+                          </div>
                         </div>
                       );
                     })}
 
                     <Button
                       type="button"
-                      variant="outline"
-                      size="sm"
+                      variant="ghost"
+                      size="icon"
                       onClick={() => {
                         setDeeplKeys([...deeplKeys, ""]);
-                        setEditingKeyIndex(deeplKeys.length); // Auto-edit new key
+                        setEditingKeyIndex(deeplKeys.length);
                       }}
-                      className="text-xs border-dashed border-slate-600 hover:bg-slate-700 text-slate-400"
+                      title="Add new key"
                     >
-                      + Add Key
+                      <Plus className="h-4 w-4" />
+                      <span className="sr-only">Add Key</span>
                     </Button>
                   </div>
 
@@ -596,7 +530,9 @@ export default function SettingsPage() {
                                     )}
                                     <span className="text-[10px] text-slate-500">
                                       {usage.character_count.toLocaleString()} /{" "}
-                                      {usage.character_limit.toLocaleString()}
+                                      {usage.valid
+                                        ? usage.character_limit.toLocaleString()
+                                        : "0"}
                                     </span>
                                   </div>
                                 </div>

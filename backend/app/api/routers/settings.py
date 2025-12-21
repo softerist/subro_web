@@ -6,12 +6,15 @@ These endpoints require authentication and admin privileges.
 """
 
 import logging
+from datetime import UTC, datetime
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import current_active_superuser
 from app.crud.crud_app_settings import crud_app_settings
+from app.db.models.deepl_usage import DeepLUsage
 from app.db.models.user import User
 from app.db.session import get_async_session
 from app.schemas.app_settings import SettingsRead, SettingsUpdate
@@ -75,7 +78,77 @@ async def update_settings(
             detail=f"Failed to update settings: {e!s}",
         ) from e
 
+    # Post-update: Validate DeepL keys and update usage stats
+    try:
+        from sqlalchemy import select
+
+        # Get the plain text keys to validate
+        decrypted_keys = await crud_app_settings.get_decrypted_value(db, "deepl_api_keys")
+
+        if decrypted_keys and isinstance(decrypted_keys, list):
+            for key in decrypted_keys:
+                if not key or not isinstance(key, str) or not key.strip():
+                    continue
+
+                # Validate key with DeepL
+                usage_data = await _validate_deepl_key(key)
+
+                # Update Database Record using upsert pattern
+                identifier = key[-4:] if len(key) >= 4 else key
+
+                # Check if record exists
+                result = await db.execute(
+                    select(DeepLUsage).where(DeepLUsage.key_identifier == identifier)
+                )
+                record = result.scalar_one_or_none()
+
+                if not record:
+                    record = DeepLUsage(key_identifier=identifier)
+                    db.add(record)
+                    await db.flush()  # Flush to catch any constraint errors early
+
+                # Update fields
+                if usage_data["valid"]:
+                    record.character_count = usage_data["character_count"]
+                    record.character_limit = usage_data["character_limit"]
+                    record.valid = True
+                else:
+                    record.valid = False
+
+                record.last_updated = datetime.now(UTC)
+
+            await db.commit()
+
+    except Exception as e:
+        # Rollback to clean up the session state
+        await db.rollback()
+        logger.error(f"Failed to validate DeepL keys after update: {e}")
+
     return await crud_app_settings.to_read_schema(db)
+
+
+async def _validate_deepl_key(api_key: str) -> dict:
+    """Helper to validate a DeepL key and return usage stats."""
+    api_key = api_key.strip()
+    is_free_key = ":fx" in api_key
+    url = "https://api-free.deepl.com/v2/usage" if is_free_key else "https://api.deepl.com/v2/usage"
+    headers = {"Authorization": f"DeepL-Auth-Key {api_key}"}
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers, timeout=5.0)
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "valid": True,
+                    "character_count": data.get("character_count", 0),
+                    "character_limit": data.get("character_limit", 0),
+                }
+            else:
+                return {"valid": False, "error": f"Status {response.status_code}"}
+        except Exception as e:
+            logger.warning(f"DeepL validation error for {api_key[-4:]}: {e}")
+            return {"valid": False, "error": str(e)}
 
 
 @router.get(
@@ -102,67 +175,4 @@ async def get_raw_setting(
     return {"field": field_name, "value": value}
 
 
-@router.post(
-    "/test-deepl-key",
-    summary="Test a DeepL API key",
-    description="Validates a DeepL API key by checking usage quota. Returns key info if valid.",
-)
-async def test_deepl_key(
-    request: dict,
-    current_user: User = Depends(current_active_superuser),
-) -> dict:
-    """
-    Test if a DeepL API key is valid.
-
-    Makes a request to DeepL's usage endpoint to verify the key.
-    Returns usage information if valid, error message if not.
-
-    **Requires admin privileges.**
-    """
-    import httpx
-
-    api_key = request.get("api_key", "").strip()
-    if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="API key is required",
-        )
-
-    # Determine if free or pro key
-    is_free_key = ":fx" in api_key
-    url = "https://api-free.deepl.com/v2/usage" if is_free_key else "https://api.deepl.com/v2/usage"
-    headers = {"Authorization": f"DeepL-Auth-Key {api_key}"}
-
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(url, headers=headers, timeout=10.0)
-
-            if response.status_code == 200:
-                data = response.json()
-                character_count = data.get("character_count", 0)
-                character_limit = data.get("character_limit", 0)
-                remaining = max(0, character_limit - character_count)
-
-                logger.info(f"DeepL key validated by {current_user.email}: ...{api_key[-4:]}")
-                return {
-                    "valid": True,
-                    "key_type": "free" if is_free_key else "pro",
-                    "character_count": character_count,
-                    "character_limit": character_limit,
-                    "remaining": remaining,
-                    "usage_percent": round((character_count / character_limit * 100), 1)
-                    if character_limit > 0
-                    else 0,
-                }
-            elif response.status_code == 403:
-                return {"valid": False, "error": "Invalid API key or unauthorized"}
-            elif response.status_code == 456:
-                return {"valid": False, "error": "Quota exceeded for this key"}
-            else:
-                return {"valid": False, "error": f"Unexpected response: {response.status_code}"}
-
-        except httpx.TimeoutException:
-            return {"valid": False, "error": "Request timed out"}
-        except httpx.RequestError as e:
-            logger.error(f"Error testing DeepL key: {e}")
-            return {"valid": False, "error": f"Connection error: {e!s}"}
+# Removed test_deepl_key endpoint as validation is now automatic on save
