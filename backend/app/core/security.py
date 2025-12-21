@@ -1,8 +1,11 @@
 # backend/app/core/security.py
 
+import base64
+import hashlib
 import logging
 import uuid
 
+from cryptography.fernet import Fernet, InvalidToken
 from fastapi import Depends, Request
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin, exceptions
 from fastapi_users.authentication import (
@@ -25,6 +28,50 @@ from app.db.session import get_user_db
 # from app.schemas.user import UserCreate as CustomUserCreateSchema
 
 logger = logging.getLogger(__name__)
+
+
+# --- Fernet Encryption for Sensitive Settings ---
+def _get_fernet_key() -> bytes:
+    """Derive a 32-byte Fernet key from SECRET_KEY using SHA256."""
+    key_bytes = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+    return base64.urlsafe_b64encode(key_bytes)
+
+
+def encrypt_value(value: str) -> str:
+    """Encrypt a string value using Fernet symmetric encryption."""
+    if not value:
+        return ""
+    try:
+        f = Fernet(_get_fernet_key())
+        return f.encrypt(value.encode()).decode()
+    except Exception as e:
+        logger.error(f"Encryption failed: {e}")
+        raise ValueError("Failed to encrypt value") from e
+
+
+def decrypt_value(token: str) -> str:
+    """Decrypt a Fernet-encrypted token back to the original string."""
+    if not token:
+        return ""
+    try:
+        f = Fernet(_get_fernet_key())
+        return f.decrypt(token.encode()).decode()
+    except InvalidToken:
+        logger.error("Decryption failed: Invalid token (SECRET_KEY may have changed)")
+        raise ValueError("Failed to decrypt value - token is invalid or key has changed") from None
+    except Exception as e:
+        logger.error(f"Decryption failed: {e}")
+        raise ValueError("Failed to decrypt value") from e
+
+
+def mask_sensitive_value(value: str | None, visible_chars: int = 4) -> str:
+    """Mask a sensitive value, showing only the last few characters."""
+    if not value:
+        return ""
+    if len(value) <= visible_chars:
+        return "*" * len(value)
+    return "*" * (len(value) - visible_chars) + value[-visible_chars:]
+
 
 # --- Password Hashing ---
 password_helper = PasswordHelper()

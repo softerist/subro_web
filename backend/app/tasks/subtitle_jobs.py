@@ -20,6 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.effective_settings import build_subprocess_env
 from app.crud.crud_job import CRUDJob
 from app.crud.crud_job import job as crud_job_operations
 from app.db.session import get_worker_db_session
@@ -258,7 +259,15 @@ async def _execute_subtitle_downloader_async_logic(
                 f"Configuration error: Subtitle downloader script not found at {script_path}"
             )
 
-        # STEP 2: Execute the long-running external script. This step does not interact with the DB.
+        # STEP 2: Fetch effective settings from DB to inject as environment variables
+        # This allows the subprocess to use API keys stored in the database
+        async with get_worker_db_session() as db:
+            subprocess_env = await build_subprocess_env(db)
+        logger.debug(
+            f"{task_log_prefix} Prepared subprocess environment with DB-configured settings."
+        )
+
+        # STEP 3: Execute the long-running external script.
         exit_code_from_script = await _run_script_and_get_output(
             script_path=str(script_path),
             folder_path=folder_path,
@@ -270,6 +279,7 @@ async def _execute_subtitle_downloader_async_logic(
             job_db_id_str=job_db_id_str,
             stdout_accumulator=stdout_accumulator,
             stderr_accumulator=stderr_accumulator,
+            subprocess_env=subprocess_env,
         )
 
         # STEP 3: Finalize the job. This function opens a NEW, FRESH DB session
@@ -737,11 +747,15 @@ async def _execute_subtitle_script(
     job_db_id_str: str,
     stdout_accumulator: list[bytes],
     stderr_accumulator: list[bytes],
+    subprocess_env: dict[str, str] | None = None,  # Custom env from DB settings
 ) -> int:
     """
     Manages the execution of the external subtitle script and captures its output.
     This function has been simplified to focus only on subprocess management.
     It no longer contains any database logic.
+
+    The subprocess_env parameter allows injecting effective settings (from DB)
+    as environment variables for the script to use.
     """
     # Use -u flag for unbuffered Python output to enable real-time log streaming
     cmd_args = [
@@ -763,7 +777,12 @@ async def _execute_subtitle_script(
 
     try:
         process = await _setup_subprocess(
-            cmd_args, task_log_prefix, redis_client, job_db_id_str, stderr_accumulator
+            cmd_args,
+            task_log_prefix,
+            redis_client,
+            job_db_id_str,
+            stderr_accumulator,
+            subprocess_env=subprocess_env,
         )
 
         (
@@ -846,11 +865,15 @@ async def _setup_subprocess(
     redis_client: aioredis.Redis | None,
     job_db_id_str: str,
     stderr_accumulator: list[bytes],  # To log internal errors if subprocess setup fails
+    subprocess_env: dict[str, str] | None = None,  # Custom env vars for the subprocess
 ) -> asyncio.subprocess.Process:
     """Creates and starts the subprocess. Raises RuntimeError with 'exit_code' attribute on failure."""
     try:
         process = await asyncio.create_subprocess_exec(
-            *cmd_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            *cmd_args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=subprocess_env,  # Pass custom env (or None for inherit)
         )
         logger.info(
             f"{task_log_prefix} Process (PID: {process.pid}) started with command: {' '.join(cmd_args)}"
@@ -1278,12 +1301,16 @@ async def _run_script_and_get_output(
     job_db_id_str: str,
     stdout_accumulator: list[bytes],
     stderr_accumulator: list[bytes],
+    subprocess_env: dict[str, str] | None = None,  # Custom env from DB settings
 ) -> int:
     """
     Core subprocess execution logic. Manages subprocess creation, stream reading, timeout,
     and cancellation signals (asyncio.CancelledError).
     Returns the script's exit code.
     Raises TimeoutError, asyncio.CancelledError, or RuntimeError (with exit_code attribute for setup issues).
+
+    The subprocess_env parameter allows injecting effective settings (from DB)
+    as environment variables for the script to use.
     """
     # Use -u flag for unbuffered Python output to enable real-time log streaming
     cmd_args = [
@@ -1309,7 +1336,12 @@ async def _run_script_and_get_output(
 
     try:
         process = await _setup_subprocess(
-            cmd_args, task_log_prefix, redis_client, job_db_id_str, stderr_accumulator
+            cmd_args,
+            task_log_prefix,
+            redis_client,
+            job_db_id_str,
+            stderr_accumulator,
+            subprocess_env=subprocess_env,
         )
         # _setup_subprocess raises RuntimeError with .exit_code if it fails, caught below
 

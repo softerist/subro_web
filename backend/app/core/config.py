@@ -12,6 +12,7 @@ from pydantic import (
     PostgresDsn,
     RedisDsn,
     computed_field,
+    field_validator,
     model_validator,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -71,6 +72,50 @@ class Settings(BaseSettings):
     # --- Initial Superuser Settings ---
     FIRST_SUPERUSER_EMAIL: EmailStr = Field(validation_alias="FIRST_SUPERUSER_EMAIL")
     FIRST_SUPERUSER_PASSWORD: str = Field(validation_alias="FIRST_SUPERUSER_PASSWORD")
+
+    # --- External API Keys (optional, can be overridden via Settings UI) ---
+    TMDB_API_KEY: str | None = Field(default=None, validation_alias="TMDB_API_KEY")
+    OMDB_API_KEY: str | None = Field(default=None, validation_alias="OMDB_API_KEY")
+    OPENSUBTITLES_API_KEY: str | None = Field(
+        default=None, validation_alias="OPENSUBTITLES_API_KEY"
+    )
+    OPENSUBTITLES_USERNAME: str | None = Field(
+        default=None, validation_alias="OPENSUBTITLES_USERNAME"
+    )
+    OPENSUBTITLES_PASSWORD: str | None = Field(
+        default=None, validation_alias="OPENSUBTITLES_PASSWORD"
+    )
+    DEEPL_API_KEYS: list[str] | None = Field(default=None, validation_alias="DEEPL_API_KEYS")
+
+    # --- qBittorrent Settings (optional, for torrent monitoring) ---
+    QBITTORRENT_HOST: str | None = Field(default=None, validation_alias="QBITTORRENT_HOST")
+    QBITTORRENT_PORT: int | None = Field(default=None, validation_alias="QBITTORRENT_PORT")
+    QBITTORRENT_USERNAME: str | None = Field(default=None, validation_alias="QBITTORRENT_USERNAME")
+    QBITTORRENT_PASSWORD: str | None = Field(default=None, validation_alias="QBITTORRENT_PASSWORD")
+
+    # --- Allowed Media Folders ---
+    ALLOWED_MEDIA_FOLDERS: list[str] | None = Field(
+        default=None, validation_alias="ALLOWED_MEDIA_FOLDERS"
+    )
+
+    # Validators to parse JSON strings for list fields from environment variables
+    @field_validator("DEEPL_API_KEYS", "ALLOWED_MEDIA_FOLDERS", mode="before")
+    @classmethod
+    def parse_json_list(cls, v: str | list | None) -> list[str] | None:
+        """Parse JSON array strings from env vars into Python lists."""
+        if v is None:
+            return None
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return parsed
+            except json.JSONDecodeError:
+                # Maybe comma-separated?
+                return [item.strip() for item in v.split(",") if item.strip()]
+        return None
 
     # --- Database Settings ---
     PRIMARY_DATABASE_URL_ENV: PostgresDsn | None = Field(

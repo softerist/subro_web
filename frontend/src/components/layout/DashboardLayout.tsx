@@ -5,6 +5,7 @@ import {
   UploadCloud,
   Users,
   Folder,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,12 @@ export default function DashboardLayout() {
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Paths", href: "/paths", icon: Folder },
-    ...(isAdmin ? [{ name: "Users", href: "/admin/users", icon: Users }] : []),
+    ...(isAdmin
+      ? [
+          { name: "Users", href: "/admin/users", icon: Users },
+          { name: "Settings", href: "/settings", icon: Settings },
+        ]
+      : []),
   ];
 
   return (
@@ -84,7 +90,7 @@ export default function DashboardLayout() {
         </header>
 
         {/* Page Content */}
-        <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 overflow-hidden">
+        <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 overflow-auto">
           <Outlet />
         </main>
       </div>
