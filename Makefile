@@ -7,8 +7,8 @@ OVERRIDE_COMPOSE_FILE := infra/docker/docker-compose.override.yml
 COMPOSE_FILES := -f $(BASE_COMPOSE_FILE) -f $(OVERRIDE_COMPOSE_FILE)
 UID := $(shell id -u)
 GID := $(shell id -g)
-API_PORT_HOST ?= 8000
-FRONTEND_PORT_HOST ?= 5173
+API_PORT_HOST ?= 8001
+FRONTEND_PORT_HOST ?= 5174
 
 # ==============================================================================
 # Help Target
@@ -75,11 +75,22 @@ PYTHON_MIGRATION_FILES_EXIST := $(shell find backend/alembic/versions -maxdepth 
 # We still keep the other .PHONY targets from the old block if they are unique.
 .PHONY: rebuild-dev compose-up compose-down compose-down-keep-volumes
 
+stop-prod: ## Stop production stacks to free up ports
+	@echo "Stopping production stacks (if running)..."
+	-docker compose -p infra -f infra/docker/compose.gateway.yml -f infra/docker/compose.data.yml down 2>/dev/null || true
+	-docker compose -p blue -f infra/docker/compose.prod.yml down 2>/dev/null || true
+	-docker compose -p green -f infra/docker/compose.prod.yml down 2>/dev/null || true
+
 # rebuild-dev now correctly depends on the later 'dev' implicitly through compose-up if needed,
 # or you might adjust its dependencies if 'ensure-migrations' logic should also apply here.
 # For now, let's assume its current dependencies are fine.
 rebuild-dev: compose-down db-migrate compose-up ## Clean rebuild: stop, wipe volumes, migrate, then start fresh
 	@echo "Development stack fully rebuilt and started."
+	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
+	@echo "Gateway (Caddy HTTPS) available at https://localhost:8444"
+	@echo "API available at http://localhost:$(API_PORT_HOST)"
+	@echo "API Docs available at http://localhost:$(API_PORT_HOST)/api/v1/docs"
+	@echo "Frontend available at http://localhost:$(FRONTEND_PORT_HOST)"
 
 compose-up: ## Start the Docker Compose stack in detached mode (builds if necessary)
 	@echo "Starting Docker Compose stack..."
@@ -158,10 +169,13 @@ db-migrate-and-apply: db-makemigrations db-apply-migration ## Generate migration
 	@echo "IMPORTANT: Review the migration file in backend/alembic/versions/ before applying it."
 
 
-.PHONY: dev ensure-migrations
-dev: ensure-migrations compose-up ## Start the full stack (generates initial migration if needed, uses existing volumes)
+.PHONY: dev ensure-migrations stop-prod prod
+dev: stop-prod ensure-migrations compose-up ## Start the full stack (generates initial migration if needed, uses existing volumes)
 	@echo "Development stack is up."
-	@echo "API available at http://localhost:$(API_PORT_HOST) (or http://localhost for Caddy)"
+	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
+	@echo "Gateway (Caddy HTTPS) available at https://localhost:8444"
+	@echo "API available at http://localhost:$(API_PORT_HOST)"
+	@echo "API Docs available at http://localhost:$(API_PORT_HOST)/api/v1/docs"
 	@echo "Frontend available at http://localhost:$(FRONTEND_PORT_HOST)"
 
 # New helper target
@@ -175,6 +189,14 @@ ensure-migrations:
 		echo "Migration files found. Skipping generation."; \
 	fi
 	@echo "Running database migrations..."
+
+prod: ## Deploy to production using blue-green deployment script
+	@echo "Deploying to production..."
+	./infra/scripts/blue_green_deploy.sh
+	@echo "Production stack deployed."
+	@echo "Gateway (Caddy HTTP)  available at http://localhost:8080"
+	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
+	@echo "API Docs available at https://localhost:8443/api/v1/docs"
 
 
 # ==============================================================================

@@ -6,9 +6,9 @@ services:
   caddy:
     image: caddy:2-alpine
     ports:
-      - "8080:80" # Expose Caddy's HTTP port on host 8080
-      - "443:443" # Standard HTTPS port
-      - "443:443/udp" # For HTTP/3
+      - "8090:8090" # Expose Caddy's HTTP port on host 8090
+      - "8444:8444" # Expose Caddy's HTTPS port on host 8444
+      - "8444:8444/udp" # For HTTP/3
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile # Mount local Caddyfile for dev config
       - /mnt/sata0/Media:/mnt/sata0/Media
@@ -27,7 +27,7 @@ services:
       target: development # Use the development stage from backend/Dockerfile
     # Command is overridden in docker-compose.override.yml for hot-reloading
     ports:
-      - "8000:8000" # Host port : Container port
+      - "8001:8000" # Host port : Container port
     volumes:
       # Base volume mount (can be overridden) - maps built code into /app
       - ../../backend:/app # Mount source for reference, but override focuses on dev workflow
@@ -157,9 +157,7 @@ services:
       - ../../.env # Loads POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
     environment:
       - PGDATA=/var/lib/postgresql/data/pgdata
-      - POSTGRES_USER=${POSTGRES_USER:-admin} # Reads from .env, defaults to admin
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-Pa44w0rd} # Reads from .env
-      - POSTGRES_DB=${POSTGRES_DB:-subappdb} # <--- THIS IS CRUCIAL
+      # Rely on env_file to load keys, avoiding substitution issues preventing .env pickup
     networks:
       - app_network
     healthcheck:

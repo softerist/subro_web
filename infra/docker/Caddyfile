@@ -13,7 +13,13 @@
 	}
 }
 
-localhost {
+# Explicitly handle HTTP redirection on port 8090
+http://localhost:8090 {
+	redir https://localhost:8444{uri}
+}
+
+# Main site configuration on HTTPS port 8444
+https://localhost:8444 {
 	tls internal
 	import common_security_headers
 

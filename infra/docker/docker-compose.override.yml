@@ -65,7 +65,7 @@ services:
     ports:
       # Expose Vite's port directly to the host (optional, Caddy is the primary entry)
       # Useful for direct access during debugging if Caddy has issues.
-      - "5173:5173"
+      - "5174:5173"
     # Healthcheck for the Vite dev server (can be slow to start)
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5173"]

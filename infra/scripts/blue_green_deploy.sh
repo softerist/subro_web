@@ -20,6 +20,10 @@ fi
 # docker network rm infra_internal_net infra_caddy_net 2>/dev/null || true
 # We rely on compose to create them correctly.
 
+# 0.5 Stop Development Stack (if running)
+echo "--- Stopping Development Stack (if running) ---"
+docker compose -p subapp_dev -f "$DOCK_DIR/docker-compose.yml" -f "$DOCK_DIR/docker-compose.override.yml" down 2>/dev/null || true
+
 # 1. Ensure Infrastructure (Gateway + Data) is running
 echo "--- Ensuring Infrastucture is Up ---"
 docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --build
