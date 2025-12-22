@@ -57,12 +57,13 @@ export function LoginForm({
 
   return (
     <div className={cn("grid gap-6", className)} {...props}>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} action="/login" method="post">
         <div className={cn("grid gap-4")}>
           <div className="grid gap-2">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
+              name="email"
               placeholder="name@example.com"
               type="email"
               autoCapitalize="none"
@@ -78,6 +79,7 @@ export function LoginForm({
             <Label htmlFor="password">Password</Label>
             <Input
               id="password"
+              name="password"
               placeholder="Password"
               type="password"
               autoComplete="current-password"

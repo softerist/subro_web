@@ -43,6 +43,7 @@ export default function SetupPage() {
     opensubtitles_api_key: "",
     opensubtitles_username: "",
     opensubtitles_password: "",
+    deepl_api_keys: [],
     qbittorrent_host: "",
     qbittorrent_port: undefined,
     qbittorrent_username: "",
@@ -55,6 +56,12 @@ export default function SetupPage() {
       // Validate admin form
       if (!adminEmail || !adminPassword) {
         setError("Email and password are required");
+        return;
+      }
+      // Validate email format (must have @ and a domain with a period)
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(adminEmail)) {
+        setError("Please enter a valid email address (e.g., user@example.com)");
         return;
       }
       if (adminPassword !== confirmPassword) {
@@ -134,7 +141,10 @@ export default function SetupPage() {
     }
   };
 
-  const updateSetting = (key: keyof SettingsUpdate, value: string | number) => {
+  const updateSetting = (
+    key: keyof SettingsUpdate,
+    value: string | number | string[],
+  ) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -337,6 +347,60 @@ export default function SetupPage() {
                       placeholder="Leave blank to use default"
                       className="bg-slate-900 border-slate-600 text-white"
                     />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">
+                        OpenSubtitles Username
+                      </Label>
+                      <Input
+                        value={settings.opensubtitles_username || ""}
+                        onChange={(e) =>
+                          updateSetting(
+                            "opensubtitles_username",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="Leave blank to use default"
+                        className="bg-slate-900 border-slate-600 text-white"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">
+                        OpenSubtitles Password
+                      </Label>
+                      <Input
+                        type="password"
+                        value={settings.opensubtitles_password || ""}
+                        onChange={(e) =>
+                          updateSetting(
+                            "opensubtitles_password",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="Leave blank to use default"
+                        className="bg-slate-900 border-slate-600 text-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="border-t border-slate-700 pt-4 mt-4">
+                    <p className="text-sm text-slate-400 mb-3">
+                      DeepL Translation (optional)
+                    </p>
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">DeepL API Keys</Label>
+                      <textarea
+                        value={(settings.deepl_api_keys || []).join("\n")}
+                        onChange={(e) =>
+                          updateSetting(
+                            "deepl_api_keys",
+                            e.target.value.split("\n").filter((k) => k.trim()),
+                          )
+                        }
+                        placeholder="One API key per line (optional)"
+                        className="w-full h-20 bg-slate-900 border border-slate-600 rounded-md p-2 text-white placeholder:text-slate-500 text-sm font-mono"
+                      />
+                    </div>
                   </div>
                   <div className="border-t border-slate-700 pt-4 mt-4">
                     <p className="text-sm text-slate-400 mb-3">

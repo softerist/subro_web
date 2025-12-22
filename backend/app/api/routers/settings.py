@@ -18,6 +18,7 @@ from app.db.models.deepl_usage import DeepLUsage
 from app.db.models.user import User
 from app.db.session import get_async_session
 from app.schemas.app_settings import SettingsRead, SettingsUpdate
+from app.services.api_validation import validate_all_settings
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +95,7 @@ async def update_settings(
                 usage_data = await _validate_deepl_key(key)
 
                 # Update Database Record using upsert pattern
-                identifier = key[-4:] if len(key) >= 4 else key
+                identifier = key[-8:] if len(key) >= 8 else key
 
                 # Check if record exists
                 result = await db.execute(
@@ -124,6 +125,13 @@ async def update_settings(
         await db.rollback()
         logger.error(f"Failed to validate DeepL keys after update: {e}")
 
+    # Post-update: Validate TMDB, OMDB, and OpenSubtitles credentials
+    try:
+        await validate_all_settings(db)
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to validate API credentials after update: {e}")
+
     return await crud_app_settings.to_read_schema(db)
 
 
@@ -147,7 +155,7 @@ async def _validate_deepl_key(api_key: str) -> dict:
             else:
                 return {"valid": False, "error": f"Status {response.status_code}"}
         except Exception as e:
-            logger.warning(f"DeepL validation error for {api_key[-4:]}: {e}")
+            logger.warning(f"DeepL validation error for ...{api_key[-8:]}: {e}")
             return {"valid": False, "error": str(e)}
 
 

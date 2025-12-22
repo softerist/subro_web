@@ -21,6 +21,7 @@ from app.schemas.app_settings import (
     SetupStatus,
 )
 from app.schemas.user import UserCreate
+from app.services.api_validation import validate_all_settings
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,12 @@ async def complete_setup(
             # Don't fail the whole setup if settings save fails
             # Admin can update settings later
 
+    # Populate any empty fields with env var defaults
+    await crud_app_settings.populate_from_env_defaults(db)
+
+    # Validate settings (including defaults if not provided)
+    await validate_all_settings(db)
+
     # Mark setup as completed
     await crud_app_settings.mark_setup_completed(db)
     logger.info("Setup wizard completed successfully.")
@@ -158,6 +165,13 @@ async def skip_setup(
 
     # Mark setup as completed (settings remain empty, system uses env defaults)
     await crud_app_settings.mark_setup_completed(db)
+
+    # Populate any empty fields with env var defaults
+    await crud_app_settings.populate_from_env_defaults(db)
+
+    # Validate defaults from environment
+    await validate_all_settings(db)
+
     logger.info("Setup skipped. System will use environment variable defaults.")
 
     return SetupStatus(setup_completed=True)

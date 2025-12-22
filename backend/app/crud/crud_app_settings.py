@@ -144,6 +144,55 @@ class CRUDAppSettings:
         await db.refresh(settings)
         return settings
 
+    async def populate_from_env_defaults(self, db: AsyncSession) -> AppSettings:
+        """
+        Populate empty DB fields with values from environment variables.
+        Called during setup to ensure DB becomes the complete source of truth.
+        """
+        from app.core.config import settings as env_settings
+
+        settings = await self.get(db)
+
+        # Mapping: DB field -> env attribute name
+        env_mapping = {
+            "tmdb_api_key": "TMDB_API_KEY",
+            "omdb_api_key": "OMDB_API_KEY",
+            "opensubtitles_api_key": "OPENSUBTITLES_API_KEY",
+            "opensubtitles_username": "OPENSUBTITLES_USERNAME",
+            "opensubtitles_password": "OPENSUBTITLES_PASSWORD",
+            "deepl_api_keys": "DEEPL_API_KEYS",
+            "qbittorrent_host": "QBITTORRENT_HOST",
+            "qbittorrent_port": "QBITTORRENT_PORT",
+            "qbittorrent_username": "QBITTORRENT_USERNAME",
+            "qbittorrent_password": "QBITTORRENT_PASSWORD",
+            "allowed_media_folders": "ALLOWED_MEDIA_FOLDERS",
+        }
+
+        populated_fields = []
+
+        for db_field, env_attr in env_mapping.items():
+            # Only populate if DB field is empty
+            current_value = getattr(settings, db_field, None)
+            if current_value:
+                continue
+
+            # Get value from environment
+            env_value = getattr(env_settings, env_attr, None)
+            if env_value is None:
+                continue
+
+            # Process and encrypt as needed
+            processed_value = self._process_field_for_update(db_field, env_value)
+            setattr(settings, db_field, processed_value)
+            populated_fields.append(db_field)
+
+        if populated_fields:
+            await db.commit()
+            await db.refresh(settings)
+            logger.info(f"Populated DB with env defaults for: {populated_fields}")
+
+        return settings
+
     async def get_decrypted_value(self, db: AsyncSession, field: str) -> str | list[str] | None:
         """
         Get a single decrypted setting value.
@@ -187,6 +236,7 @@ class CRUDAppSettings:
         from app.core.config import settings as env_settings
 
         db_settings = await self.get(db)
+
         active_deepl_keys = self._get_effective_list(
             db_settings, env_settings, "deepl_api_keys", "DEEPL_API_KEYS"
         )
@@ -223,6 +273,11 @@ class CRUDAppSettings:
                 db_settings, env_settings, "allowed_media_folders", "ALLOWED_MEDIA_FOLDERS"
             ),
             setup_completed=db_settings.setup_completed,
+            # Validation status from DB cache
+            tmdb_valid=db_settings.tmdb_valid,
+            omdb_valid=db_settings.omdb_valid,
+            opensubtitles_valid=db_settings.opensubtitles_valid,
+            opensubtitles_key_valid=db_settings.opensubtitles_key_valid,
         )
 
     def _get_db_to_env_map(self) -> dict[str, str]:
@@ -281,6 +336,8 @@ class CRUDAppSettings:
                 decrypted = decrypt_value(raw) if field_name in ENCRYPTED_FIELDS else raw
                 items = json.loads(decrypted)
                 if field_name in ENCRYPTED_FIELDS:
+                    if field_name == "deepl_api_keys":
+                        return [mask_sensitive_value(str(item), visible_chars=8) for item in items]
                     return [mask_sensitive_value(str(item)) for item in items]
                 return items
             except (ValueError, json.JSONDecodeError):
@@ -310,8 +367,8 @@ class CRUDAppSettings:
 
         final_stats = []
         for key_str in configured_keys:
-            # We use the suffix as the identifier
-            suffix = key_str[-4:] if len(key_str) >= 4 else key_str
+            # We use the suffix as the identifier - Updated to 8 chars
+            suffix = key_str[-8:] if len(key_str) >= 8 else key_str
             if suffix in usage_map:
                 final_stats.append(usage_map[suffix])
             else:

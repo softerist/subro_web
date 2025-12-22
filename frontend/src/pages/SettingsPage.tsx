@@ -65,6 +65,12 @@ export default function SettingsPage() {
       // Only send fields that have been modified
       const updatedSettings = await updateSettings(formData);
       setSettings(updatedSettings);
+
+      // Sync DeepL keys state to ensure they are masked immediately
+      if (updatedSettings.deepl_api_keys) {
+        setDeeplKeys(updatedSettings.deepl_api_keys);
+      }
+
       setFormData({});
       setSuccess("Settings saved successfully!");
       setTimeout(() => setSuccess(null), 3000);
@@ -101,15 +107,6 @@ export default function SettingsPage() {
             Manage your application configuration
           </p>
         </div>
-        {hasChanges && (
-          <Button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            {isSaving ? "Saving..." : "Save Changes"}
-          </Button>
-        )}
       </div>
 
       {error && (
@@ -206,45 +203,93 @@ export default function SettingsPage() {
                   </h3>
                 </div>
                 <div className="pl-10 space-y-4">
-                  <div className="group relative max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Label className="text-xs uppercase tracking-wider text-slate-500 block">
+                  <div
+                    className={`max-w-md rounded-xl border-2 p-1 transition-all duration-500 ${
+                      settings?.tmdb_valid === true
+                        ? "border-emerald-500/30 bg-emerald-500/5"
+                        : settings?.tmdb_valid === false
+                          ? "border-red-500/30 bg-red-500/5"
+                          : "border-transparent"
+                    }`}
+                  >
+                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
+                      <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
                         TMDB API Key
                       </Label>
+                      <Input
+                        placeholder={
+                          settings?.tmdb_api_key || "Enter API key..."
+                        }
+                        value={formData.tmdb_api_key || ""}
+                        onChange={(e) =>
+                          updateField("tmdb_api_key", e.target.value)
+                        }
+                        className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-cyan-500"
+                      />
                       {settings?.tmdb_api_key && (
-                        <span className="text-xs text-emerald-400">
-                          ● Configured
-                        </span>
+                        <div className="mt-2 text-left">
+                          <span
+                            className={`px-2 py-0.5 text-xs rounded-full ${
+                              settings?.tmdb_valid === true
+                                ? "bg-emerald-500/20 text-emerald-400"
+                                : settings?.tmdb_valid === false
+                                  ? "bg-red-500/20 text-red-400"
+                                  : "bg-yellow-500/20 text-yellow-400"
+                            }`}
+                          >
+                            {settings?.tmdb_valid === true
+                              ? "Valid"
+                              : settings?.tmdb_valid === false
+                                ? "Invalid"
+                                : "Not Validated"}
+                          </span>
+                        </div>
                       )}
                     </div>
-                    <Input
-                      placeholder={settings?.tmdb_api_key || "Enter API key..."}
-                      value={formData.tmdb_api_key || ""}
-                      onChange={(e) =>
-                        updateField("tmdb_api_key", e.target.value)
-                      }
-                      className="max-w-md bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-cyan-500"
-                    />
                   </div>
-                  <div className="group relative max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Label className="text-xs uppercase tracking-wider text-slate-500 block">
+                  <div
+                    className={`max-w-md rounded-xl border-2 p-1 transition-all duration-500 ${
+                      settings?.omdb_valid === true
+                        ? "border-emerald-500/30 bg-emerald-500/5"
+                        : settings?.omdb_valid === false
+                          ? "border-red-500/30 bg-red-500/5"
+                          : "border-transparent"
+                    }`}
+                  >
+                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
+                      <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
                         OMDB API Key
                       </Label>
+                      <Input
+                        placeholder={
+                          settings?.omdb_api_key || "Enter API key..."
+                        }
+                        value={formData.omdb_api_key || ""}
+                        onChange={(e) =>
+                          updateField("omdb_api_key", e.target.value)
+                        }
+                        className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-cyan-500"
+                      />
                       {settings?.omdb_api_key && (
-                        <span className="text-xs text-emerald-400">
-                          ● Configured
-                        </span>
+                        <div className="mt-2 text-left">
+                          <span
+                            className={`px-2 py-0.5 text-xs rounded-full ${
+                              settings?.omdb_valid === true
+                                ? "bg-emerald-500/20 text-emerald-400"
+                                : settings?.omdb_valid === false
+                                  ? "bg-red-500/20 text-red-400"
+                                  : "bg-yellow-500/20 text-yellow-400"
+                            }`}
+                          >
+                            {settings?.omdb_valid === true
+                              ? "Valid"
+                              : settings?.omdb_valid === false
+                                ? "Invalid"
+                                : "Not Validated"}
+                          </span>
+                        </div>
                       )}
                     </div>
-                    <Input
-                      placeholder={settings?.omdb_api_key || "Enter API key..."}
-                      value={formData.omdb_api_key || ""}
-                      onChange={(e) =>
-                        updateField("omdb_api_key", e.target.value)
-                      }
-                      className="max-w-md bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-cyan-500"
-                    />
                   </div>
                 </div>
               </div>
@@ -258,60 +303,114 @@ export default function SettingsPage() {
                   <h3 className="text-lg font-semibold text-white">
                     OpenSubtitles
                   </h3>
-                  {settings?.opensubtitles_api_key && (
-                    <span className="ml-2 px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-xs rounded-full">
-                      Connected
-                    </span>
-                  )}
                 </div>
                 <div className="pl-10 space-y-4">
-                  <div className="max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
-                    <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
-                      API Key
-                    </Label>
-                    <Input
-                      placeholder={
-                        settings?.opensubtitles_api_key || "Enter API key..."
-                      }
-                      value={formData.opensubtitles_api_key || ""}
-                      onChange={(e) =>
-                        updateField("opensubtitles_api_key", e.target.value)
-                      }
-                      className="max-w-md bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
-                    />
+                  <div
+                    className={`max-w-md rounded-xl border-2 p-1 transition-all duration-500 ${
+                      settings?.opensubtitles_key_valid === true
+                        ? "border-emerald-500/30 bg-emerald-500/5"
+                        : settings?.opensubtitles_key_valid === false
+                          ? "border-red-500/30 bg-red-500/5"
+                          : "border-transparent"
+                    }`}
+                  >
+                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
+                      <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
+                        API Key
+                      </Label>
+                      <Input
+                        placeholder={
+                          settings?.opensubtitles_api_key || "Enter API key..."
+                        }
+                        value={formData.opensubtitles_api_key || ""}
+                        onChange={(e) =>
+                          updateField("opensubtitles_api_key", e.target.value)
+                        }
+                        className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
+                      />
+                      {settings?.opensubtitles_api_key && (
+                        <div className="mt-2 text-left">
+                          <span
+                            className={`px-2 py-0.5 text-xs rounded-full ${
+                              settings?.opensubtitles_key_valid === true
+                                ? "bg-emerald-500/20 text-emerald-400"
+                                : settings?.opensubtitles_key_valid === false
+                                  ? "bg-red-500/20 text-red-400"
+                                  : "bg-yellow-500/20 text-yellow-400"
+                            }`}
+                          >
+                            {settings?.opensubtitles_key_valid === true
+                              ? "Valid"
+                              : settings?.opensubtitles_key_valid === false
+                                ? "Invalid"
+                                : "Unknown"}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
-                    <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
-                      Username
-                    </Label>
-                    <Input
-                      placeholder={
-                        settings?.opensubtitles_username || "Enter username..."
-                      }
-                      value={formData.opensubtitles_username || ""}
-                      onChange={(e) =>
-                        updateField("opensubtitles_username", e.target.value)
-                      }
-                      className="max-w-md bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
-                    />
-                  </div>
-                  <div className="max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
-                    <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
-                      Password
-                    </Label>
-                    <Input
-                      type="password"
-                      placeholder={
-                        settings?.opensubtitles_password
-                          ? "••••••••"
-                          : "Enter password..."
-                      }
-                      value={formData.opensubtitles_password || ""}
-                      onChange={(e) =>
-                        updateField("opensubtitles_password", e.target.value)
-                      }
-                      className="max-w-md bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
-                    />
+                  <div
+                    className={`max-w-md rounded-xl border-2 p-1 space-y-4 transition-all duration-500 ${
+                      settings?.opensubtitles_valid === true
+                        ? "border-emerald-500/30 bg-emerald-500/5"
+                        : settings?.opensubtitles_valid === false
+                          ? "border-red-500/30 bg-red-500/5"
+                          : "border-transparent"
+                    }`}
+                  >
+                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
+                      <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
+                        Username
+                      </Label>
+                      <Input
+                        placeholder={
+                          settings?.opensubtitles_username ||
+                          "Enter username..."
+                        }
+                        value={formData.opensubtitles_username || ""}
+                        onChange={(e) =>
+                          updateField("opensubtitles_username", e.target.value)
+                        }
+                        className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
+                      />
+                    </div>
+                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors">
+                      <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
+                        Password
+                      </Label>
+                      <Input
+                        type="password"
+                        placeholder={
+                          settings?.opensubtitles_password
+                            ? "••••••••"
+                            : "Enter password..."
+                        }
+                        value={formData.opensubtitles_password || ""}
+                        onChange={(e) =>
+                          updateField("opensubtitles_password", e.target.value)
+                        }
+                        className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
+                      />
+                      {settings?.opensubtitles_api_key && (
+                        <div className="mt-2 text-left">
+                          <span
+                            className={`px-2 py-0.5 text-xs rounded-full ${
+                              settings?.opensubtitles_valid === true
+                                ? "bg-emerald-500/20 text-emerald-400"
+                                : settings?.opensubtitles_valid === false
+                                  ? "bg-red-500/20 text-red-400"
+                                  : "bg-yellow-500/20 text-yellow-400"
+                            }`}
+                          >
+                            {settings?.opensubtitles_valid === true
+                              ? "Connected"
+                              : settings?.opensubtitles_valid === false
+                                ? "Invalid Credentials"
+                                : "Unknown"}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -383,7 +482,7 @@ export default function SettingsPage() {
                               <div className="flex-1 min-w-0 max-w-md px-3 py-2 bg-slate-800 border border-slate-600 rounded-md font-mono text-sm text-slate-300 overflow-hidden text-ellipsis whitespace-nowrap">
                                 {isMasked
                                   ? key
-                                  : `${"•".repeat(Math.max(0, key.length - 4))}${key.slice(-4)}`}
+                                  : `${"•".repeat(Math.max(0, key.length - 8))}${key.slice(-8)}`}
                               </div>
                             )}
 
@@ -465,7 +564,7 @@ export default function SettingsPage() {
                     >();
                     if (settings?.deepl_usage) {
                       settings.deepl_usage.forEach((usage) => {
-                        const suffix = usage.key_alias.slice(-4);
+                        const suffix = usage.key_alias.slice(-8);
                         statsBySuffix.set(suffix, usage);
                       });
                     }
@@ -474,7 +573,7 @@ export default function SettingsPage() {
                     deeplKeys.forEach((key) => {
                       if (!key.trim()) return; // Skip empty keys
 
-                      const suffix = key.slice(-4);
+                      const suffix = key.slice(-8);
                       const existingStat = statsBySuffix.get(suffix);
 
                       if (existingStat) {
@@ -671,6 +770,71 @@ export default function SettingsPage() {
           </>
         )}
       </Card>
+
+      {/* Sticky Save Bar */}
+      <div
+        className={`fixed bottom-0 left-0 right-0 z-50 transform transition-all duration-300 ease-out ${
+          hasChanges
+            ? "translate-y-0 opacity-100"
+            : "translate-y-full opacity-0 pointer-events-none"
+        }`}
+      >
+        <div className="bg-slate-900/95 backdrop-blur-sm border-t border-slate-700 shadow-2xl">
+          <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+              <span className="text-slate-300 text-sm font-medium">
+                You have unsaved changes
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setFormData({});
+                  // Reset DeepL keys to server state
+                  if (settings?.deepl_api_keys) {
+                    setDeeplKeys(settings.deepl_api_keys);
+                  }
+                }}
+                className="text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                Discard
+              </Button>
+              <Button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6"
+              >
+                {isSaving ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        fill="none"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    Saving...
+                  </span>
+                ) : (
+                  "Save Changes"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

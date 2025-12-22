@@ -68,6 +68,15 @@ class SettingsRead(SettingsBase):
     deepl_usage: list[DeepLUsage] = Field(default_factory=list)
     qbittorrent_password: str = ""
 
+    # Validation Status (set by backend after validating credentials)
+    # None = Not Validated / Connection Error
+    # True = Valid
+    # False = Invalid
+    tmdb_valid: bool | None = None
+    omdb_valid: bool | None = None
+    opensubtitles_valid: bool | None = None  # Login/Credentials status
+    opensubtitles_key_valid: bool | None = None  # API Key status
+
     # State
     setup_completed: bool = False
 

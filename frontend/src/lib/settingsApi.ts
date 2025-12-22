@@ -30,6 +30,11 @@ export interface DeepLUsage {
 export interface SettingsRead extends SettingsUpdate {
   setup_completed: boolean;
   deepl_usage?: DeepLUsage[];
+  // Validation status from backend
+  tmdb_valid?: boolean;
+  omdb_valid?: boolean;
+  opensubtitles_valid?: boolean;
+  opensubtitles_key_valid?: boolean;
 }
 
 export interface SetupComplete {

@@ -47,5 +47,13 @@ class AppSettings(Base):
     # --- Setup State ---
     setup_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # --- Validation Status (cached after API validation) ---
+    tmdb_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
+    omdb_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
+    opensubtitles_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
+    opensubtitles_key_valid: Mapped[bool | None] = mapped_column(
+        Boolean, default=None, nullable=True
+    )
+
     def __repr__(self) -> str:
         return f"<AppSettings(id={self.id}, setup_completed={self.setup_completed})>"

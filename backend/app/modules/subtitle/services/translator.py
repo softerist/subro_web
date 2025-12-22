@@ -599,7 +599,7 @@ def get_deepl_usage(api_key: str) -> dict | None:  # noqa: C901
     is_free_key = ":fx" in api_key
     url = "https://api-free.deepl.com/v2/usage" if is_free_key else "https://api.deepl.com/v2/usage"
     headers = {"Authorization": f"DeepL-Auth-Key {api_key}"}
-    key_suffix = api_key[-4:] if len(api_key) >= 4 else "***"  # For logging
+    key_suffix = api_key[-8:] if len(api_key) >= 8 else "***"  # Updated to 8 chars for logging
 
     try:
         response = requests.get(url, headers=headers, timeout=15)  # Increased timeout
@@ -2020,7 +2020,7 @@ class TranslationManager:
                                     idx = int(service.replace("deepl_key_", "")) - 1
                                     if 0 <= idx < len(self.deepl_keys):
                                         key_str = self.deepl_keys[idx]
-                                        suffix = key_str[-4:] if len(key_str) >= 4 else key_str
+                                        suffix = key_str[-8:] if len(key_str) >= 8 else key_str
 
                                         # Get latest info from cache or just use billed chars
                                         info = self.deepl_usage_cache.get(idx, {})
