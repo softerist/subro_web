@@ -27,6 +27,7 @@ ENCRYPTED_FIELDS = {
     "opensubtitles_password",
     "deepl_api_keys",  # JSON array, entire string is encrypted
     "qbittorrent_password",
+    "google_cloud_credentials",  # Full service account JSON
 }
 
 # Fields stored as JSON arrays
@@ -81,6 +82,10 @@ class CRUDAppSettings:
         for field, value in update_data.items():
             if value is None:
                 continue
+
+            # Strip string values to prevent saving whitespace
+            if isinstance(value, str):
+                value = value.strip()
 
             processed_value = self._process_field_for_update(field, value)
             setattr(settings, field, processed_value)
@@ -173,7 +178,7 @@ class CRUDAppSettings:
         for db_field, env_attr in env_mapping.items():
             # Only populate if DB field is empty
             current_value = getattr(settings, db_field, None)
-            if current_value:
+            if current_value is not None:
                 continue
 
             # Get value from environment
@@ -196,38 +201,45 @@ class CRUDAppSettings:
     async def get_decrypted_value(self, db: AsyncSession, field: str) -> str | list[str] | None:
         """
         Get a single decrypted setting value.
-        Returns None if the field is empty.
+        Checks DB first, then falls back to Environment variables.
+        Returns None if both are empty.
         """
+
         settings = await self.get(db)
         raw_value = getattr(settings, field, None)
 
-        if not raw_value:
-            return None
+        # 1. Try DB Value (treat empty string as explicit override)
+        if raw_value is not None:
+            # If explicit empty string, return it (override env)
+            if raw_value == "":
+                return ""
 
-        # Decrypt if needed
-        if field in ENCRYPTED_FIELDS:
-            try:
-                decrypted = decrypt_value(raw_value)
-            except ValueError:
-                logger.warning(f"Failed to decrypt field {field}. Returning None.")
-                return None
+            # Decrypt if needed
+            if field in ENCRYPTED_FIELDS:
+                try:
+                    decrypted = decrypt_value(raw_value)
+                except ValueError:
+                    logger.warning(f"Failed to decrypt field {field}. Returning None.")
+                    return None
 
-            # Parse JSON if it's an array field
+                # Parse JSON if it's an array field
+                if field in JSON_ARRAY_FIELDS:
+                    try:
+                        return json.loads(decrypted)
+                    except json.JSONDecodeError:
+                        return []
+                return decrypted
+
+            # Non-encrypted JSON array
             if field in JSON_ARRAY_FIELDS:
                 try:
-                    return json.loads(decrypted)
+                    return json.loads(raw_value)
                 except json.JSONDecodeError:
                     return []
-            return decrypted
 
-        # Non-encrypted JSON array
-        if field in JSON_ARRAY_FIELDS:
-            try:
-                return json.loads(raw_value)
-            except json.JSONDecodeError:
-                return []
+            return raw_value
 
-        return raw_value
+        return None
 
     async def to_read_schema(self, db: AsyncSession) -> SettingsRead:
         """
@@ -237,9 +249,31 @@ class CRUDAppSettings:
 
         db_settings = await self.get(db)
 
-        active_deepl_keys = self._get_effective_list(
-            db_settings, env_settings, "deepl_api_keys", "DEEPL_API_KEYS"
+        # Get raw DeepL keys for validation check
+        active_deepl_keys_plain = self._get_effective_list(
+            db_settings, env_settings, "deepl_api_keys", "DEEPL_API_KEYS", do_mask=False
         )
+
+        # Get usage stats
+        deepl_usage = await self._get_deepl_usage_stats(db, active_deepl_keys_plain)
+
+        # Process keys: mask if valid, plaintext if invalid
+        active_deepl_keys = []
+        for key in active_deepl_keys_plain:
+            if not key:
+                continue
+
+            # Find corresponding usage
+            identifier = key[-8:] if len(key) >= 8 else key
+            usage = next((u for u in deepl_usage if u["key_alias"].endswith(identifier)), None)
+
+            # Mask if valid (or if status is unknown/True default, to be safe? No, user wants invalid unmasked)
+            # If usage is found and valid is False -> Unmasked.
+            # Else (Valid or Unknown) -> Masked.
+            if usage and usage["valid"] is False:
+                active_deepl_keys.append(key)
+            else:
+                active_deepl_keys.append(mask_sensitive_value(key, visible_chars=8))
 
         return SettingsRead(
             tmdb_api_key=self._get_effective_and_mask(db_settings, env_settings, "tmdb_api_key"),
@@ -254,7 +288,7 @@ class CRUDAppSettings:
                 db_settings, env_settings, "opensubtitles_password"
             ),
             deepl_api_keys=active_deepl_keys,
-            deepl_usage=await self._get_deepl_usage_stats(db, active_deepl_keys),
+            deepl_usage=deepl_usage,
             qbittorrent_host=self._get_effective_plain(
                 db_settings, env_settings, "qbittorrent_host"
             )
@@ -278,6 +312,14 @@ class CRUDAppSettings:
             omdb_valid=db_settings.omdb_valid,
             opensubtitles_valid=db_settings.opensubtitles_valid,
             opensubtitles_key_valid=db_settings.opensubtitles_key_valid,
+            # Google Cloud status
+            google_cloud_configured=db_settings.google_cloud_credentials is not None,
+            google_cloud_project_id=(
+                mask_sensitive_value(db_settings.google_cloud_project_id, visible_chars=8)
+                if db_settings.google_cloud_project_id
+                else None
+            ),
+            google_cloud_valid=db_settings.google_cloud_valid,
         )
 
     def _get_db_to_env_map(self) -> dict[str, str]:
@@ -294,11 +336,15 @@ class CRUDAppSettings:
         }
 
     def _get_effective_and_mask(
-        self, db_settings: AppSettings, env_settings: Any, field_name: str
+        self, db_settings: AppSettings, _env_settings: Any, field_name: str
     ) -> str:
         """Get effective value (DB > env) and mask it."""
         raw = getattr(db_settings, field_name, None)
-        if raw:
+
+        # If DB value exists (including explicit empty string), use it
+        if raw is not None:
+            if raw == "":
+                return ""
             if field_name in ENCRYPTED_FIELDS:
                 try:
                     decrypted = decrypt_value(raw)
@@ -307,27 +353,27 @@ class CRUDAppSettings:
                     return "[decryption failed]"
             return mask_sensitive_value(str(raw))
 
-        env_attr = self._get_db_to_env_map().get(field_name)
-        if env_attr:
-            env_val = getattr(env_settings, env_attr, None)
-            if env_val:
-                return mask_sensitive_value(str(env_val))
         return ""
 
     def _get_effective_plain(
-        self, db_settings: AppSettings, env_settings: Any, field_name: str
+        self, db_settings: AppSettings, _env_settings: Any, field_name: str
     ) -> str | int | None:
         """Get effective value (DB > env) without masking."""
         raw = getattr(db_settings, field_name, None)
-        if raw is not None and raw != "":
+
+        # If DB value exists (including explicit empty string), use it
+        if raw is not None:
             return raw
-        env_attr = self._get_db_to_env_map().get(field_name)
-        if env_attr:
-            return getattr(env_settings, env_attr, None)
+
         return None
 
     def _get_effective_list(
-        self, db_settings: AppSettings, env_settings: Any, field_name: str, env_attr: str
+        self,
+        db_settings: AppSettings,
+        _env_settings: Any,
+        field_name: str,
+        _env_attr: str,
+        do_mask: bool = True,
     ) -> list[str]:
         """Get effective list value (DB > env)."""
         raw = getattr(db_settings, field_name, None)
@@ -335,16 +381,13 @@ class CRUDAppSettings:
             try:
                 decrypted = decrypt_value(raw) if field_name in ENCRYPTED_FIELDS else raw
                 items = json.loads(decrypted)
-                if field_name in ENCRYPTED_FIELDS:
+                if field_name in ENCRYPTED_FIELDS and do_mask:
                     if field_name == "deepl_api_keys":
                         return [mask_sensitive_value(str(item), visible_chars=8) for item in items]
                     return [mask_sensitive_value(str(item)) for item in items]
                 return items
             except (ValueError, json.JSONDecodeError):
                 pass
-        env_val = getattr(env_settings, env_attr, None)
-        if env_val:
-            return env_val if isinstance(env_val, list) else [str(env_val)]
         return []
 
     async def _get_deepl_usage_stats(
@@ -365,19 +408,27 @@ class CRUDAppSettings:
             for record in usage_records
         }
 
+        import hashlib
+
         final_stats = []
         for key_str in configured_keys:
-            # We use the suffix as the identifier - Updated to 8 chars
+            # Look up by hash
+            key_hash = hashlib.sha256(key_str.strip().encode()).hexdigest()
             suffix = key_str[-8:] if len(key_str) >= 8 else key_str
-            if suffix in usage_map:
-                final_stats.append(usage_map[suffix])
+
+            if key_hash in usage_map:
+                # Found record (by hash)
+                stat = usage_map[key_hash].copy()
+                stat["key_alias"] = f"...{suffix}"
+                final_stats.append(stat)
             else:
+                # Not found (or legacy record with suffix identifier)
                 final_stats.append(
                     {
                         "key_alias": f"...{suffix}",
                         "character_count": 0,
                         "character_limit": 500000,
-                        "valid": True,
+                        "valid": None,
                     }
                 )
         return final_stats

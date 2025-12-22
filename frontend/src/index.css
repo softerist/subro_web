@@ -88,6 +88,7 @@
   html,
   body {
     @apply h-full overflow-hidden;
+    cursor: default;
   }
   body {
     @apply bg-background text-foreground;
@@ -121,4 +122,13 @@
 * {
   scrollbar-width: thin;
   scrollbar-color: hsl(215 27.9% 25%) transparent;
+}
+
+/* Re-enable selection for inputs and utility elements */
+input,
+textarea,
+[contenteditable="true"] {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
 }

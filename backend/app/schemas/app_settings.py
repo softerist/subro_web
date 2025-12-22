@@ -39,6 +39,9 @@ class SettingsUpdate(SettingsBase):
     deepl_api_keys: list[str] = Field(default_factory=list)
     qbittorrent_password: str | None = None
 
+    # Google Cloud (JSON credentials blob)
+    google_cloud_credentials: str | None = None
+
 
 class DeepLUsage(BaseModel):
     """
@@ -76,6 +79,12 @@ class SettingsRead(SettingsBase):
     omdb_valid: bool | None = None
     opensubtitles_valid: bool | None = None  # Login/Credentials status
     opensubtitles_key_valid: bool | None = None  # API Key status
+
+    # Google Cloud (read-only display fields)
+    google_cloud_configured: bool = False
+    google_cloud_project_id: str | None = None
+    google_cloud_valid: bool | None = None
+    google_cloud_error: str | None = None
 
     # State
     setup_completed: bool = False

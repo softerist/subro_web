@@ -69,62 +69,85 @@ async def validate_omdb(api_key: str) -> bool | None:
             return None
 
 
-async def validate_opensubtitles(
-    api_key: str, username: str, password: str
+async def validate_opensubtitles(  # noqa: C901
+    api_key: str, username: str | None, password: str | None
 ) -> tuple[bool | None, bool | None]:
     """
     Validate OpenSubtitles credentials.
     Returns: (key_valid, login_valid)
     """
-    if not all([api_key, username, password]):
+    if not api_key:
         return (None, None)
 
     api_key = api_key.strip()
-    username = username.strip()
-    password = password.strip()
+    if username:
+        username = username.strip()
+    if password:
+        password = password.strip()
 
-    login_url = "https://api.opensubtitles.com/api/v1/login"
-    logout_url = "https://api.opensubtitles.com/api/v1/logout"
+    # If we have full credentials, try login
+    if username and password:
+        login_url = "https://api.opensubtitles.com/api/v1/login"
+        logout_url = "https://api.opensubtitles.com/api/v1/logout"
 
+        headers = {
+            "Api-Key": api_key,
+            "Content-Type": "application/json",
+            "User-Agent": "SubtitleDownloader v1.0",
+        }
+        payload = {"username": username, "password": password}
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(login_url, headers=headers, json=payload, timeout=10.0)
+                if response.status_code == 200:
+                    data = response.json()
+                    token = data.get("token")
+                    if token:
+                        # Logout
+                        logout_headers = {
+                            "Api-Key": api_key,
+                            "Authorization": f"Bearer {token}",
+                            "User-Agent": "SubtitleDownloader v1.0",
+                        }
+                        try:
+                            await client.delete(logout_url, headers=logout_headers, timeout=5.0)
+                        except Exception:
+                            pass
+                        return (True, True)
+                    return (None, None)
+
+                if response.status_code == 403:
+                    return (False, None)
+
+                if response.status_code == 401:
+                    return (True, False)
+
+                return (None, None)
+            except httpx.TransportError as e:
+                logger.warning(f"OpenSubtitles connection error: {e}")
+                return (None, None)
+            except Exception as e:
+                logger.warning(f"OpenSubtitles validation error: {e}")
+                return (None, None)
+
+    # Fallback: Validate Key Only (if missing login details)
+    check_url = "https://api.opensubtitles.com/api/v1/infos/formats"
     headers = {
         "Api-Key": api_key,
-        "Content-Type": "application/json",
         "User-Agent": "SubtitleDownloader v1.0",
     }
-    payload = {"username": username, "password": password}
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(login_url, headers=headers, json=payload, timeout=10.0)
+            response = await client.get(check_url, headers=headers, timeout=5.0)
             if response.status_code == 200:
-                data = response.json()
-                token = data.get("token")
-                if token:
-                    # Logout
-                    logout_headers = {
-                        "Api-Key": api_key,
-                        "Authorization": f"Bearer {token}",
-                        "User-Agent": "SubtitleDownloader v1.0",
-                    }
-                    try:
-                        await client.delete(logout_url, headers=logout_headers, timeout=5.0)
-                    except Exception:
-                        pass
-                    return (True, True)
-                return (None, None)
-
+                return (True, None)
             if response.status_code == 403:
                 return (False, None)
-
-            if response.status_code == 401:
-                return (True, False)
-
-            return (None, None)
-        except httpx.TransportError as e:
-            logger.warning(f"OpenSubtitles connection error: {e}")
             return (None, None)
         except Exception as e:
-            logger.warning(f"OpenSubtitles validation error: {e}")
+            logger.warning(f"OpenSubtitles key check error: {e}")
             return (None, None)
 
 
@@ -146,10 +169,13 @@ async def validate_all_settings(db: AsyncSession) -> None:
         settings_row.tmdb_valid = await validate_tmdb(tmdb_key) if tmdb_key else None
         settings_row.omdb_valid = await validate_omdb(omdb_key) if omdb_key else None
 
-        if os_api_key and os_username and os_password:
-            key_valid, login_valid = await validate_opensubtitles(
-                os_api_key, os_username, os_password
-            )
+        if os_api_key:
+            # Validate Key (and Login if creds are present)
+            # Ensure types are compatible (os_username/password might be None)
+            u_arg = str(os_username) if os_username else None
+            p_arg = str(os_password) if os_password else None
+
+            key_valid, login_valid = await validate_opensubtitles(str(os_api_key), u_arg, p_arg)
             settings_row.opensubtitles_key_valid = key_valid
             settings_row.opensubtitles_valid = login_valid
         else:

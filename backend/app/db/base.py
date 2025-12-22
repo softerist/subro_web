@@ -20,6 +20,7 @@ from app.db.models.dashboard import DashboardTile  # noqa: F401
 from app.db.models.deepl_usage import DeepLUsage  # noqa: F401
 from app.db.models.job import Job  # noqa: F401
 from app.db.models.storage_path import StoragePath  # noqa: F401
+from app.db.models.translation_log import TranslationLog  # noqa: F401
 from app.db.models.user import User  # noqa: F401
 # Example for future models:
 # from app.db.models.another_model import AnotherModel

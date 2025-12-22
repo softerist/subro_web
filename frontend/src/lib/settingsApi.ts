@@ -18,6 +18,7 @@ export interface SettingsUpdate {
   qbittorrent_username?: string | null;
   qbittorrent_password?: string | null;
   allowed_media_folders?: string[];
+  google_cloud_credentials?: string | null;
 }
 
 export interface DeepLUsage {
@@ -35,6 +36,11 @@ export interface SettingsRead extends SettingsUpdate {
   omdb_valid?: boolean;
   opensubtitles_valid?: boolean;
   opensubtitles_key_valid?: boolean;
+  // Google Cloud status
+  google_cloud_configured?: boolean;
+  google_cloud_project_id?: string | null;
+  google_cloud_valid?: boolean | null;
+  google_cloud_error?: string | null;
 }
 
 export interface SetupComplete {
@@ -106,6 +112,64 @@ export const testDeepLKey = async (
     {
       api_key: apiKey,
     },
+  );
+  return response.data;
+};
+
+// --- Translation Stats API ---
+
+export interface AggregateStats {
+  total_translations: number;
+  total_characters: number;
+  deepl_characters: number;
+  google_characters: number;
+  success_count: number;
+  failure_count: number;
+}
+
+export interface TranslationStatsResponse {
+  all_time: AggregateStats;
+  last_30_days: AggregateStats;
+  last_7_days: AggregateStats;
+}
+
+export interface TranslationLogEntry {
+  id: number;
+  timestamp: string;
+  file_name: string;
+  source_language?: string;
+  target_language: string;
+  service_used: string;
+  characters_billed: number;
+  deepl_characters: number;
+  google_characters: number;
+  status: string;
+  output_file_path?: string | null;
+}
+
+export interface TranslationHistoryResponse {
+  items: TranslationLogEntry[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+// Admin endpoint - get translation statistics
+export const getTranslationStats =
+  async (): Promise<TranslationStatsResponse> => {
+    const response = await api.get<TranslationStatsResponse>(
+      "/v1/translation-stats",
+    );
+    return response.data;
+  };
+
+// Admin endpoint - get translation history
+export const getTranslationHistory = async (
+  page: number = 1,
+  pageSize: number = 10,
+): Promise<TranslationHistoryResponse> => {
+  const response = await api.get<TranslationHistoryResponse>(
+    `/v1/translation-stats/history?page=${page}&page_size=${pageSize}`,
   );
   return response.data;
 };

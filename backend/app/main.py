@@ -57,12 +57,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.routers.admin import admin_router
 from app.api.routers.auth import auth_router as custom_auth_router
 from app.api.routers.dashboard import router as dashboard_router
+from app.api.routers.files import router as files_router
 from app.api.routers.jobs import router as jobs_router
 from app.api.routers.settings import router as settings_router
 
 # *** NEW IMPORTS FOR SETUP AND SETTINGS ROUTERS ***
 from app.api.routers.setup import router as setup_router
 from app.api.routers.storage_paths import router as storage_paths_router
+from app.api.routers.translation_stats import router as translation_stats_router
 from app.api.routers.users import router as users_router
 
 # *** NEW IMPORT FOR WEBSOCKET ROUTER ***
@@ -308,6 +310,12 @@ api_v1_router.include_router(storage_paths_router, prefix="/storage-paths", tags
 api_v1_router.include_router(setup_router)  # prefix is already "/setup" in router
 # Settings requires admin auth - used for updating configuration after setup
 api_v1_router.include_router(settings_router)  # prefix is already "/settings" in router
+# Translation statistics - requires admin auth
+api_v1_router.include_router(
+    translation_stats_router
+)  # prefix is already "/translation-stats" in router
+# File download - requires admin auth
+api_v1_router.include_router(files_router)  # prefix is already "/files" in router
 
 # *** INCLUDE THE WEBSOCKET ROUTER HERE ***
 # Note: WebSocket routers are typically included directly on the `app` instance

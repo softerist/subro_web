@@ -44,6 +44,13 @@ class AppSettings(Base):
     # Stored as JSON array string (e.g., '["/mnt/media", "/data/videos"]')
     allowed_media_folders: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # --- Google Cloud Translate ---
+    # Encrypted JSON blob containing the full service account credentials
+    google_cloud_credentials: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Extracted project_id for display purposes (not encrypted)
+    google_cloud_project_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_cloud_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
+
     # --- Setup State ---
     setup_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 

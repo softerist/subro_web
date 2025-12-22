@@ -61,6 +61,7 @@ try:
     # Example: Using a hypothetical settings object
     from app.core.config import settings
     from app.db.models.deepl_usage import DeepLUsage
+    from app.db.models.translation_log import TranslationLog
     from app.db.session import SyncSessionLocal
 
     CONFIG_LOADER_AVAILABLE = True
@@ -69,6 +70,7 @@ except ImportError:
     settings = None
     SyncSessionLocal = None
     DeepLUsage = None
+    TranslationLog = None
     CONFIG_LOADER_AVAILABLE = False
     DATABASE_AVAILABLE = False
     # In a real application, handle missing config loader more robustly.
@@ -1997,6 +1999,7 @@ class TranslationManager:
         file_name: str,
         service_details: list[str],
         billing_details: list[dict] | None = None,
+        output_file_path: str | None = None,
     ):
         """Logs translation usage details to the JSON log file and Database."""
         global TRANSLATION_LOG_FILE, DATABASE_AVAILABLE, SyncSessionLocal, DeepLUsage
@@ -2011,7 +2014,9 @@ class TranslationManager:
                     # Update counts for each key used
                     if billing_details:
                         # Aggregate by service
-                        deepl_usage_updates = {}  # {key_suffix: {"count": int, "limit": int, "valid": bool}}
+                        deepl_usage_updates = {}  # {key_hash: {"count": int, "limit": int, "valid": bool}}
+
+                        import hashlib
 
                         for detail in billing_details:
                             service = detail.get("service", "")
@@ -2020,42 +2025,47 @@ class TranslationManager:
                                     idx = int(service.replace("deepl_key_", "")) - 1
                                     if 0 <= idx < len(self.deepl_keys):
                                         key_str = self.deepl_keys[idx]
-                                        suffix = key_str[-8:] if len(key_str) >= 8 else key_str
+                                        # Use standard SHA256 hash for identifier
+                                        key_hash = hashlib.sha256(
+                                            key_str.strip().encode()
+                                        ).hexdigest()
 
                                         # Get latest info from cache or just use billed chars
                                         info = self.deepl_usage_cache.get(idx, {})
                                         count_incr = detail.get("chars", 0)
 
-                                        if suffix not in deepl_usage_updates:
-                                            deepl_usage_updates[suffix] = {
+                                        if key_hash not in deepl_usage_updates:
+                                            deepl_usage_updates[key_hash] = {
                                                 "count_incr": 0,
                                                 "limit": info.get("limit", 500000),
                                                 "valid": info.get("valid", True),
                                             }
-                                        deepl_usage_updates[suffix]["count_incr"] += count_incr
+                                        deepl_usage_updates[key_hash]["count_incr"] += count_incr
                                         # Update limit/validity if we have more recent info in cache
                                         if info.get("limit"):
-                                            deepl_usage_updates[suffix]["limit"] = info["limit"]
+                                            deepl_usage_updates[key_hash]["limit"] = info["limit"]
                                         if "valid" in info:
-                                            deepl_usage_updates[suffix]["valid"] = info["valid"]
+                                            deepl_usage_updates[key_hash]["valid"] = info["valid"]
                                 except (ValueError, IndexError):
                                     continue
 
-                        for suffix, data in deepl_usage_updates.items():
+                        for key_hash, data in deepl_usage_updates.items():
                             usage_record = (
                                 db.query(DeepLUsage)
-                                .filter(DeepLUsage.key_identifier == suffix)
+                                .filter(DeepLUsage.key_identifier == key_hash)
                                 .first()
                             )
                             if not usage_record:
                                 usage_record = DeepLUsage(
-                                    key_identifier=suffix,
+                                    key_identifier=key_hash,
                                     character_count=data["count_incr"],
                                     character_limit=data["limit"],
                                     valid=data["valid"],
                                 )
                                 db.add(usage_record)
-                                logger.debug(f"Created new DeepL usage record for suffix: {suffix}")
+                                logger.debug(
+                                    f"Created new DeepL usage record for key: {key_hash[:16]}..."
+                                )
                             else:
                                 usage_record.character_count += data["count_incr"]
                                 # Only update limit if it changed and we have a valid value
@@ -2063,10 +2073,33 @@ class TranslationManager:
                                     usage_record.character_limit = data["limit"]
                                 usage_record.valid = data["valid"]
                                 logger.debug(
-                                    f"Updated DeepL usage for suffix {suffix}: +{data['count_incr']} chars"
+                                    f"Updated DeepL usage for key {key_hash[:16]}...: +{data['count_incr']} chars"
                                 )
 
-                    db.commit()
+                        db.commit()
+
+                    # --- NEW: Log the translation job itself ---
+                    if TranslationLog:
+                        # Determine overall status
+                        overall_status = self._determine_overall_service(service_details)
+
+                        log_entry = TranslationLog(
+                            file_name=file_name,
+                            source_language=None,  # Could be enhanced to pass this
+                            target_language=self.target_lang or "unknown",
+                            service_used=overall_status,
+                            characters_billed=deepl_chars + google_chars,
+                            deepl_characters=deepl_chars,
+                            google_characters=google_chars,
+                            status="success"
+                            if overall_status not in ("failed", "partial_failure")
+                            else overall_status,
+                            output_file_path=output_file_path,
+                        )
+                        db.add(log_entry)
+                        db.commit()
+                        logger.debug(f"Logged translation job for file: {file_name}")
+
             except Exception as e:
                 logger.error(f"Failed to update DeepL usage in database: {e}", exc_info=True)
 

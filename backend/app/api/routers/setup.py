@@ -91,6 +91,14 @@ async def complete_setup(
         created_user = await user_manager.create(admin_user, safe=False)
         logger.info(f"Admin user created via setup wizard: {created_user.email}")
     except Exception as e:
+        error_msg = str(e).lower()
+        # Check for user already exists (fastapi-users raises this)
+        if "already exists" in error_msg or "UserAlreadyExists" in type(e).__name__:
+            logger.warning(f"Admin user already exists: {setup_data.admin_email}")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A user with email '{setup_data.admin_email}' already exists. Please use a different email or login with the existing account.",
+            ) from e
         logger.error(f"Failed to create admin user during setup: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
