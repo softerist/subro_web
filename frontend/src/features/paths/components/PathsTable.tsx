@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Loader2, Trash2 } from "lucide-react";
@@ -12,22 +13,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 
 import { pathsApi } from "../api/paths";
-import { useState } from "react";
 import { StoragePath } from "../types";
 
 export function PathsTable() {
   const queryClient = useQueryClient();
-  const [pathToDelete, setPathToDelete] = useState<StoragePath | null>(null);
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    path: StoragePath | null;
+    positionY?: number;
+  }>({ open: false, path: null });
 
   const {
     data: paths,
@@ -43,7 +40,7 @@ export function PathsTable() {
     onSuccess: () => {
       toast.success("Path removed successfully");
       queryClient.invalidateQueries({ queryKey: ["storage-paths"] });
-      setPathToDelete(null);
+      setConfirmState({ open: false, path: null });
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (error: any) => {
@@ -51,13 +48,18 @@ export function PathsTable() {
     },
   });
 
-  const handleDeleteClick = (path: StoragePath) => {
-    setPathToDelete(path);
+  const handleDeleteRequest = (path: StoragePath, event: React.MouseEvent) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setConfirmState({
+      open: true,
+      path,
+      positionY: rect.top + window.scrollY,
+    });
   };
 
-  const confirmDelete = () => {
-    if (pathToDelete) {
-      deleteMutation.mutate(pathToDelete.id);
+  const executeDelete = async () => {
+    if (confirmState.path) {
+      deleteMutation.mutate(confirmState.path.id);
     }
   };
 
@@ -106,15 +108,15 @@ export function PathsTable() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleDeleteClick(path)}
+                      onClick={(e) => handleDeleteRequest(path, e)}
                       disabled={
                         deleteMutation.isPending &&
-                        deleteMutation.variables === path.id
+                        confirmState.path?.id === path.id
                       }
                       title="Remove Path"
                     >
                       {deleteMutation.isPending &&
-                      deleteMutation.variables === path.id ? (
+                      confirmState.path?.id === path.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Trash2 className="h-4 w-4 text-destructive" />
@@ -128,41 +130,29 @@ export function PathsTable() {
         </Table>
       </div>
 
-      <Dialog
-        open={!!pathToDelete}
-        onOpenChange={(open) => !open && setPathToDelete(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove Path</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to remove this path? <br />
-              <span className="font-mono font-medium text-foreground">
-                {pathToDelete?.path}
+      <ConfirmDialog
+        open={confirmState.open}
+        onOpenChange={(open) => setConfirmState((prev) => ({ ...prev, open }))}
+        title="Remove Path?"
+        description={
+          confirmState.path ? (
+            <>
+              Are you sure you want to remove this path?
+              <br />
+              <span className="font-mono text-white">
+                {confirmState.path.path}
               </span>
-              <br />
-              <br />
-              This will purely remove it from the allowed list. Use caution.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPathToDelete(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmDelete}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                "Remove"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </>
+          ) : (
+            "Are you sure you want to remove this path?"
+          )
+        }
+        onConfirm={executeDelete}
+        isLoading={deleteMutation.isPending}
+        variant="destructive"
+        confirmLabel="Remove"
+        positionY={confirmState.positionY}
+      />
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuthStore } from "@/store/authStore";
-import { Pencil, Plus, Trash2, AlertCircle } from "lucide-react";
+import { Plus, Trash2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,11 +48,13 @@ export default function SettingsPage() {
     index?: number;
     title: string;
     description: React.ReactNode;
+    positionY?: number;
   }>({
     open: false,
     type: null,
     title: "",
     description: null,
+    positionY: undefined,
   });
 
   // Translation Statistics State
@@ -198,23 +200,27 @@ export default function SettingsPage() {
     }
   };
 
-  const handleKeyDeleteRequest = (index: number) => {
+  const handleKeyDeleteRequest = (index: number, event: React.MouseEvent) => {
+    const rect = event.currentTarget.getBoundingClientRect();
     setConfirmState({
       open: true,
       type: "deepl",
       index,
       title: "Remove API Key?",
       description: "Are you sure you want to remove this DeepL API key?",
+      positionY: rect.top + window.scrollY,
     });
   };
 
-  const handleGoogleRemoveRequest = () => {
+  const handleGoogleRemoveRequest = (event: React.MouseEvent) => {
+    const rect = event.currentTarget.getBoundingClientRect();
     setConfirmState({
       open: true,
       type: "google",
       title: "Remove Google Cloud Configuration?",
       description:
         "Are you sure you want to remove the Google Cloud credentials?",
+      positionY: rect.top + window.scrollY,
     });
   };
 
@@ -345,39 +351,10 @@ export default function SettingsPage() {
                 file.
               </CardDescription>
 
-              <div className="mt-4 ml-10 max-w-md border border-slate-700 rounded-md overflow-hidden bg-slate-900/40">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-800 text-slate-400 font-medium">
-                    <tr>
-                      <th className="px-3 py-2">Priority</th>
-                      <th className="px-3 py-2">Source</th>
-                      <th className="px-3 py-2">Example</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-700/50 text-slate-300">
-                    <tr>
-                      <td className="px-3 py-2 text-cyan-400 font-bold">
-                        1 (Highest)
-                      </td>
-                      <td className="px-3 py-2">Database</td>
-                      <td className="px-3 py-2 text-slate-500">
-                        Set via Settings UI
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="px-3 py-2 text-slate-400">2 (Fallback)</td>
-                      <td className="px-3 py-2">Environment</td>
-                      <td className="px-3 py-2 text-slate-500">
-                        .env.prod file
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div className="px-3 py-2 text-[10px] text-slate-500 bg-slate-900/60 border-t border-slate-700/50">
-                  If DB value is null/empty, system automatically uses
-                  environment variable.
-                </div>
-              </div>
+              <p className="mt-2 text-xs text-slate-500 italic">
+                💡 Settings saved here override environment variables
+                (.env.prod).
+              </p>
             </CardHeader>
             <CardContent className="space-y-8">
               {/* Metadata Providers Section */}
@@ -391,109 +368,85 @@ export default function SettingsPage() {
                   </h3>
                 </div>
                 <div className="pl-10 space-y-4">
-                  <div
-                    className={`max-w-md rounded-xl border-2 p-1 transition-all duration-500 ${
-                      settings?.tmdb_valid === true
-                        ? "border-emerald-500/30 bg-emerald-500/5"
-                        : settings?.tmdb_valid === false
-                          ? "border-red-500/30 bg-red-500/5"
-                          : "border-transparent"
-                    }`}
-                  >
-                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
-                      <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
+                  <div className="max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-xs uppercase tracking-wider text-slate-500 block">
                         TMDB API Key
                       </Label>
-                      <Input
-                        placeholder={
-                          settings?.tmdb_api_key || "Enter API key..."
-                        }
-                        value={formData.tmdb_api_key || ""}
-                        onChange={(e) => {
-                          const rect = e.target.getBoundingClientRect();
-                          updateEditPosition(rect.top + window.scrollY);
-                          updateField("tmdb_api_key", e.target.value);
-                        }}
-                        onKeyDown={handleInputKeyDown}
-                        className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-cyan-500"
-                      />
-                      <div className="mt-2 text-left">
-                        {settings?.tmdb_api_key &&
-                        settings.tmdb_api_key.trim() !== "" ? (
-                          <span
-                            className={`px-2 py-0.5 text-xs rounded-full ${
-                              settings?.tmdb_valid === true
-                                ? "bg-emerald-500/20 text-emerald-400"
-                                : settings?.tmdb_valid === false
-                                  ? "bg-red-500/20 text-red-400"
-                                  : "bg-yellow-500/20 text-yellow-400"
-                            }`}
-                          >
-                            {settings?.tmdb_valid === true
-                              ? "Valid"
+                      {settings?.tmdb_api_key &&
+                      settings.tmdb_api_key.trim() !== "" ? (
+                        <span
+                          className={`px-2 py-0.5 text-xs rounded-full ${
+                            settings?.tmdb_valid === true
+                              ? "bg-emerald-500/20 text-emerald-400"
                               : settings?.tmdb_valid === false
-                                ? "Invalid"
-                                : "Not Validated"}
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
-                            Not Connected
-                          </span>
-                        )}
-                      </div>
+                                ? "bg-red-500/20 text-red-400"
+                                : "bg-yellow-500/20 text-yellow-400"
+                          }`}
+                        >
+                          {settings?.tmdb_valid === true
+                            ? "Valid"
+                            : settings?.tmdb_valid === false
+                              ? "Invalid"
+                              : "Not Validated"}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
+                          Not Connected
+                        </span>
+                      )}
                     </div>
+                    <Input
+                      placeholder={settings?.tmdb_api_key || "Enter API key..."}
+                      value={formData.tmdb_api_key || ""}
+                      onChange={(e) => {
+                        const rect = e.target.getBoundingClientRect();
+                        updateEditPosition(rect.top + window.scrollY);
+                        updateField("tmdb_api_key", e.target.value);
+                      }}
+                      onKeyDown={handleInputKeyDown}
+                      className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-cyan-500"
+                    />
                   </div>
-                  <div
-                    className={`max-w-md rounded-xl border-2 p-1 transition-all duration-500 ${
-                      settings?.omdb_valid === true
-                        ? "border-emerald-500/30 bg-emerald-500/5"
-                        : settings?.omdb_valid === false
-                          ? "border-red-500/30 bg-red-500/5"
-                          : "border-transparent"
-                    }`}
-                  >
-                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
-                      <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
+                  <div className="max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-xs uppercase tracking-wider text-slate-500 block">
                         OMDB API Key
                       </Label>
-                      <Input
-                        placeholder={
-                          settings?.omdb_api_key || "Enter API key..."
-                        }
-                        value={formData.omdb_api_key || ""}
-                        onChange={(e) => {
-                          const rect = e.target.getBoundingClientRect();
-                          updateEditPosition(rect.top + window.scrollY);
-                          updateField("omdb_api_key", e.target.value);
-                        }}
-                        onKeyDown={handleInputKeyDown}
-                        className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-cyan-500"
-                      />
-                      <div className="mt-2 text-left">
-                        {settings?.omdb_api_key &&
-                        settings.omdb_api_key.trim() !== "" ? (
-                          <span
-                            className={`px-2 py-0.5 text-xs rounded-full ${
-                              settings?.omdb_valid === true
-                                ? "bg-emerald-500/20 text-emerald-400"
-                                : settings?.omdb_valid === false
-                                  ? "bg-red-500/20 text-red-400"
-                                  : "bg-yellow-500/20 text-yellow-400"
-                            }`}
-                          >
-                            {settings?.omdb_valid === true
-                              ? "Valid"
+                      {settings?.omdb_api_key &&
+                      settings.omdb_api_key.trim() !== "" ? (
+                        <span
+                          className={`px-2 py-0.5 text-xs rounded-full ${
+                            settings?.omdb_valid === true
+                              ? "bg-emerald-500/20 text-emerald-400"
                               : settings?.omdb_valid === false
-                                ? "Invalid"
-                                : "Not Validated"}
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
-                            Not Connected
-                          </span>
-                        )}
-                      </div>
+                                ? "bg-red-500/20 text-red-400"
+                                : "bg-yellow-500/20 text-yellow-400"
+                          }`}
+                        >
+                          {settings?.omdb_valid === true
+                            ? "Valid"
+                            : settings?.omdb_valid === false
+                              ? "Invalid"
+                              : "Not Validated"}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
+                          Not Connected
+                        </span>
+                      )}
                     </div>
+                    <Input
+                      placeholder={settings?.omdb_api_key || "Enter API key..."}
+                      value={formData.omdb_api_key || ""}
+                      onChange={(e) => {
+                        const rect = e.target.getBoundingClientRect();
+                        updateEditPosition(rect.top + window.scrollY);
+                        updateField("omdb_api_key", e.target.value);
+                      }}
+                      onKeyDown={handleInputKeyDown}
+                      className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-cyan-500"
+                    />
                   </div>
                 </div>
               </div>
@@ -509,140 +462,134 @@ export default function SettingsPage() {
                   </h3>
                 </div>
                 <div className="pl-10 space-y-4">
-                  <div
-                    className={`max-w-md rounded-xl border-2 p-1 transition-all duration-500 ${
-                      settings?.opensubtitles_key_valid === true
-                        ? "border-emerald-500/30 bg-emerald-500/5"
-                        : settings?.opensubtitles_key_valid === false
-                          ? "border-red-500/30 bg-red-500/5"
-                          : "border-transparent"
-                    }`}
-                  >
-                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
-                      <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
+                  <div className="max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-xs uppercase tracking-wider text-slate-500 block">
                         API Key
                       </Label>
-                      <Input
-                        placeholder={
-                          settings?.opensubtitles_api_key || "Enter API key..."
-                        }
-                        value={formData.opensubtitles_api_key || ""}
-                        onChange={(e) => {
-                          const rect = e.target.getBoundingClientRect();
-                          updateEditPosition(rect.top + window.scrollY);
-                          updateField("opensubtitles_api_key", e.target.value);
-                        }}
-                        onKeyDown={handleInputKeyDown}
-                        className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
-                      />
-                      <div className="mt-2 text-left">
-                        {settings?.opensubtitles_api_key &&
-                        settings.opensubtitles_api_key.trim() !== "" ? (
-                          <span
-                            className={`px-2 py-0.5 text-xs rounded-full ${
-                              settings?.opensubtitles_key_valid === true
-                                ? "bg-emerald-500/20 text-emerald-400"
-                                : settings?.opensubtitles_key_valid === false
-                                  ? "bg-red-500/20 text-red-400"
-                                  : "bg-yellow-500/20 text-yellow-400"
-                            }`}
-                          >
-                            {settings?.opensubtitles_key_valid === true
-                              ? "Valid"
+                      {settings?.opensubtitles_api_key &&
+                      settings.opensubtitles_api_key.trim() !== "" ? (
+                        <span
+                          className={`px-2 py-0.5 text-xs rounded-full ${
+                            settings?.opensubtitles_key_valid === true
+                              ? "bg-emerald-500/20 text-emerald-400"
                               : settings?.opensubtitles_key_valid === false
-                                ? "Invalid"
-                                : "Not Validated"}
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
-                            Not Connected
-                          </span>
-                        )}
-                      </div>
+                                ? "bg-red-500/20 text-red-400"
+                                : "bg-yellow-500/20 text-yellow-400"
+                          }`}
+                        >
+                          {settings?.opensubtitles_key_valid === true
+                            ? "Valid"
+                            : settings?.opensubtitles_key_valid === false
+                              ? "Invalid"
+                              : "Not Validated"}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
+                          Not Connected
+                        </span>
+                      )}
                     </div>
+                    <Input
+                      placeholder={
+                        settings?.opensubtitles_api_key || "Enter API key..."
+                      }
+                      value={formData.opensubtitles_api_key || ""}
+                      onChange={(e) => {
+                        const rect = e.target.getBoundingClientRect();
+                        updateEditPosition(rect.top + window.scrollY);
+                        updateField("opensubtitles_api_key", e.target.value);
+                      }}
+                      onKeyDown={handleInputKeyDown}
+                      className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
+                    />
                   </div>
-                  <div
-                    className={`max-w-md rounded-xl border-2 p-1 space-y-4 transition-all duration-500 ${
-                      settings?.opensubtitles_valid === true
-                        ? "border-emerald-500/30 bg-emerald-500/5"
-                        : settings?.opensubtitles_valid === false
-                          ? "border-red-500/30 bg-red-500/5"
-                          : "border-transparent"
-                    }`}
-                  >
-                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
-                      <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
-                        Username
+                  <div className="max-w-md rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
+                    <div className="flex items-center justify-between mb-4">
+                      <Label className="text-xs uppercase tracking-wider text-slate-500 block">
+                        Credentials
                       </Label>
-                      <Input
-                        placeholder={
-                          settings?.opensubtitles_username ||
-                          "Enter username..."
-                        }
-                        value={formData.opensubtitles_username || ""}
-                        onChange={(e) => {
-                          const rect = e.target.getBoundingClientRect();
-                          updateEditPosition(rect.top + window.scrollY);
-                          updateField("opensubtitles_username", e.target.value);
-                        }}
-                        onKeyDown={handleInputKeyDown}
-                        className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
-                      />
-                    </div>
-                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
-                      <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
-                        Password
-                      </Label>
-                      <Input
-                        type="password"
-                        placeholder={
-                          settings?.opensubtitles_password
-                            ? "••••••••"
-                            : "Enter password..."
-                        }
-                        value={formData.opensubtitles_password || ""}
-                        onChange={(e) => {
-                          const rect = e.target.getBoundingClientRect();
-                          updateEditPosition(rect.top + window.scrollY);
-                          updateField("opensubtitles_password", e.target.value);
-                        }}
-                        onKeyDown={handleInputKeyDown}
-                        className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
-                      />
-                      <div className="mt-2 text-left">
-                        {(settings?.opensubtitles_username &&
-                          settings.opensubtitles_username.trim() !== "") ||
-                        (settings?.opensubtitles_password &&
-                          settings.opensubtitles_password.trim() !== "") ? (
-                          <span
-                            className={`px-2 py-0.5 text-xs rounded-full ${
-                              settings?.opensubtitles_valid === true
-                                ? "bg-emerald-500/20 text-emerald-400"
+                      {(settings?.opensubtitles_username &&
+                        settings.opensubtitles_username.trim() !== "") ||
+                      (settings?.opensubtitles_password &&
+                        settings.opensubtitles_password.trim() !== "") ? (
+                        <span
+                          className={`px-2 py-0.5 text-xs rounded-full ${
+                            settings?.opensubtitles_valid === true
+                              ? "bg-emerald-500/20 text-emerald-400"
+                              : settings?.opensubtitles_valid === false
+                                ? "bg-red-500/20 text-red-400"
+                                : "bg-yellow-500/20 text-yellow-400"
+                          }`}
+                        >
+                          {settings?.opensubtitles_valid === true
+                            ? "Valid"
+                            : !settings?.opensubtitles_username
+                              ? "Username Required"
+                              : !settings?.opensubtitles_password
+                                ? "Password Required"
                                 : settings?.opensubtitles_valid === false
-                                  ? "bg-red-500/20 text-red-400"
-                                  : "bg-yellow-500/20 text-yellow-400"
-                            }`}
-                          >
-                            {settings?.opensubtitles_valid === true
-                              ? "Connected"
-                              : !settings?.opensubtitles_username
-                                ? "Username Required"
-                                : !settings?.opensubtitles_password
-                                  ? "Password Required"
-                                  : settings?.opensubtitles_valid === false
-                                    ? "Invalid Credentials"
-                                    : settings?.opensubtitles_key_valid ===
-                                        false
-                                      ? "Valid API Key required"
-                                      : !settings?.opensubtitles_api_key
-                                        ? "API Key Invalid"
-                                        : "Not Validated"}
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
-                            Not Connected
-                          </span>
-                        )}
+                                  ? "Invalid Credentials"
+                                  : settings?.opensubtitles_key_valid === false
+                                    ? "Valid API Key required"
+                                    : !settings?.opensubtitles_api_key
+                                      ? "API Key Invalid"
+                                      : "Not Validated"}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
+                          Not Connected
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label className="text-[10px] uppercase tracking-widest text-slate-500">
+                          Username
+                        </Label>
+                        <Input
+                          placeholder={
+                            settings?.opensubtitles_username ||
+                            "Enter username..."
+                          }
+                          value={formData.opensubtitles_username || ""}
+                          onChange={(e) => {
+                            const rect = e.target.getBoundingClientRect();
+                            updateEditPosition(rect.top + window.scrollY);
+                            updateField(
+                              "opensubtitles_username",
+                              e.target.value,
+                            );
+                          }}
+                          onKeyDown={handleInputKeyDown}
+                          className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-[10px] uppercase tracking-widest text-slate-500">
+                          Password
+                        </Label>
+                        <Input
+                          type="password"
+                          placeholder={
+                            settings?.opensubtitles_password
+                              ? "••••••••"
+                              : "Enter password..."
+                          }
+                          value={formData.opensubtitles_password || ""}
+                          onChange={(e) => {
+                            const rect = e.target.getBoundingClientRect();
+                            updateEditPosition(rect.top + window.scrollY);
+                            updateField(
+                              "opensubtitles_password",
+                              e.target.value,
+                            );
+                          }}
+                          onKeyDown={handleInputKeyDown}
+                          className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
+                        />
                       </div>
                     </div>
                   </div>
@@ -680,12 +627,66 @@ export default function SettingsPage() {
                       const isEditing = editingKeyIndex === index;
                       const isMasked = key.includes("***");
 
+                      // Find validation status and usage for this key
+                      let status:
+                        | "valid"
+                        | "invalid"
+                        | "not_validated"
+                        | "not_connected" = "not_validated";
+                      let usage = undefined;
+
+                      if (!key.trim()) {
+                        status = "not_connected";
+                      } else {
+                        let suffix = key;
+                        if (key.length >= 8) {
+                          suffix = key.slice(-8);
+                        } else if (key.includes("...")) {
+                          suffix = key.replace(/^\.\.\./, "");
+                        }
+
+                        usage = settings?.deepl_usage?.find((u) =>
+                          u.key_alias.endsWith(suffix),
+                        );
+                        if (usage) {
+                          status =
+                            usage.valid === true
+                              ? "valid"
+                              : usage.valid === false
+                                ? "invalid"
+                                : "not_validated";
+                        }
+                      }
+
                       return (
                         <div
                           key={index}
-                          className="space-y-2 focus-within:relative focus-within:z-[50] transition-all duration-300"
+                          className="max-w-md bg-slate-900/50 rounded-lg border border-slate-700 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]"
                         >
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center justify-between mb-2">
+                            <Label className="text-xs uppercase tracking-wider text-slate-500 block">
+                              Key {index + 1}
+                            </Label>
+                            {status === "valid" ? (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-500/20 text-emerald-400">
+                                Valid
+                              </span>
+                            ) : status === "invalid" ? (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-red-500/20 text-red-400">
+                                Invalid
+                              </span>
+                            ) : status === "not_connected" ? (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
+                                Not Connected
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-500/20 text-yellow-400">
+                                Not Validated
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="relative group">
                             {isEditing ? (
                               <Input
                                 type="text"
@@ -734,46 +735,70 @@ export default function SettingsPage() {
                                     }
                                   }
                                 }}
-                                className="flex-1 min-w-0 max-w-md bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-violet-500 font-mono text-sm"
+                                className="w-full pr-10 bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-violet-500 font-mono text-sm"
                               />
                             ) : (
-                              <div className="flex-1 min-w-0 max-w-md px-3 py-2 bg-slate-800 border border-slate-600 rounded-md font-mono text-sm text-slate-300 overflow-hidden text-ellipsis whitespace-nowrap">
+                              <div
+                                className="w-full pr-10 px-3 py-2 bg-slate-800 border border-slate-600 rounded-md font-mono text-sm text-slate-300 overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer hover:border-violet-500 hover:bg-slate-700/50 transition-colors"
+                                onClick={() => setEditingKeyIndex(index)}
+                                title="Click to edit"
+                              >
                                 {isMasked
                                   ? key
                                   : `${"•".repeat(Math.max(0, key.length - 8))}${key.slice(-8)}`}
                               </div>
                             )}
 
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              {/* Edit Button */}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() =>
-                                  setEditingKeyIndex(isEditing ? null : index)
-                                }
-                                title={isEditing ? "Done editing" : "Edit key"}
-                              >
-                                <Pencil className="h-4 w-4" />
-                                <span className="sr-only">
-                                  {isEditing ? "Done" : "Edit"}
-                                </span>
-                              </Button>
-
-                              {/* Remove Button */}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleKeyDeleteRequest(index)}
-                                title="Remove key"
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                                <span className="sr-only">Remove</span>
-                              </Button>
-                            </div>
+                            {/* Remove Button - Inside Field */}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => handleKeyDeleteRequest(index, e)}
+                              className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-slate-500 hover:text-destructive hover:bg-transparent"
+                              title="Remove key"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Remove</span>
+                            </Button>
                           </div>
+
+                          {/* Usage Progress Bar - Integrated inside the box */}
+                          {usage && (
+                            <div className="mt-4 space-y-1">
+                              <div className="flex justify-between items-center text-[10px] text-slate-500">
+                                <span>Character Usage</span>
+                                <span>
+                                  {usage.character_count.toLocaleString()} /{" "}
+                                  {usage.valid
+                                    ? usage.character_limit.toLocaleString()
+                                    : "0"}
+                                </span>
+                              </div>
+                              {(() => {
+                                const percent =
+                                  usage.character_limit > 0
+                                    ? Math.min(
+                                        100,
+                                        Math.round(
+                                          (usage.character_count /
+                                            usage.character_limit) *
+                                            100,
+                                        ),
+                                      )
+                                    : 0;
+                                const isFull = percent >= 100;
+                                return (
+                                  <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full transition-all duration-500 ${isFull ? "bg-red-500" : "bg-blue-500"}`}
+                                      style={{ width: `${percent}%` }}
+                                    />
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -785,11 +810,7 @@ export default function SettingsPage() {
                         updateEditPosition(rect.top + window.scrollY);
                         setDeeplKeys([...deeplKeys, ""]);
                         setEditingKeyIndex(deeplKeys.length);
-                        // Also mark as having changes
-                        setFormData((prev) => ({
-                          ...prev,
-                          deepl_api_keys: [...deeplKeys, ""],
-                        }));
+                        // Don't mark as having changes yet - wait for user to type something
                       }}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 rounded-lg text-white text-sm font-medium transition-all shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40"
                     >
@@ -797,130 +818,6 @@ export default function SettingsPage() {
                       Add API Key
                     </button>
                   </div>
-
-                  {/* Historical Usage Stats - merged with current UI state */}
-                  {(() => {
-                    // Compute merged usage stats: combine current deeplKeys with backend settings.deepl_usage
-                    const mergedUsageStats: Array<{
-                      key_alias: string;
-                      character_count: number;
-                      character_limit: number;
-                      valid: boolean;
-                    }> = [];
-
-                    // Create a map of existing stats by suffix for quick lookup
-                    // Use a list to handle duplicates (e.g. valid & invalid keys with same suffix)
-                    const statsBySuffix = new Map<
-                      string,
-                      typeof mergedUsageStats
-                    >();
-                    if (settings?.deepl_usage) {
-                      settings.deepl_usage.forEach((usage) => {
-                        // Extract suffix from key_alias (remove leading "...")
-                        const suffix = usage.key_alias.replace(/^\.\.\./, "");
-                        const existing = statsBySuffix.get(suffix) || [];
-                        existing.push(usage);
-                        statsBySuffix.set(suffix, existing);
-                      });
-                    }
-
-                    // For each key in deeplKeys, find or create a usage stat
-                    deeplKeys.forEach((key) => {
-                      if (!key.trim()) return; // Skip empty keys
-
-                      // Extract suffix from current key (handle masked or raw)
-                      let suffix = key;
-                      if (key.length >= 8) {
-                        suffix = key.slice(-8);
-                      } else if (key.includes("...")) {
-                        suffix = key.replace(/^\.\.\./, ""); // Handle "...short" format if it occurs
-                      }
-
-                      const statsList = statsBySuffix.get(suffix);
-                      const existingStat =
-                        statsList && statsList.length > 0
-                          ? statsList.shift()
-                          : undefined;
-
-                      if (existingStat) {
-                        mergedUsageStats.push(existingStat);
-                      } else {
-                        // New unsaved key or failed match - show as unknown
-                        mergedUsageStats.push({
-                          key_alias: `...${suffix}`,
-                          character_count: 0,
-                          character_limit: 0,
-                          valid: undefined as unknown as boolean, // Mark as undefined
-                        });
-                      }
-                    });
-
-                    return mergedUsageStats.length > 0 ? (
-                      <div className="mt-4 pt-4 border-t border-slate-700 max-w-md">
-                        <h4 className="text-sm font-medium text-slate-400 mb-3">
-                          Usage
-                        </h4>
-                        <div className="space-y-2 focus-within:relative focus-within:z-[50] transition-all duration-300">
-                          {mergedUsageStats.map((usage, index) => {
-                            const percent =
-                              usage.character_limit > 0
-                                ? Math.min(
-                                    100,
-                                    Math.round(
-                                      (usage.character_count /
-                                        usage.character_limit) *
-                                        100,
-                                    ),
-                                  )
-                                : 0;
-                            const isFull = percent >= 100;
-                            const isValid = usage.valid === true;
-                            const isInvalid = usage.valid === false;
-
-                            return (
-                              <div
-                                key={index}
-                                className="bg-slate-900/50 rounded p-2 border border-slate-700"
-                              >
-                                <div className="flex justify-between items-center mb-1">
-                                  <span className="text-xs font-mono text-slate-300">
-                                    {usage.key_alias}
-                                  </span>
-                                  <div className="flex items-center gap-2">
-                                    {isValid ? (
-                                      <span className="text-[10px] text-emerald-400">
-                                        Valid
-                                      </span>
-                                    ) : isInvalid ? (
-                                      <span className="text-[10px] text-red-400">
-                                        Invalid
-                                      </span>
-                                    ) : (
-                                      <span className="text-[10px] text-slate-500">
-                                        Not Validated
-                                      </span>
-                                    )}
-                                    <span className="text-[10px] text-slate-500">
-                                      {usage.character_count.toLocaleString()} /{" "}
-                                      {usage.valid
-                                        ? usage.character_limit.toLocaleString()
-                                        : "0"}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-                                  <div
-                                    className={`h-full transition-all duration-500 ${isFull ? "bg-red-500" : "bg-blue-500"}`}
-                                    style={{ width: `${percent}%` }}
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : null;
-                  })()}
                 </div>
               </div>
 
@@ -928,28 +825,11 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
-                    <span className="text-white text-sm font-bold">G</span>
+                    <span className="text-white text-sm font-bold">☁️</span>
                   </div>
                   <h3 className="text-lg font-semibold text-white">
                     Google Cloud Translation
                   </h3>
-                  {settings?.google_cloud_configured && (
-                    <span
-                      className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
-                        settings?.google_cloud_valid === true
-                          ? "bg-emerald-500/20 text-emerald-400"
-                          : settings?.google_cloud_valid === false
-                            ? "bg-red-500/20 text-red-400"
-                            : "bg-yellow-500/20 text-yellow-400"
-                      }`}
-                    >
-                      {settings?.google_cloud_valid === true
-                        ? "Valid"
-                        : settings?.google_cloud_valid === false
-                          ? "Invalid"
-                          : "Not Validated"}
-                    </span>
-                  )}
                 </div>
                 <div className="pl-10 space-y-4 max-w-xl">
                   <p className="text-sm text-slate-500">
@@ -961,24 +841,43 @@ export default function SettingsPage() {
                   {settings?.google_cloud_configured &&
                   formData.google_cloud_credentials !== "" ? (
                     <div className="space-y-3">
-                      <div className="flex items-center gap-2 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                        <div className="flex-1">
-                          <div className="text-sm text-slate-400">
+                      <div className="max-w-md bg-slate-900/50 rounded-lg border border-slate-700 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
+                        <div className="flex items-center justify-between mb-2">
+                          <Label className="text-xs uppercase tracking-wider text-slate-500 block">
                             Project ID
-                          </div>
-                          <div className="text-white font-mono text-sm">
+                          </Label>
+                          <span
+                            className={`px-2 py-0.5 text-xs rounded-full ${
+                              settings?.google_cloud_valid === true
+                                ? "bg-emerald-500/20 text-emerald-400"
+                                : settings?.google_cloud_valid === false
+                                  ? "bg-red-500/20 text-red-400"
+                                  : "bg-yellow-500/20 text-yellow-400"
+                            }`}
+                          >
+                            {settings?.google_cloud_valid === true
+                              ? "Valid"
+                              : settings?.google_cloud_valid === false
+                                ? "Invalid"
+                                : "Not Validated"}
+                          </span>
+                        </div>
+                        <div className="relative group">
+                          <div className="w-full pr-10 px-3 py-2 bg-slate-800 border border-slate-600 rounded-md font-mono text-sm text-slate-300 overflow-hidden text-ellipsis whitespace-nowrap">
                             {settings.google_cloud_project_id || "Unknown"}
                           </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={handleGoogleRemoveRequest}
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-slate-500 hover:text-destructive hover:bg-transparent"
+                            title="Remove configuration"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Remove</span>
+                          </Button>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleGoogleRemoveRequest}
-                          className="text-red-400 hover:text-red-300"
-                        >
-                          Remove
-                        </Button>
                       </div>
                       {/* Error Message Display */}
                       {settings?.google_cloud_valid === false &&
@@ -992,13 +891,30 @@ export default function SettingsPage() {
                         )}
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      <div className="space-y-2 focus-within:relative focus-within:z-[50] transition-all duration-300">
-                        <Label className="text-slate-300">
-                          Service Account JSON
-                        </Label>
+                    <div className="space-y-4">
+                      <div className="max-w-md bg-slate-900/50 rounded-lg border border-slate-700 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
+                        <div className="flex items-center justify-between mb-2">
+                          <Label className="text-xs uppercase tracking-wider text-slate-500 block">
+                            JSON Config
+                          </Label>
+                          <span
+                            className={`px-2 py-0.5 text-xs rounded-full ${
+                              settings?.google_cloud_valid === true
+                                ? "bg-emerald-500/20 text-emerald-400"
+                                : settings?.google_cloud_valid === false
+                                  ? "bg-red-500/20 text-red-400"
+                                  : "bg-yellow-500/20 text-yellow-400"
+                            }`}
+                          >
+                            {settings?.google_cloud_valid === true
+                              ? "Valid"
+                              : settings?.google_cloud_valid === false
+                                ? "Invalid"
+                                : "Not Validated"}
+                          </span>
+                        </div>
                         <textarea
-                          className="w-full h-32 bg-slate-900 border border-slate-600 rounded-md p-3 text-white placeholder:text-slate-500 font-mono text-xs resize-none focus:border-blue-500 focus:outline-none"
+                          className="w-full h-32 bg-slate-800 border border-slate-600 rounded-md p-3 text-white placeholder:text-slate-500 font-mono text-xs resize-none focus:border-blue-500 focus:outline-none"
                           placeholder='{"type": "service_account", "project_id": "...", ...}'
                           onChange={(e) => {
                             const rect = e.target.getBoundingClientRect();
@@ -1020,8 +936,12 @@ export default function SettingsPage() {
                             onChange={(e) => {
                               const file = e.target.files?.[0];
                               if (file) {
-                                const rect = e.target.getBoundingClientRect();
-                                updateEditPosition(rect.top + window.scrollY);
+                                // Get position from the parent label (visible button), not hidden input
+                                const label = e.target.closest("label");
+                                if (label) {
+                                  const rect = label.getBoundingClientRect();
+                                  updateEditPosition(rect.top + window.scrollY);
+                                }
                                 const reader = new FileReader();
                                 reader.onload = (event) => {
                                   const content = event.target?.result;
@@ -1566,6 +1486,7 @@ export default function SettingsPage() {
         isLoading={isSaving}
         variant="destructive"
         confirmLabel="Remove"
+        positionY={confirmState.positionY}
       />
     </div>
   );
