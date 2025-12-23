@@ -1759,6 +1759,8 @@ class TranslationManager:
             file_name=input_file,
             service_details=list(set(service_summary_parts)),  # Unique raw services used
             billing_details=batch_billing_details,  # NEW: Pass detailed billing
+            target_lang=target_lang,
+            source_lang=source_lang,
         )
 
         total_duration = time.monotonic() - start_time
@@ -1952,6 +1954,8 @@ class TranslationManager:
             google_chars=google_billed,
             file_name=job.input_file,
             service_details=list(set(service_details)),
+            target_lang=job.target_language,
+            source_lang=job.source_language,
         )
 
         total_duration = time.monotonic() - start_time
@@ -2000,6 +2004,8 @@ class TranslationManager:
         service_details: list[str],
         billing_details: list[dict] | None = None,
         output_file_path: str | None = None,
+        target_lang: str | None = None,
+        source_lang: str | None = None,
     ):
         """Logs translation usage details to the JSON log file and Database."""
         global TRANSLATION_LOG_FILE, DATABASE_AVAILABLE, SyncSessionLocal, DeepLUsage
@@ -2085,8 +2091,8 @@ class TranslationManager:
 
                         log_entry = TranslationLog(
                             file_name=file_name,
-                            source_language=None,  # Could be enhanced to pass this
-                            target_language=self.target_lang or "unknown",
+                            source_language=source_lang,
+                            target_language=target_lang or "unknown",
                             service_used=overall_status,
                             characters_billed=deepl_chars + google_chars,
                             deepl_characters=deepl_chars,
