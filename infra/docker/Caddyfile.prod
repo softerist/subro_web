@@ -26,11 +26,11 @@
 
 		# Content-Security-Policy (CSP)
 		# default-src 'self': Only allow resources from same origin by default
-		# script-src 'self' 'unsafe-inline' cdn.jsdelivr.net: Allow Swagger UI scripts
-		# style-src 'self' 'unsafe-inline' cdn.jsdelivr.net: Allow Swagger UI styles
-		# img-src 'self' data: fastapi.tiangolo.com: Allow FastAPI favicon
-		# connect-src 'self' wss:: Allow XHR/Fetch to same origin and WebSockets
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com; connect-src 'self' wss: https://cdn.jsdelivr.net;"
+		# script-src 'self' 'unsafe-inline': Allow local scripts and inline scripts (required for some React hydration/tooling)
+		# style-src 'self' 'unsafe-inline': Allow local styles and inline styles (required for CSS-in-JS/Tailwind)
+		# img-src 'self' data:: Allow local images and data URIs (base64)
+		# connect-src 'self' wss:: Allow XHR/Fetch to same origin and WebSockets to secure protocols
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:;"
 	}
 }
 
@@ -47,7 +47,7 @@ localhost {
 
 	# 1. Handle API requests (including WebSockets at /api/v1/ws/...)
 	route @api {
-		reverse_proxy green-api-1:8000 {
+		reverse_proxy blue-api-1:8000 {
 			header_up Host {http.request.host}
 			header_up X-Real-IP {http.request.remote}
 		}
@@ -55,7 +55,7 @@ localhost {
 
 	# 2. Handle WebSocket requests
 	route @websockets {
-		reverse_proxy green-api-1:8000 {
+		reverse_proxy blue-api-1:8000 {
 			header_up Host {http.request.host}
 			header_up X-Real-IP {http.request.remote}
 			header_up Connection {http.request.header.Connection}
@@ -68,7 +68,7 @@ localhost {
 		# Serve static files from /srv (needs to be mounted/copied in prod Dockerfile)
 		# OR reverse proxy to a node server if using SSR / separate frontend container
 		# Since we have a 'frontend' service in docker-compose.prod which is likely nginx or similar:
-		reverse_proxy green-frontend-1:8080 {
+		reverse_proxy blue-frontend-1:8080 {
 			header_up Connection {http.request.header.Connection}
 			header_up Upgrade {http.request.header.Upgrade}
 		}
