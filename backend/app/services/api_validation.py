@@ -1,9 +1,13 @@
+import hashlib
 import logging
+from datetime import UTC, datetime
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.crud_app_settings import crud_app_settings
+from app.db.models.deepl_usage import DeepLUsage
 
 logger = logging.getLogger(__name__)
 
@@ -151,9 +155,37 @@ async def validate_opensubtitles(  # noqa: C901
             return (None, None)
 
 
+async def validate_deepl(api_key: str) -> dict:
+    """Helper to validate a DeepL key and return usage stats."""
+    api_key = api_key.strip()
+    is_free_key = ":fx" in api_key
+    url = "https://api-free.deepl.com/v2/usage" if is_free_key else "https://api.deepl.com/v2/usage"
+    headers = {"Authorization": f"DeepL-Auth-Key {api_key}"}
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers, timeout=5.0)
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "valid": True,
+                    "character_count": data.get("character_count", 0),
+                    "character_limit": data.get("character_limit", 0),
+                }
+            else:
+                logger.error(
+                    f"DeepL API validation failed. Status: {response.status_code}, Body: {response.text}"
+                )
+                return {"valid": False, "error": f"Status {response.status_code}"}
+        except Exception as e:
+            logger.warning(f"DeepL validation error for ...{api_key[-8:]}: {e}")
+            return {"valid": False, "error": str(e)}
+
+
 async def validate_all_settings(db: AsyncSession) -> None:
     """
     Fetch current settings, validate configured credentials, and update validation status in DB.
+    Also validates DeepL keys and updates/creates usage records.
     """
     try:
         settings_row = await crud_app_settings.get(db)
@@ -165,13 +197,11 @@ async def validate_all_settings(db: AsyncSession) -> None:
         os_username = await crud_app_settings.get_decrypted_value(db, "opensubtitles_username")
         os_password = await crud_app_settings.get_decrypted_value(db, "opensubtitles_password")
 
-        # Validate and Update
+        # 1. Validate General API keys
         settings_row.tmdb_valid = await validate_tmdb(tmdb_key) if tmdb_key else None
         settings_row.omdb_valid = await validate_omdb(omdb_key) if omdb_key else None
 
         if os_api_key:
-            # Validate Key (and Login if creds are present)
-            # Ensure types are compatible (os_username/password might be None)
             u_arg = str(os_username) if os_username else None
             p_arg = str(os_password) if os_password else None
 
@@ -182,12 +212,47 @@ async def validate_all_settings(db: AsyncSession) -> None:
             settings_row.opensubtitles_key_valid = None
             settings_row.opensubtitles_valid = None
 
+        # 2. Validate DeepL Keys
+        deepl_keys = await crud_app_settings.get_decrypted_value(db, "deepl_api_keys")
+        if deepl_keys and isinstance(deepl_keys, list):
+            for key in deepl_keys:
+                if not key or not isinstance(key, str) or not key.strip():
+                    continue
+
+                # Validate key using helper
+                usage_data = await validate_deepl(key)
+
+                # Upsert usage record
+                key_hash = hashlib.sha256(key.strip().encode()).hexdigest()
+
+                result = await db.execute(
+                    select(DeepLUsage).where(DeepLUsage.key_identifier == key_hash)
+                )
+                record = result.scalar_one_or_none()
+
+                if not record:
+                    record = DeepLUsage(key_identifier=key_hash)
+                    db.add(record)
+                    await db.flush()
+
+                if usage_data["valid"]:
+                    record.character_count = usage_data["character_count"]
+                    record.character_limit = usage_data["character_limit"]
+                    record.valid = True
+                else:
+                    record.character_count = 0
+                    record.character_limit = 0
+                    record.valid = False
+
+                record.last_updated = datetime.now(UTC)
+
         await db.commit()
         logger.info(
             f"Validation status updated: TMDB={settings_row.tmdb_valid}, "
             f"OMDB={settings_row.omdb_valid}, "
             f"OS_Key={settings_row.opensubtitles_key_valid}, "
-            f"OS_Login={settings_row.opensubtitles_valid}"
+            f"OS_Login={settings_row.opensubtitles_valid}, "
+            f"DeepL keys processed."
         )
 
     except Exception as e:

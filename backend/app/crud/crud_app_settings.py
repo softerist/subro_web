@@ -313,7 +313,7 @@ class CRUDAppSettings:
             opensubtitles_valid=db_settings.opensubtitles_valid,
             opensubtitles_key_valid=db_settings.opensubtitles_key_valid,
             # Google Cloud status
-            google_cloud_configured=db_settings.google_cloud_credentials is not None,
+            google_cloud_configured=bool(db_settings.google_cloud_credentials),
             google_cloud_project_id=(
                 mask_sensitive_value(db_settings.google_cloud_project_id, visible_chars=8)
                 if db_settings.google_cloud_project_id

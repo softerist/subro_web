@@ -30,13 +30,16 @@ class SettingsUpdate(SettingsBase):
     Accepts raw (unencrypted) values - encryption happens in CRUD layer.
     """
 
+    # Override base field to allow None (no update)
+    allowed_media_folders: list[str] | None = None
+
     # API Keys (will be encrypted before storage)
     tmdb_api_key: str | None = None
     omdb_api_key: str | None = None
     opensubtitles_api_key: str | None = None
     opensubtitles_username: str | None = None
     opensubtitles_password: str | None = None
-    deepl_api_keys: list[str] = Field(default_factory=list)
+    deepl_api_keys: list[str] | None = None
     qbittorrent_password: str | None = None
 
     # Google Cloud (JSON credentials blob)
@@ -51,7 +54,7 @@ class DeepLUsage(BaseModel):
     key_alias: str
     character_count: int
     character_limit: int
-    valid: bool
+    valid: bool | None = None
 
 
 class SettingsRead(SettingsBase):

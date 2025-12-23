@@ -22,6 +22,7 @@ import {
   getTranslationHistory,
   TranslationLogEntry,
 } from "@/lib/settingsApi";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 
 type SettingsTab = "integrations" | "qbittorrent" | "paths";
 
@@ -39,6 +40,20 @@ export default function SettingsPage() {
   // DeepL Key Management State
   const [deeplKeys, setDeeplKeys] = useState<string[]>([]);
   const [editingKeyIndex, setEditingKeyIndex] = useState<number | null>(null);
+
+  // Confirmation Dialog State
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    type: "deepl" | "google" | null;
+    index?: number;
+    title: string;
+    description: React.ReactNode;
+  }>({
+    open: false,
+    type: null,
+    title: "",
+    description: null,
+  });
 
   // Translation Statistics State
   const [translationStats, setTranslationStats] =
@@ -183,6 +198,92 @@ export default function SettingsPage() {
     }
   };
 
+  const handleKeyDeleteRequest = (index: number) => {
+    setConfirmState({
+      open: true,
+      type: "deepl",
+      index,
+      title: "Remove API Key?",
+      description: "Are you sure you want to remove this DeepL API key?",
+    });
+  };
+
+  const handleGoogleRemoveRequest = () => {
+    setConfirmState({
+      open: true,
+      type: "google",
+      title: "Remove Google Cloud Configuration?",
+      description:
+        "Are you sure you want to remove the Google Cloud credentials?",
+    });
+  };
+
+  const executeDelete = async () => {
+    setIsSaving(true);
+    setConfirmState((prev) => ({ ...prev, open: false })); // Close dialog immediately or wait? Better wait? No, user wants feedback.
+    // Actually confirming acts as "Save".
+    // We can keep dialog open if we wanted loading state there.
+    // ConfirmDialog has isLoading prop.
+    // Let's implement isLoading on Dialog.
+
+    try {
+      let updatePayload: Partial<SettingsUpdate> = {};
+      let successMsg = "";
+
+      if (confirmState.type === "deepl" && confirmState.index !== undefined) {
+        // DeepL Deletion
+        const newKeys = deeplKeys.filter((_, i) => i !== confirmState.index);
+        updatePayload = { deepl_api_keys: newKeys };
+        successMsg = "DeepL key removed successfully.";
+      } else if (confirmState.type === "google") {
+        // Google Cloud Removal
+        updatePayload = { google_cloud_credentials: "" };
+        successMsg = "Google Cloud configuration removed.";
+      }
+
+      if (Object.keys(updatePayload).length > 0) {
+        const updatedSettings = await updateSettings(updatePayload);
+        setSettings(updatedSettings);
+
+        // Update local state
+        if (updatedSettings.deepl_api_keys) {
+          setDeeplKeys(updatedSettings.deepl_api_keys);
+        }
+
+        // Clean up formData if it contained related pending changes
+        setFormData((prev) => {
+          const newData = { ...prev };
+          if (confirmState.type === "deepl") {
+            delete newData.deepl_api_keys;
+          } else if (confirmState.type === "google") {
+            delete newData.google_cloud_credentials;
+          }
+          return newData;
+        });
+
+        setSuccess(successMsg);
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    } catch (err) {
+      setError("Failed to execute removal.");
+    } finally {
+      setIsSaving(false);
+      setConfirmState((prev) => ({ ...prev, open: false, type: null }));
+    }
+  };
+
+  const handleDiscard = () => {
+    setFormData({});
+    setLastEditY(null);
+    setShowSaveBar(false);
+    if (saveBarTimeoutRef.current) {
+      clearTimeout(saveBarTimeoutRef.current);
+    }
+    if (settings?.deepl_api_keys) {
+      setDeeplKeys(settings.deepl_api_keys);
+    }
+  };
+
   const hasChanges = Object.keys(formData).length > 0;
 
   if (isLoading) {
@@ -299,7 +400,7 @@ export default function SettingsPage() {
                           : "border-transparent"
                     }`}
                   >
-                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[100]">
+                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
                       <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
                         TMDB API Key
                       </Label>
@@ -351,7 +452,7 @@ export default function SettingsPage() {
                           : "border-transparent"
                     }`}
                   >
-                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[100]">
+                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
                       <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
                         OMDB API Key
                       </Label>
@@ -417,7 +518,7 @@ export default function SettingsPage() {
                           : "border-transparent"
                     }`}
                   >
-                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[100]">
+                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
                       <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
                         API Key
                       </Label>
@@ -469,7 +570,7 @@ export default function SettingsPage() {
                           : "border-transparent"
                     }`}
                   >
-                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[100]">
+                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
                       <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
                         Username
                       </Label>
@@ -488,7 +589,7 @@ export default function SettingsPage() {
                         className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500"
                       />
                     </div>
-                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[100]">
+                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
                       <Label className="text-xs uppercase tracking-wider text-slate-500 mb-2 block">
                         Password
                       </Label>
@@ -582,7 +683,7 @@ export default function SettingsPage() {
                       return (
                         <div
                           key={index}
-                          className="space-y-2 focus-within:relative focus-within:z-[100] transition-all duration-300"
+                          className="space-y-2 focus-within:relative focus-within:z-[50] transition-all duration-300"
                         >
                           <div className="flex items-center gap-2 flex-wrap">
                             {isEditing ? (
@@ -665,22 +766,7 @@ export default function SettingsPage() {
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                onClick={(e) => {
-                                  const rect =
-                                    e.currentTarget.getBoundingClientRect();
-                                  updateEditPosition(rect.top + window.scrollY);
-                                  const newKeys = deeplKeys.filter(
-                                    (_, i) => i !== index,
-                                  );
-                                  setDeeplKeys(newKeys);
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    deepl_api_keys: newKeys.filter((k) =>
-                                      k.trim(),
-                                    ),
-                                  }));
-                                  setEditingKeyIndex(null);
-                                }}
+                                onClick={() => handleKeyDeleteRequest(index)}
                                 title="Remove key"
                               >
                                 <Trash2 className="h-4 w-4 text-destructive" />
@@ -774,7 +860,7 @@ export default function SettingsPage() {
                         <h4 className="text-sm font-medium text-slate-400 mb-3">
                           Usage
                         </h4>
-                        <div className="space-y-2 focus-within:relative focus-within:z-[100] transition-all duration-300">
+                        <div className="space-y-2 focus-within:relative focus-within:z-[50] transition-all duration-300">
                           {mergedUsageStats.map((usage, index) => {
                             const percent =
                               usage.character_limit > 0
@@ -888,13 +974,7 @@ export default function SettingsPage() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          onClick={(e) => {
-                            // Track position and clear credentials
-                            const rect =
-                              e.currentTarget.getBoundingClientRect();
-                            updateEditPosition(rect.top + window.scrollY);
-                            updateField("google_cloud_credentials", "");
-                          }}
+                          onClick={handleGoogleRemoveRequest}
                           className="text-red-400 hover:text-red-300"
                         >
                           Remove
@@ -913,7 +993,7 @@ export default function SettingsPage() {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="space-y-2 focus-within:relative focus-within:z-[100] transition-all duration-300">
+                      <div className="space-y-2 focus-within:relative focus-within:z-[50] transition-all duration-300">
                         <Label className="text-slate-300">
                           Service Account JSON
                         </Label>
@@ -1239,7 +1319,7 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2 focus-within:relative focus-within:z-[100] transition-all duration-300">
+                <div className="space-y-2 focus-within:relative focus-within:z-[50] transition-all duration-300">
                   <Label className="text-slate-300">Host</Label>
                   <Input
                     placeholder={settings?.qbittorrent_host || "Not configured"}
@@ -1253,7 +1333,7 @@ export default function SettingsPage() {
                     className="bg-slate-900 border-slate-600 text-white placeholder:text-slate-500"
                   />
                 </div>
-                <div className="space-y-2 focus-within:relative focus-within:z-[100] transition-all duration-300">
+                <div className="space-y-2 focus-within:relative focus-within:z-[50] transition-all duration-300">
                   <Label className="text-slate-300">Port</Label>
                   <Input
                     type="number"
@@ -1275,7 +1355,7 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2 focus-within:relative focus-within:z-[100] transition-all duration-300">
+                <div className="space-y-2 focus-within:relative focus-within:z-[50] transition-all duration-300">
                   <Label className="text-slate-300">Username</Label>
                   <Input
                     placeholder={
@@ -1291,7 +1371,7 @@ export default function SettingsPage() {
                     className="bg-slate-900 border-slate-600 text-white placeholder:text-slate-500"
                   />
                 </div>
-                <div className="space-y-2 focus-within:relative focus-within:z-[100] transition-all duration-300">
+                <div className="space-y-2 focus-within:relative focus-within:z-[50] transition-all duration-300">
                   <Label className="text-slate-300">Password</Label>
                   <Input
                     type="password"
@@ -1334,7 +1414,7 @@ export default function SettingsPage() {
                   paths at the filesystem level.
                 </AlertDescription>
               </Alert>
-              <div className="space-y-2 focus-within:relative focus-within:z-[100] transition-all duration-300">
+              <div className="space-y-2 focus-within:relative focus-within:z-[50] transition-all duration-300">
                 <Label className="text-slate-300">Paths (one per line)</Label>
                 <textarea
                   className="w-full h-32 bg-slate-900 border border-slate-600 rounded-md p-3 text-white placeholder:text-slate-500 font-mono text-sm"
@@ -1360,7 +1440,11 @@ export default function SettingsPage() {
 
       {/* Backdrop to block interaction when changes are pending */}
       {hasChanges && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-[1px] z-[99] animate-in fade-in duration-300" />
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-[1px] z-[40] animate-in fade-in duration-300 cursor-pointer"
+          onClick={handleDiscard}
+          title="Click to discard changes"
+        />
       )}
 
       {/* Floating Save Bar */}
@@ -1384,17 +1468,7 @@ export default function SettingsPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setFormData({});
-                  setLastEditY(null);
-                  setShowSaveBar(false);
-                  if (saveBarTimeoutRef.current) {
-                    clearTimeout(saveBarTimeoutRef.current);
-                  }
-                  if (settings?.deepl_api_keys) {
-                    setDeeplKeys(settings.deepl_api_keys);
-                  }
-                }}
+                onClick={handleDiscard}
                 className="px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors"
               >
                 Discard
@@ -1483,6 +1557,16 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmState.open}
+        onOpenChange={(open) => setConfirmState((prev) => ({ ...prev, open }))}
+        title={confirmState.title}
+        description={confirmState.description}
+        onConfirm={executeDelete}
+        isLoading={isSaving}
+        variant="destructive"
+        confirmLabel="Remove"
+      />
     </div>
   );
 }

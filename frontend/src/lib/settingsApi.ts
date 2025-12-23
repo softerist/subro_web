@@ -25,7 +25,7 @@ export interface DeepLUsage {
   key_alias: string;
   character_count: number;
   character_limit: number;
-  valid: boolean;
+  valid: boolean | null | undefined;
 }
 
 export interface SettingsRead extends SettingsUpdate {
