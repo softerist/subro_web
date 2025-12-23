@@ -164,7 +164,7 @@ async def validate_deepl(api_key: str) -> dict:
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(url, headers=headers, timeout=5.0)
+            response = await client.get(url, headers=headers, timeout=10.0)
             if response.status_code == 200:
                 data = response.json()
                 return {
@@ -172,20 +172,120 @@ async def validate_deepl(api_key: str) -> dict:
                     "character_count": data.get("character_count", 0),
                     "character_limit": data.get("character_limit", 0),
                 }
+            elif response.status_code == 429:
+                return {
+                    "valid": False,
+                    "error": "Rate limit exceeded (429)",
+                    "retry_after": int(response.headers.get("Retry-After", 1)),
+                }
             else:
-                logger.error(
-                    f"DeepL API validation failed. Status: {response.status_code}, Body: {response.text}"
-                )
-                return {"valid": False, "error": f"Status {response.status_code}"}
+                return {"valid": False, "error": f"Status {response.status_code}: {response.text}"}
         except Exception as e:
-            logger.warning(f"DeepL validation error for ...{api_key[-8:]}: {e}")
             return {"valid": False, "error": str(e)}
+
+
+async def validate_deepl_keys_background(  # noqa: C901
+    keys: list[str], db_session_factory
+) -> None:
+    """
+    Background task to validate a list of DeepL keys.
+    Uses its own DB session since it runs in the background.
+    Respects rate limits.
+    """
+    import asyncio
+
+    logger.info(f"Starting background validation for {len(keys)} DeepL keys.")
+
+    # Use a new session
+    async with db_session_factory() as db:
+        for i, key in enumerate(keys):
+            if not key or not isinstance(key, str) or not key.strip():
+                continue
+
+            # Check if key is already valid/recently updated to avoid redundant work?
+            # ideally yes, but force-check is better for consistency if requested.
+
+            logger.info(f"Validating key: {key[:5]}...")
+            usage_data = await validate_deepl(key)
+
+            # Handle rate limiting retry
+            if not usage_data["valid"] and "Rate limit" in str(usage_data.get("error")):
+                retry_after = usage_data.get("retry_after", 1) + 1
+                logger.warning(f"Rate limit 429 for key {key[:8]}... Waiting {retry_after}s.")
+                await asyncio.sleep(retry_after)
+                # Retry once
+                usage_data = await validate_deepl(key)
+
+            key_hash = hashlib.sha256(key.strip().encode()).hexdigest()
+
+            # Upsert
+            result = await db.execute(
+                select(DeepLUsage).where(DeepLUsage.key_identifier == key_hash)
+            )
+            record = result.scalar_one_or_none()
+
+            if not record:
+                record = DeepLUsage(key_identifier=key_hash)
+                db.add(record)
+
+            if usage_data["valid"]:
+                record.character_count = usage_data["character_count"]
+                record.character_limit = usage_data["character_limit"]
+                record.valid = True
+            else:
+                # If it failed, we mark it invalid.
+                # If it was a rate limit failure even after retry, we mark as invalid
+                # but maybe we should add an 'error_message' column in future.
+                # For now, valid=False is correct.
+                record.character_count = 0
+                record.character_limit = 0
+                record.valid = False
+
+            record.last_updated = datetime.now(UTC)
+
+            try:
+                await db.commit()
+            except Exception as e:
+                await db.rollback()
+                # Check for IntegrityError (race condition on insert)
+                if "IntegrityError" in str(type(e)) or "UniqueViolationError" in str(e):
+                    logger.warning(f"Race condition saving key {key[:8]}... Retrying update.")
+                    # Retry logic: Fetch existing, update, commit
+                    result = await db.execute(
+                        select(DeepLUsage).where(DeepLUsage.key_identifier == key_hash)
+                    )
+                    record = result.scalar_one_or_none()
+                    if record:
+                        if usage_data["valid"]:
+                            record.character_count = usage_data["character_count"]
+                            record.character_limit = usage_data["character_limit"]
+                            record.valid = True
+                        else:
+                            record.character_count = 0
+                            record.character_limit = 0
+                            record.valid = False
+
+                        record.last_updated = datetime.now(UTC)
+                        try:
+                            await db.commit()
+                        except Exception as retry_e:
+                            logger.error(
+                                f"Failed to retry save usage for key {key[:8]}...: {retry_e}"
+                            )
+                else:
+                    logger.error(f"Failed to save usage for key {key[:8]}...: {e}")
+
+            # Avoid hitting rate limits between keys
+            if i < len(keys) - 1:
+                await asyncio.sleep(0.2)
+
+    logger.info("Background DeepL validation completed.")
 
 
 async def validate_all_settings(db: AsyncSession) -> None:
     """
     Fetch current settings, validate configured credentials, and update validation status in DB.
-    Also validates DeepL keys and updates/creates usage records.
+    For DeepL keys, triggers a background validation task instead of blocking.
     """
     try:
         settings_row = await crud_app_settings.get(db)
@@ -197,7 +297,7 @@ async def validate_all_settings(db: AsyncSession) -> None:
         os_username = await crud_app_settings.get_decrypted_value(db, "opensubtitles_username")
         os_password = await crud_app_settings.get_decrypted_value(db, "opensubtitles_password")
 
-        # 1. Validate General API keys
+        # 1. Validate General API keys (fast)
         settings_row.tmdb_valid = await validate_tmdb(tmdb_key) if tmdb_key else None
         settings_row.omdb_valid = await validate_omdb(omdb_key) if omdb_key else None
 
@@ -212,47 +312,41 @@ async def validate_all_settings(db: AsyncSession) -> None:
             settings_row.opensubtitles_key_valid = None
             settings_row.opensubtitles_valid = None
 
-        # 2. Validate DeepL Keys
-        deepl_keys = await crud_app_settings.get_decrypted_value(db, "deepl_api_keys")
-        if deepl_keys and isinstance(deepl_keys, list):
-            for key in deepl_keys:
-                if not key or not isinstance(key, str) or not key.strip():
-                    continue
-
-                # Validate key using helper
-                usage_data = await validate_deepl(key)
-
-                # Upsert usage record
-                key_hash = hashlib.sha256(key.strip().encode()).hexdigest()
-
-                result = await db.execute(
-                    select(DeepLUsage).where(DeepLUsage.key_identifier == key_hash)
-                )
-                record = result.scalar_one_or_none()
-
-                if not record:
-                    record = DeepLUsage(key_identifier=key_hash)
-                    db.add(record)
-                    await db.flush()
-
-                if usage_data["valid"]:
-                    record.character_count = usage_data["character_count"]
-                    record.character_limit = usage_data["character_limit"]
-                    record.valid = True
-                else:
-                    record.character_count = 0
-                    record.character_limit = 0
-                    record.valid = False
-
-                record.last_updated = datetime.now(UTC)
-
         await db.commit()
+
+        # 2. Trigger DeepL Validation in Background
+        # We need to get the keys first
+        deepl_keys = await crud_app_settings.get_decrypted_value(db, "deepl_api_keys")
+        logger.info(
+            f"DeepL keys retrieved for validation: {type(deepl_keys)} - count: {len(deepl_keys) if isinstance(deepl_keys, list) else 'N/A'}"
+        )
+
+        if deepl_keys and isinstance(deepl_keys, list):
+            # We need to pass the session maker, not the current session.
+            import asyncio
+
+            from app.db.session import FastAPISessionLocal
+
+            if FastAPISessionLocal:
+                logger.info(
+                    f"Creating background task for {len(deepl_keys)} DeepL keys validation..."
+                )
+                asyncio.create_task(  # noqa: RUF006
+                    validate_deepl_keys_background(deepl_keys, FastAPISessionLocal)
+                )
+                logger.info("Background task created successfully for DeepL validation.")
+            else:
+                logger.error(
+                    "FastAPISessionLocal is None, cannot trigger DeepL background validation!"
+                )
+        else:
+            logger.warning(f"No DeepL keys found to validate. deepl_keys = {deepl_keys}")
+
         logger.info(
             f"Validation status updated: TMDB={settings_row.tmdb_valid}, "
             f"OMDB={settings_row.omdb_valid}, "
             f"OS_Key={settings_row.opensubtitles_key_valid}, "
-            f"OS_Login={settings_row.opensubtitles_valid}, "
-            f"DeepL keys processed."
+            f"OS_Login={settings_row.opensubtitles_valid}."
         )
 
     except Exception as e:

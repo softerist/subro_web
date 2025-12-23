@@ -49,6 +49,7 @@ while [ $MIGRATION_ATTEMPT -lt $MAX_MIGRATION_ATTEMPTS ]; do
   fi
   echo "Entrypoint: 'alembic upgrade head' command finished for attempt #$MIGRATION_ATTEMPT."
   # Strict consistency check disabled to preventing looping on parse errors.
+  MIGRATIONS_UP_TO_DATE=true
   break
 
 

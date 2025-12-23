@@ -73,6 +73,7 @@ services:
       # Base volume mount (can be overridden)
       - ../../backend:/app # Mount source for reference
       - /tmp:/tmp # Share /tmp between host and container
+      - /app/.venv
       - /mnt/usb3/Media/Movies:/mnt/usb3/Media/Movies # Media folder mount
     env_file:
       - ../../.env
@@ -96,7 +97,8 @@ services:
         condition: service_healthy
     healthcheck:
       # Use poetry run to ensure the correct environment is activated
-      test: [
+      test:
+        [
           "CMD",
           "poetry",
           "run",
@@ -104,11 +106,11 @@ services:
           "-A",
           "app.tasks.celery_app",
           "status",
-        ] # <--- MODIFIED
+        ]
       interval: 15s
-      timeout: 15s # Increased timeout slightly just in case
+      timeout: 15s
       retries: 3
-      start_period: 30s # Increased start_period just in case
+      start_period: 30s
     restart: unless-stopped
 
   frontend:
@@ -127,7 +129,8 @@ services:
     environment:
       - NODE_ENV=development
       # VITE_API_BASE_URL is often set here or via .env to configure the frontend build
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-https://localhost/api}
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-https://localhost:8444/api/v1}
+      - VITE_WS_BASE_URL=${VITE_WS_BASE_URL:-wss://localhost:8444/api/v1}
     networks:
       - app_network
     restart: unless-stopped
@@ -135,6 +138,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: redis-server --ignore-warnings ARM64-COW-BUG --save 60 1 --loglevel warning
     volumes:
       - redis_data:/data
     networks:
@@ -157,6 +161,8 @@ services:
       - ../../.env # Loads POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
     environment:
       - PGDATA=/var/lib/postgresql/data/pgdata
+      - LANG=en_US.UTF-8
+      - LC_ALL=en_US.UTF-8
       # Rely on env_file to load keys, avoiding substitution issues preventing .env pickup
     networks:
       - app_network

@@ -283,7 +283,8 @@ async def create_job(
 ) -> Job:
     # Fetch dynamic allowed paths from DB
     db_paths = await crud.storage_path.get_multi(db)
-    allowed_folders = list(set(settings.ALLOWED_MEDIA_FOLDERS + [p.path for p in db_paths]))
+    env_folders = settings.ALLOWED_MEDIA_FOLDERS or []
+    allowed_folders = list(set(env_folders + [p.path for p in db_paths]))
 
     # Ensure settings.ALLOWED_MEDIA_FOLDERS is the correct config variable name
     resolved_input_path = await _validate_and_resolve_job_path(
@@ -354,7 +355,8 @@ async def get_allowed_folders(
     current_user: Annotated[User, Depends(current_active_user)],  # noqa: ARG001
 ) -> list[str]:
     db_paths = await crud.storage_path.get_multi(db)
-    combined = list(set(settings.ALLOWED_MEDIA_FOLDERS + [p.path for p in db_paths]))
+    env_folders = settings.ALLOWED_MEDIA_FOLDERS or []
+    combined = list(set(env_folders + [p.path for p in db_paths]))
     return sorted(combined)
 
 

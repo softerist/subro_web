@@ -72,11 +72,17 @@ class CRUDAppSettings:
         settings = await self.get(db)
         update_data = obj_in.model_dump(exclude_unset=True)
 
-        # Restore masked DeepL keys if they're being updated
         if "deepl_api_keys" in update_data and isinstance(update_data["deepl_api_keys"], list):
-            update_data["deepl_api_keys"] = self._restore_deepl_keys(
-                settings, update_data["deepl_api_keys"]
-            )
+            db_has_keys = settings.deepl_api_keys is not None and settings.deepl_api_keys != ""
+
+            restored_keys = self._restore_deepl_keys(settings, update_data["deepl_api_keys"])
+            if not restored_keys:
+                if db_has_keys:
+                    update_data["deepl_api_keys"] = ""
+                else:
+                    del update_data["deepl_api_keys"]
+            else:
+                update_data["deepl_api_keys"] = restored_keys
 
         # Apply updates
         for field, value in update_data.items():
@@ -96,31 +102,39 @@ class CRUDAppSettings:
 
     def _restore_deepl_keys(self, settings: AppSettings, new_keys: list[str]) -> list[str]:
         """Restore original values for masked keys in the update payload."""
-        current_raw = getattr(settings, "deepl_api_keys", None)
-        if not current_raw:
-            return new_keys
+        # Use _get_effective_list to get currently active keys (DB or Env), unmasked
+        from app.core.config import settings as env_settings
 
-        try:
-            current_decrypted_json = decrypt_value(current_raw)
-            existing_keys_list = json.loads(current_decrypted_json)
-            existing_masked_list = [mask_sensitive_value(k) for k in existing_keys_list]
-        except Exception:
-            return new_keys
+        # We need unmasked keys to be able to restore the values
+        existing_keys_list = self._get_effective_list(
+            settings, env_settings, "deepl_api_keys", "DEEPL_API_KEYS", do_mask=False
+        )
+
+        # Create masked versions for comparison
+        existing_masked_list = [
+            mask_sensitive_value(k, visible_chars=8) for k in existing_keys_list
+        ]
 
         restored_value = []
+        logger.info(f"Restoring keys. Input: {new_keys}")
+        logger.info(f"Existing masked references: {existing_masked_list}")
+
         for i, item in enumerate(new_keys):
             # Check if this looks like a masked key (contains *** or •)
             if "***" in item or "•" in item:
-                # Try positional match first (most reliable for edits)
+                # Try positional match first (most reliable for edits if order preserved)
                 if i < len(existing_masked_list) and item == existing_masked_list[i]:
                     restored_value.append(existing_keys_list[i])
+                    logger.info(f"Restored index {i} via position.")
                 else:
                     # Try to find it anywhere in the list by exact match
                     try:
                         idx = existing_masked_list.index(item)
                         restored_value.append(existing_keys_list[idx])
+                        logger.info(f"Restored index {i} via search (found at old index {idx}).")
                     except ValueError:
                         restored_value.append(item)
+                        logger.warning(f"Failed to restore masked key at index {i}: {item}")
             else:
                 restored_value.append(item)
         return restored_value
@@ -198,7 +212,9 @@ class CRUDAppSettings:
 
         return settings
 
-    async def get_decrypted_value(self, db: AsyncSession, field: str) -> str | list[str] | None:
+    async def get_decrypted_value(  # noqa: C901
+        self, db: AsyncSession, field: str
+    ) -> str | list[str] | None:
         """
         Get a single decrypted setting value.
         Checks DB first, then falls back to Environment variables.
@@ -238,6 +254,19 @@ class CRUDAppSettings:
                     return []
 
             return raw_value
+
+        # 2. Fall back to environment variable for known list fields
+        from app.core.config import settings as env_settings
+
+        env_mapping = self._get_db_to_env_map()
+        if field in env_mapping:
+            env_attr = env_mapping[field]
+            env_value = getattr(env_settings, env_attr, None)
+            if env_value is not None:
+                # For list fields, return the list directly
+                if field in JSON_ARRAY_FIELDS and isinstance(env_value, list):
+                    return env_value
+                return env_value
 
         return None
 
@@ -312,14 +341,33 @@ class CRUDAppSettings:
             omdb_valid=db_settings.omdb_valid,
             opensubtitles_valid=db_settings.opensubtitles_valid,
             opensubtitles_key_valid=db_settings.opensubtitles_key_valid,
-            # Google Cloud status
-            google_cloud_configured=bool(db_settings.google_cloud_credentials),
+            # Google Cloud status - check DB first, then env path
+            # Logic: If DB has value (even empty string), use it. If DB is None, check Env.
+            google_cloud_configured=bool(
+                db_settings.google_cloud_credentials
+                if db_settings.google_cloud_credentials is not None
+                else getattr(env_settings, "GOOGLE_CREDENTIALS_PATH", None)
+            ),
             google_cloud_project_id=(
                 mask_sensitive_value(db_settings.google_cloud_project_id, visible_chars=8)
                 if db_settings.google_cloud_project_id
-                else None
+                else (
+                    mask_sensitive_value(env_settings.GOOGLE_PROJECT_ID, visible_chars=8)
+                    if getattr(env_settings, "GOOGLE_PROJECT_ID", None)
+                    and db_settings.google_cloud_credentials is None
+                    else None
+                )
             ),
-            google_cloud_valid=db_settings.google_cloud_valid,
+            google_cloud_valid=(
+                db_settings.google_cloud_valid
+                if db_settings.google_cloud_credentials
+                else (
+                    True
+                    if getattr(env_settings, "GOOGLE_CREDENTIALS_PATH", None)
+                    and db_settings.google_cloud_credentials is None
+                    else None
+                )
+            ),
         )
 
     def _get_db_to_env_map(self) -> dict[str, str]:
@@ -329,10 +377,12 @@ class CRUDAppSettings:
             "opensubtitles_api_key": "OPENSUBTITLES_API_KEY",
             "opensubtitles_username": "OPENSUBTITLES_USERNAME",
             "opensubtitles_password": "OPENSUBTITLES_PASSWORD",
+            "deepl_api_keys": "DEEPL_API_KEYS",
             "qbittorrent_host": "QBITTORRENT_HOST",
             "qbittorrent_port": "QBITTORRENT_PORT",
             "qbittorrent_username": "QBITTORRENT_USERNAME",
             "qbittorrent_password": "QBITTORRENT_PASSWORD",
+            "allowed_media_folders": "ALLOWED_MEDIA_FOLDERS",
         }
 
     def _get_effective_and_mask(
@@ -367,27 +417,56 @@ class CRUDAppSettings:
 
         return None
 
-    def _get_effective_list(
+    def _get_effective_list(  # noqa: C901
         self,
         db_settings: AppSettings,
-        _env_settings: Any,
+        env_settings: Any,
         field_name: str,
-        _env_attr: str,
+        env_attr: str,
         do_mask: bool = True,
     ) -> list[str]:
         """Get effective list value (DB > env)."""
         raw = getattr(db_settings, field_name, None)
-        if raw:
+        if raw is not None:
+            # Empty string means "explicitly cleared" - return empty list
+            if raw == "":
+                return []
             try:
                 decrypted = decrypt_value(raw) if field_name in ENCRYPTED_FIELDS else raw
                 items = json.loads(decrypted)
-                if field_name in ENCRYPTED_FIELDS and do_mask:
-                    if field_name == "deepl_api_keys":
-                        return [mask_sensitive_value(str(item), visible_chars=8) for item in items]
-                    return [mask_sensitive_value(str(item)) for item in items]
-                return items
+                # Return DB value even if empty - empty list means "explicitly cleared"
+                # Only fallback to env if raw is None (not configured in DB)
+                if isinstance(items, list):
+                    if items and field_name in ENCRYPTED_FIELDS and do_mask:
+                        if field_name == "deepl_api_keys":
+                            return [
+                                mask_sensitive_value(str(item), visible_chars=8) for item in items
+                            ]
+                        return [mask_sensitive_value(str(item)) for item in items]
+                    return items  # Return empty list if user cleared all keys
             except (ValueError, json.JSONDecodeError):
                 pass
+
+        # Fall back to environment variable
+        env_value = getattr(env_settings, env_attr, None)
+        if env_value and isinstance(env_value, list):
+            if field_name in ENCRYPTED_FIELDS and do_mask:
+                if field_name == "deepl_api_keys":
+                    return [mask_sensitive_value(str(item), visible_chars=8) for item in env_value]
+                return [mask_sensitive_value(str(item)) for item in env_value]
+            return env_value
+
+        # Additional fallback for DEEPL_API_KEYS if it's a JSON string
+        if env_attr == "DEEPL_API_KEYS" and env_value and isinstance(env_value, str):
+            try:
+                items = json.loads(env_value)
+                if isinstance(items, list):
+                    if field_name in ENCRYPTED_FIELDS and do_mask:
+                        return [mask_sensitive_value(str(item), visible_chars=8) for item in items]
+                    return items
+            except json.JSONDecodeError:
+                pass
+
         return []
 
     async def _get_deepl_usage_stats(
@@ -410,6 +489,32 @@ class CRUDAppSettings:
 
         import hashlib
 
+        # Check for missing keys and trigger background validation
+        missing_keys = []
+        for key_str in configured_keys:
+            key_hash = hashlib.sha256(key_str.strip().encode()).hexdigest()
+            if key_hash not in usage_map:
+                missing_keys.append(key_str)
+
+        if missing_keys:
+            try:
+                import asyncio
+
+                from app.db.session import FastAPISessionLocal
+                from app.services.api_validation import validate_deepl_keys_background
+
+                # Trigger background validation task
+                if FastAPISessionLocal:
+                    asyncio.create_task(  # noqa: RUF006
+                        validate_deepl_keys_background(missing_keys, FastAPISessionLocal)
+                    )
+                else:
+                    logger.error(
+                        "FastAPISessionLocal is None, cannot trigger background validation."
+                    )
+            except Exception as e:
+                logger.error(f"Failed to trigger background DeepL validation: {e}")
+
         final_stats = []
         for key_str in configured_keys:
             # Look up by hash
@@ -422,13 +527,14 @@ class CRUDAppSettings:
                 stat["key_alias"] = f"...{suffix}"
                 final_stats.append(stat)
             else:
-                # Not found (or legacy record with suffix identifier)
+                # Fallback if validation hasn't completed yet
                 final_stats.append(
                     {
                         "key_alias": f"...{suffix}",
+                        "key_masked": suffix,
                         "character_count": 0,
                         "character_limit": 500000,
-                        "valid": None,
+                        "valid": None,  # Indicates "Validating..." in UI
                     }
                 )
         return final_stats

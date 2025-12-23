@@ -160,13 +160,12 @@ async def _process_google_cloud_credentials(  # noqa: C901
         result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
         settings = result.scalar_one_or_none()
         if settings:
-            settings.google_cloud_credentials = None
+            # Set to empty string to explicitly override environment variable fallback
+            settings.google_cloud_credentials = ""
             settings.google_cloud_project_id = None
             settings.google_cloud_valid = None
             await db.commit()
-            logger.info("Google Cloud credentials removed")
-            await db.commit()
-            logger.info("Google Cloud credentials removed")
+            logger.info("Google Cloud credentials removed (explicitly set to empty string)")
         return None
 
     if not creds_json:

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Plus, Trash2, AlertCircle } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,22 +77,42 @@ export default function SettingsPage() {
     loadSettings();
   }, []);
 
-  const loadSettings = async () => {
-    setIsLoading(true);
+  const loadSettings = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     setError(null);
     try {
       const data = await getSettings();
       setSettings(data);
       // Initialize deeplKeys from existing settings
       if (data.deepl_api_keys && data.deepl_api_keys.length > 0) {
+        // Only update input fields if we are NOT editing them right now?
+        // Actually, better to only sync if list length changes or on first load,
+        // to avoid overwriting user typing.
+        // But here we just set it initially.
         setDeeplKeys(data.deepl_api_keys);
       }
     } catch (err) {
       setError("Failed to load settings");
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
+
+  // Poll for updates if any key is validating
+  useEffect(() => {
+    if (!settings?.deepl_usage) return;
+
+    // Check if any key is strictly "Not Validated" (valid === null)
+    // In our API response, valid is null if pending.
+    const hasPending = settings.deepl_usage.some((u) => u.valid === null);
+
+    if (hasPending) {
+      const interval = setInterval(() => {
+        loadSettings(true);
+      }, 1000); // Poll every 1 second
+      return () => clearInterval(interval);
+    }
+  }, [settings?.deepl_usage]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -603,185 +624,200 @@ export default function SettingsPage() {
 
                   {/* Key Editor */}
                   <div className="space-y-3">
-                    {deeplKeys.map((key, index) => {
-                      const isEditing = editingKeyIndex === index;
-                      const isMasked = key.includes("***");
+                    <AnimatePresence mode="sync">
+                      {deeplKeys.map((key, index) => {
+                        const isEditing = editingKeyIndex === index;
+                        const isMasked = key.includes("***");
 
-                      // Find validation status and usage for this key
-                      let status:
-                        | "valid"
-                        | "invalid"
-                        | "not_validated"
-                        | "not_connected" = "not_validated";
-                      let usage = undefined;
+                        // Find validation status and usage for this key
+                        let status:
+                          | "valid"
+                          | "invalid"
+                          | "not_validated"
+                          | "not_connected" = "not_validated";
+                        let usage = undefined;
 
-                      if (!key.trim()) {
-                        status = "not_connected";
-                      } else {
-                        let suffix = key;
-                        if (key.length >= 8) {
-                          suffix = key.slice(-8);
-                        } else if (key.includes("...")) {
-                          suffix = key.replace(/^\.\.\./, "");
+                        if (!key.trim()) {
+                          status = "not_connected";
+                        } else {
+                          let suffix = key;
+                          if (key.length >= 8) {
+                            suffix = key.slice(-8);
+                          } else if (key.includes("...")) {
+                            suffix = key.replace(/^\.\.\./, "");
+                          }
+
+                          usage = settings?.deepl_usage?.find((u) =>
+                            u.key_alias.endsWith(suffix),
+                          );
+                          if (usage) {
+                            status =
+                              usage.valid === true
+                                ? "valid"
+                                : usage.valid === false
+                                  ? "invalid"
+                                  : "not_validated";
+                          }
                         }
 
-                        usage = settings?.deepl_usage?.find((u) =>
-                          u.key_alias.endsWith(suffix),
-                        );
-                        if (usage) {
-                          status =
-                            usage.valid === true
-                              ? "valid"
-                              : usage.valid === false
-                                ? "invalid"
-                                : "not_validated";
-                        }
-                      }
-
-                      return (
-                        <div
-                          key={index}
-                          className="max-w-md bg-slate-900/50 rounded-lg border border-slate-700 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <Label className="text-xs uppercase tracking-wider text-slate-500 block">
-                              Key {index + 1}
-                            </Label>
-                            {status === "valid" ? (
-                              <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-500/20 text-emerald-400">
-                                Valid
-                              </span>
-                            ) : status === "invalid" ? (
-                              <span className="px-2 py-0.5 text-xs rounded-full bg-red-500/20 text-red-400">
-                                Invalid
-                              </span>
-                            ) : status === "not_connected" ? (
-                              <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
-                                Not Connected
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-500/20 text-yellow-400">
-                                Not Validated
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="relative group">
-                            {isEditing ? (
-                              <Input
-                                type="text"
-                                placeholder="Enter DeepL API key..."
-                                autoFocus
-                                value={key}
-                                onChange={(e) => {
-                                  const rect = e.target.getBoundingClientRect();
-                                  updateEditPosition(rect.top + window.scrollY);
-                                  const newKeys = [...deeplKeys];
-                                  newKeys[index] = e.target.value;
-                                  setDeeplKeys(newKeys);
-                                  const updatedKeys = newKeys.filter((k) =>
-                                    k.trim(),
-                                  );
-
-                                  // Check if keys match original settings
-                                  let isEqual = false;
-                                  if (settings?.deepl_api_keys) {
-                                    isEqual =
-                                      JSON.stringify(updatedKeys) ===
-                                      JSON.stringify(settings.deepl_api_keys);
-                                  } else if (updatedKeys.length === 0) {
-                                    isEqual = true;
-                                  }
-
-                                  setFormData((prev) => {
-                                    if (isEqual) {
-                                      const { deepl_api_keys: _, ...rest } =
-                                        prev;
-                                      return rest;
-                                    }
-                                    return {
-                                      ...prev,
-                                      deepl_api_keys: updatedKeys,
-                                    };
-                                  });
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    setEditingKeyIndex(null);
-                                    // Auto-save if there are changes
-                                    if (Object.keys(formData).length > 0) {
-                                      handleSave();
-                                    }
-                                  }
-                                }}
-                                className="w-full pr-10 bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-violet-500 font-mono text-sm"
-                              />
-                            ) : (
-                              <div
-                                className="w-full pr-10 px-3 py-2 bg-slate-800 border border-slate-600 rounded-md font-mono text-sm text-slate-300 overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer hover:border-violet-500 hover:bg-slate-700/50 transition-colors"
-                                onClick={() => setEditingKeyIndex(index)}
-                                title="Click to edit"
-                              >
-                                {isMasked
-                                  ? key
-                                  : `${"•".repeat(Math.max(0, key.length - 8))}${key.slice(-8)}`}
-                              </div>
-                            )}
-
-                            {/* Remove Button - Inside Field */}
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => handleKeyDeleteRequest(index, e)}
-                              className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-slate-500 hover:text-destructive hover:bg-transparent"
-                              title="Remove key"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              <span className="sr-only">Remove</span>
-                            </Button>
-                          </div>
-
-                          {/* Usage Progress Bar - Integrated inside the box */}
-                          {usage && (
-                            <div className="mt-4 space-y-1">
-                              <div className="flex justify-between items-center text-[10px] text-slate-500">
-                                <span>Character Usage</span>
-                                <span>
-                                  {usage.character_count.toLocaleString()} /{" "}
-                                  {usage.valid
-                                    ? usage.character_limit.toLocaleString()
-                                    : "0"}
+                        return (
+                          <motion.div
+                            key={`deepl-key-${index}`}
+                            initial={false}
+                            animate={{ opacity: 1 }}
+                            exit={{
+                              opacity: 0,
+                              y: -20,
+                              transition: { duration: 0.2 },
+                            }}
+                            transition={{ duration: 0.2 }}
+                            className="max-w-md bg-slate-900/50 rounded-lg border border-slate-700 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <Label className="text-xs uppercase tracking-wider text-slate-500 block">
+                                Key {index + 1}
+                              </Label>
+                              {status === "valid" ? (
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-500/20 text-emerald-400">
+                                  Valid
                                 </span>
-                              </div>
-                              {(() => {
-                                const percent =
-                                  usage.character_limit > 0
-                                    ? Math.min(
-                                        100,
-                                        Math.round(
-                                          (usage.character_count /
-                                            usage.character_limit) *
-                                            100,
-                                        ),
-                                      )
-                                    : 0;
-                                const isFull = percent >= 100;
-                                return (
-                                  <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-                                    <div
-                                      className={`h-full transition-all duration-500 ${isFull ? "bg-red-500" : "bg-blue-500"}`}
-                                      style={{ width: `${percent}%` }}
-                                    />
-                                  </div>
-                                );
-                              })()}
+                              ) : status === "invalid" ? (
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-red-500/20 text-red-400">
+                                  Invalid
+                                </span>
+                              ) : status === "not_connected" ? (
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
+                                  Not Connected
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-500/20 text-yellow-400">
+                                  Not Validated
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+
+                            <div className="relative group">
+                              {isEditing ? (
+                                <Input
+                                  type="text"
+                                  placeholder="Enter DeepL API key..."
+                                  autoFocus
+                                  value={key}
+                                  onChange={(e) => {
+                                    const rect =
+                                      e.target.getBoundingClientRect();
+                                    updateEditPosition(
+                                      rect.top + window.scrollY,
+                                    );
+                                    const newKeys = [...deeplKeys];
+                                    newKeys[index] = e.target.value;
+                                    setDeeplKeys(newKeys);
+                                    const updatedKeys = newKeys.filter((k) =>
+                                      k.trim(),
+                                    );
+
+                                    // Check if keys match original settings
+                                    let isEqual = false;
+                                    if (settings?.deepl_api_keys) {
+                                      isEqual =
+                                        JSON.stringify(updatedKeys) ===
+                                        JSON.stringify(settings.deepl_api_keys);
+                                    } else if (updatedKeys.length === 0) {
+                                      isEqual = true;
+                                    }
+
+                                    setFormData((prev) => {
+                                      if (isEqual) {
+                                        const { deepl_api_keys: _, ...rest } =
+                                          prev;
+                                        return rest;
+                                      }
+                                      return {
+                                        ...prev,
+                                        deepl_api_keys: updatedKeys,
+                                      };
+                                    });
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      setEditingKeyIndex(null);
+                                      // Auto-save if there are changes
+                                      if (Object.keys(formData).length > 0) {
+                                        handleSave();
+                                      }
+                                    }
+                                  }}
+                                  className="w-full pr-10 bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-violet-500 font-mono text-sm"
+                                />
+                              ) : (
+                                <div
+                                  className="w-full pr-10 px-3 py-2 bg-slate-800 border border-slate-600 rounded-md font-mono text-sm text-slate-300 overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer hover:border-violet-500 hover:bg-slate-700/50 transition-colors"
+                                  onClick={() => setEditingKeyIndex(index)}
+                                  title="Click to edit"
+                                >
+                                  {isMasked
+                                    ? key
+                                    : `${"•".repeat(Math.max(0, key.length - 8))}${key.slice(-8)}`}
+                                </div>
+                              )}
+
+                              {/* Remove Button - Inside Field */}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) =>
+                                  handleKeyDeleteRequest(index, e)
+                                }
+                                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-slate-500 hover:text-destructive hover:bg-transparent"
+                                title="Remove key"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Remove</span>
+                              </Button>
+                            </div>
+
+                            {/* Usage Progress Bar - Integrated inside the box */}
+                            {usage && (
+                              <div className="mt-4 space-y-1">
+                                <div className="flex justify-between items-center text-[10px] text-slate-500">
+                                  <span>Character Usage</span>
+                                  <span>
+                                    {usage.character_count.toLocaleString()} /{" "}
+                                    {usage.valid
+                                      ? usage.character_limit.toLocaleString()
+                                      : "0"}
+                                  </span>
+                                </div>
+                                {(() => {
+                                  const percent =
+                                    usage.character_limit > 0
+                                      ? Math.min(
+                                          100,
+                                          Math.round(
+                                            (usage.character_count /
+                                              usage.character_limit) *
+                                              100,
+                                          ),
+                                        )
+                                      : 0;
+                                  const isFull = percent >= 100;
+                                  return (
+                                    <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full transition-all duration-500 ${isFull ? "bg-red-500" : "bg-blue-500"}`}
+                                        style={{ width: `${percent}%` }}
+                                      />
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </motion.div>
+                        );
+                      })}
+                    </AnimatePresence>
 
                     <button
                       type="button"
@@ -817,145 +853,170 @@ export default function SettingsPage() {
                     or paste your service account JSON file.
                   </p>
 
-                  {/* Show configured status - also check pending removal */}
-                  {settings?.google_cloud_configured &&
-                  formData.google_cloud_credentials !== "" ? (
-                    <div className="space-y-3">
-                      <div className="max-w-md bg-slate-900/50 rounded-lg border border-slate-700 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
-                        <div className="flex items-center justify-between mb-2">
-                          <Label className="text-xs uppercase tracking-wider text-slate-500 block">
-                            Project ID
-                          </Label>
-                          <span
-                            className={`px-2 py-0.5 text-xs rounded-full ${
-                              settings?.google_cloud_valid === true
-                                ? "bg-emerald-500/20 text-emerald-400"
+                  {/* Show configured status - animation based on server state only */}
+                  <AnimatePresence mode="wait">
+                    {settings?.google_cloud_configured ? (
+                      <motion.div
+                        key="google-configured"
+                        initial={false}
+                        animate={{ opacity: 1 }}
+                        exit={{
+                          opacity: 0,
+                          y: -20,
+                          transition: { duration: 0.2 },
+                        }}
+                        transition={{ duration: 0.2 }}
+                        className="space-y-3"
+                      >
+                        <div className="max-w-md bg-slate-900/50 rounded-lg border border-slate-700 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
+                          <div className="flex items-center justify-between mb-2">
+                            <Label className="text-xs uppercase tracking-wider text-slate-500 block">
+                              Project ID
+                            </Label>
+                            <span
+                              className={`px-2 py-0.5 text-xs rounded-full ${
+                                settings?.google_cloud_valid === true
+                                  ? "bg-emerald-500/20 text-emerald-400"
+                                  : settings?.google_cloud_valid === false
+                                    ? "bg-red-500/20 text-red-400"
+                                    : "bg-yellow-500/20 text-yellow-400"
+                              }`}
+                            >
+                              {settings?.google_cloud_valid === true
+                                ? "Valid"
                                 : settings?.google_cloud_valid === false
-                                  ? "bg-red-500/20 text-red-400"
-                                  : "bg-yellow-500/20 text-yellow-400"
-                            }`}
-                          >
-                            {settings?.google_cloud_valid === true
-                              ? "Valid"
-                              : settings?.google_cloud_valid === false
-                                ? "Invalid"
-                                : "Not Validated"}
-                          </span>
-                        </div>
-                        <div className="relative group">
-                          <div className="w-full pr-10 px-3 py-2 bg-slate-800 border border-slate-600 rounded-md font-mono text-sm text-slate-300 overflow-hidden text-ellipsis whitespace-nowrap">
-                            {settings.google_cloud_project_id || "Unknown"}
+                                  ? "Invalid"
+                                  : "Not Validated"}
+                            </span>
                           </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={handleGoogleRemoveRequest}
-                            className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-slate-500 hover:text-destructive hover:bg-transparent"
-                            title="Remove configuration"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Remove</span>
-                          </Button>
+                          <div className="relative group">
+                            <div className="w-full pr-10 px-3 py-2 bg-slate-800 border border-slate-600 rounded-md font-mono text-sm text-slate-300 overflow-hidden text-ellipsis whitespace-nowrap">
+                              {settings.google_cloud_project_id || "Unknown"}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={handleGoogleRemoveRequest}
+                              className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-slate-500 hover:text-destructive hover:bg-transparent"
+                              title="Remove configuration"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Remove</span>
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                      {/* Error Message Display */}
-                      {settings?.google_cloud_valid === false &&
-                        settings.google_cloud_error && (
-                          <Alert className="bg-red-900/20 border-red-800 text-red-200">
-                            <AlertCircle className="h-4 w-4 stroke-red-400" />
-                            <AlertDescription className="ml-2 font-mono text-xs break-all">
-                              {settings.google_cloud_error}
-                            </AlertDescription>
-                          </Alert>
-                        )}
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="max-w-md bg-slate-900/50 rounded-lg border border-slate-700 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
-                        <div className="flex items-center justify-between mb-2">
-                          <Label className="text-xs uppercase tracking-wider text-slate-500 block">
-                            JSON Config
-                          </Label>
-                          <span
-                            className={`px-2 py-0.5 text-xs rounded-full ${
-                              settings?.google_cloud_valid === true
-                                ? "bg-emerald-500/20 text-emerald-400"
+                        {/* Error Message Display */}
+                        {settings?.google_cloud_valid === false &&
+                          settings.google_cloud_error && (
+                            <Alert className="bg-red-900/20 border-red-800 text-red-200">
+                              <AlertCircle className="h-4 w-4 stroke-red-400" />
+                              <AlertDescription className="ml-2 font-mono text-xs break-all">
+                                {settings.google_cloud_error}
+                              </AlertDescription>
+                            </Alert>
+                          )}
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="google-upload"
+                        initial={false}
+                        animate={{ opacity: 1 }}
+                        exit={{
+                          opacity: 0,
+                          y: -20,
+                          transition: { duration: 0.2 },
+                        }}
+                        transition={{ duration: 0.2 }}
+                        className="space-y-4"
+                      >
+                        <div className="max-w-md bg-slate-900/50 rounded-lg border border-slate-700 p-4 hover:border-slate-600 transition-colors focus-within:relative focus-within:z-[50]">
+                          <div className="flex items-center justify-between mb-2">
+                            <Label className="text-xs uppercase tracking-wider text-slate-500 block">
+                              JSON Config
+                            </Label>
+                            <span
+                              className={`px-2 py-0.5 text-xs rounded-full ${
+                                settings?.google_cloud_valid === true
+                                  ? "bg-emerald-500/20 text-emerald-400"
+                                  : settings?.google_cloud_valid === false
+                                    ? "bg-red-500/20 text-red-400"
+                                    : "bg-yellow-500/20 text-yellow-400"
+                              }`}
+                            >
+                              {settings?.google_cloud_valid === true
+                                ? "Valid"
                                 : settings?.google_cloud_valid === false
-                                  ? "bg-red-500/20 text-red-400"
-                                  : "bg-yellow-500/20 text-yellow-400"
-                            }`}
-                          >
-                            {settings?.google_cloud_valid === true
-                              ? "Valid"
-                              : settings?.google_cloud_valid === false
-                                ? "Invalid"
-                                : "Not Validated"}
-                          </span>
-                        </div>
-                        <textarea
-                          className="w-full h-32 bg-slate-800 border border-slate-600 rounded-md p-3 text-white placeholder:text-slate-500 font-mono text-xs resize-none focus:border-blue-500 focus:outline-none"
-                          placeholder='{"type": "service_account", "project_id": "...", ...}'
-                          onChange={(e) => {
-                            const rect = e.target.getBoundingClientRect();
-                            updateEditPosition(rect.top + window.scrollY);
-                            updateField(
-                              "google_cloud_credentials",
-                              e.target.value,
-                            );
-                          }}
-                        />
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-slate-500">or</span>
-                        <label className="cursor-pointer group">
-                          <input
-                            type="file"
-                            accept=".json"
-                            className="hidden"
+                                  ? "Invalid"
+                                  : "Not Validated"}
+                            </span>
+                          </div>
+                          <textarea
+                            className="w-full h-32 bg-slate-800 border border-slate-600 rounded-md p-3 text-white placeholder:text-slate-500 font-mono text-xs resize-none focus:border-blue-500 focus:outline-none"
+                            placeholder='{"type": "service_account", "project_id": "...", ...}'
                             onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                // Get position from the parent label (visible button), not hidden input
-                                const label = e.target.closest("label");
-                                if (label) {
-                                  const rect = label.getBoundingClientRect();
-                                  updateEditPosition(rect.top + window.scrollY);
-                                }
-                                const reader = new FileReader();
-                                reader.onload = (event) => {
-                                  const content = event.target?.result;
-                                  if (typeof content === "string") {
-                                    updateField(
-                                      "google_cloud_credentials",
-                                      content,
-                                    );
-                                  }
-                                };
-                                reader.readAsText(file);
-                              }
+                              const rect = e.target.getBoundingClientRect();
+                              updateEditPosition(rect.top + window.scrollY);
+                              updateField(
+                                "google_cloud_credentials",
+                                e.target.value,
+                              );
                             }}
                           />
-                          <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 rounded-lg text-white text-sm font-medium transition-all shadow-lg shadow-blue-500/20 group-hover:shadow-blue-500/40">
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                              />
-                            </svg>
-                            Upload JSON
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-                  )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-slate-500">or</span>
+                          <label className="cursor-pointer group">
+                            <input
+                              type="file"
+                              accept=".json"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  // Get position from the parent label (visible button), not hidden input
+                                  const label = e.target.closest("label");
+                                  if (label) {
+                                    const rect = label.getBoundingClientRect();
+                                    updateEditPosition(
+                                      rect.top + window.scrollY,
+                                    );
+                                  }
+                                  const reader = new FileReader();
+                                  reader.onload = (event) => {
+                                    const content = event.target?.result;
+                                    if (typeof content === "string") {
+                                      updateField(
+                                        "google_cloud_credentials",
+                                        content,
+                                      );
+                                    }
+                                  };
+                                  reader.readAsText(file);
+                                }
+                              }}
+                            />
+                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 rounded-lg text-white text-sm font-medium transition-all shadow-lg shadow-blue-500/20 group-hover:shadow-blue-500/40">
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                                />
+                              </svg>
+                              Upload JSON
+                            </div>
+                          </label>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
             </CardContent>

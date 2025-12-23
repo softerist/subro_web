@@ -201,6 +201,7 @@ export default function SetupPage() {
                   <ul className="mt-2 space-y-1">
                     <li>✓ Admin account credentials</li>
                     <li>✓ API keys for subtitle providers (optional)</li>
+                    <li>✓ Google Cloud Translation credentials (optional)</li>
                     <li>✓ qBittorrent integration (optional)</li>
                   </ul>
                 </div>
@@ -235,66 +236,75 @@ export default function SetupPage() {
                   Set up the administrator account for managing the application.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-slate-300">
-                    Email
-                  </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
-                    placeholder="admin@example.com"
-                    className="bg-slate-900 border-slate-600 text-white"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-slate-300">
-                    Password
-                  </Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="bg-slate-900 border-slate-600 text-white"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword" className="text-slate-300">
-                    Confirm Password
-                  </Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="bg-slate-900 border-slate-600 text-white"
-                  />
-                </div>
-                <div className="flex justify-between pt-4">
-                  <Button
-                    variant="ghost"
-                    onClick={handleBack}
-                    className="text-slate-400"
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    onClick={handleNext}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    Continue
-                  </Button>
-                </div>
+              <CardContent>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleNext();
+                  }}
+                  className="space-y-4"
+                >
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="email" className="text-slate-300">
+                      Email
+                    </Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={adminEmail}
+                      onChange={(e) => setAdminEmail(e.target.value)}
+                      placeholder="admin@example.com"
+                      className="bg-slate-900 border-slate-600 text-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-slate-300">
+                      Password
+                    </Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="bg-slate-900 border-slate-600 text-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword" className="text-slate-300">
+                      Confirm Password
+                    </Label>
+                    <Input
+                      id="confirmPassword"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="bg-slate-900 border-slate-600 text-white"
+                    />
+                  </div>
+                  <div className="flex justify-between pt-4">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={handleBack}
+                      className="text-slate-400"
+                    >
+                      Back
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                </form>
               </CardContent>
             </>
           )}
@@ -400,6 +410,87 @@ export default function SetupPage() {
                         placeholder="One API key per line (optional)"
                         className="w-full h-20 bg-slate-900 border border-slate-600 rounded-md p-2 text-white placeholder:text-slate-500 text-sm font-mono"
                       />
+                    </div>
+                  </div>
+                  <div className="border-t border-slate-700 pt-4 mt-4">
+                    <p className="text-sm text-slate-400 mb-3">
+                      Google Cloud Translation (optional)
+                    </p>
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">
+                        Service Account JSON Credentials
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <label className="flex-1 cursor-pointer">
+                          <div className="flex items-center justify-center px-4 py-3 bg-slate-900 border border-slate-600 border-dashed rounded-md text-slate-400 hover:border-blue-500 hover:text-blue-400 transition-colors">
+                            <svg
+                              className="w-5 h-5 mr-2"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                              />
+                            </svg>
+                            <span className="text-sm">
+                              {settings.google_cloud_credentials
+                                ? "✓ Credentials loaded"
+                                : "Upload JSON file"}
+                            </span>
+                          </div>
+                          <input
+                            type="file"
+                            accept=".json"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  const content = event.target
+                                    ?.result as string;
+                                  updateSetting(
+                                    "google_cloud_credentials",
+                                    content,
+                                  );
+                                };
+                                reader.readAsText(file);
+                              }
+                            }}
+                          />
+                        </label>
+                        {settings.google_cloud_credentials && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateSetting("google_cloud_credentials", "")
+                            }
+                            className="p-2 text-slate-400 hover:text-red-400 transition-colors"
+                            title="Remove credentials"
+                          >
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Upload your Google Cloud service account JSON file
+                      </p>
                     </div>
                   </div>
                   <div className="border-t border-slate-700 pt-4 mt-4">

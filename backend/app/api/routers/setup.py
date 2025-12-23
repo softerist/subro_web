@@ -110,6 +110,15 @@ async def complete_setup(
         try:
             await crud_app_settings.update(db, obj_in=setup_data.settings)
             logger.info("Settings saved during setup wizard.")
+
+            # Process Google Cloud credentials if provided
+            if setup_data.settings.google_cloud_credentials:
+                from app.api.routers.settings import _process_google_cloud_credentials
+
+                try:
+                    await _process_google_cloud_credentials(db, setup_data.settings)
+                except Exception as e:
+                    logger.warning(f"Failed to process Google Cloud credentials during setup: {e}")
         except Exception as e:
             logger.error(f"Failed to save settings during setup: {e}")
             # Don't fail the whole setup if settings save fails
@@ -119,6 +128,7 @@ async def complete_setup(
     await crud_app_settings.populate_from_env_defaults(db)
 
     # Validate settings (including defaults if not provided)
+    logger.info("Triggering initial validation for all settings...")
     await validate_all_settings(db)
 
     # Mark setup as completed
