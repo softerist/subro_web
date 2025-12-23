@@ -6,6 +6,7 @@ import {
   Users,
   Folder,
   Settings,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ export default function DashboardLayout() {
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Paths", href: "/paths", icon: Folder },
+    { name: "Statistics", href: "/statistics", icon: BarChart3 },
     ...(isAdmin
       ? [
           { name: "Users", href: "/admin/users", icon: Users },

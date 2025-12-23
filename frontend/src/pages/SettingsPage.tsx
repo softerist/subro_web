@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from "react";
-import { useAuthStore } from "@/store/authStore";
 import { Plus, Trash2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,10 +16,6 @@ import {
   updateSettings,
   SettingsUpdate,
   SettingsRead,
-  getTranslationStats,
-  TranslationStatsResponse,
-  getTranslationHistory,
-  TranslationLogEntry,
 } from "@/lib/settingsApi";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 
@@ -57,13 +52,6 @@ export default function SettingsPage() {
     positionY: undefined,
   });
 
-  // Translation Statistics State
-  const [translationStats, setTranslationStats] =
-    useState<TranslationStatsResponse | null>(null);
-  const [recentTranslations, setRecentTranslations] = useState<
-    TranslationLogEntry[]
-  >([]);
-
   // Download error state
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -97,16 +85,6 @@ export default function SettingsPage() {
       // Initialize deeplKeys from existing settings
       if (data.deepl_api_keys && data.deepl_api_keys.length > 0) {
         setDeeplKeys(data.deepl_api_keys);
-      }
-      // Load translation stats
-      try {
-        const stats = await getTranslationStats();
-        setTranslationStats(stats);
-        const history = await getTranslationHistory(1, 5);
-        setRecentTranslations(history.items);
-      } catch {
-        // Stats are optional, don't fail the whole page
-        console.warn("Failed to load translation stats");
       }
     } catch (err) {
       setError("Failed to load settings");
@@ -553,6 +531,7 @@ export default function SettingsPage() {
                             settings?.opensubtitles_username ||
                             "Enter username..."
                           }
+                          autoComplete="off"
                           value={formData.opensubtitles_username || ""}
                           onChange={(e) => {
                             const rect = e.target.getBoundingClientRect();
@@ -573,6 +552,7 @@ export default function SettingsPage() {
                         </Label>
                         <Input
                           type="password"
+                          autoComplete="new-password"
                           placeholder={
                             settings?.opensubtitles_password
                               ? "••••••••"
@@ -973,251 +953,6 @@ export default function SettingsPage() {
                             Upload JSON
                           </div>
                         </label>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Translation Statistics Section */}
-              <div className="space-y-4 mt-8 pt-8 border-t border-slate-700">
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                    <span className="text-white text-sm font-bold">📊</span>
-                  </div>
-                  <h3 className="text-lg font-semibold text-white">
-                    Translation Statistics
-                  </h3>
-                </div>
-                <div className="pl-10 space-y-4">
-                  {/* Summary Cards */}
-                  {translationStats ? (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {[
-                        { label: "All Time", data: translationStats.all_time },
-                        {
-                          label: "Last 30 Days",
-                          data: translationStats.last_30_days,
-                        },
-                        {
-                          label: "Last 7 Days",
-                          data: translationStats.last_7_days,
-                        },
-                      ].map((period) => (
-                        <div
-                          key={period.label}
-                          className="bg-slate-800/50 rounded-lg p-4 border border-slate-700"
-                        >
-                          <div className="text-sm text-slate-400 mb-2">
-                            {period.label}
-                          </div>
-                          <div className="text-2xl font-bold text-white mb-2">
-                            {period.data.total_characters.toLocaleString()}
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            characters translated
-                          </div>
-                          <div className="flex gap-3 mt-2 text-xs">
-                            <span className="text-violet-400">
-                              DeepL:{" "}
-                              {period.data.deepl_characters.toLocaleString()}
-                            </span>
-                            <span className="text-cyan-400">
-                              Google:{" "}
-                              {period.data.google_characters.toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="mt-2 text-xs text-slate-500">
-                            {period.data.total_translations} translations
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-slate-500">
-                      No translation statistics available yet.
-                    </div>
-                  )}
-
-                  {/* Recent Translations Table */}
-                  {recentTranslations.length > 0 && (
-                    <div className="mt-4">
-                      <div className="text-sm font-medium text-slate-400 mb-2">
-                        Recent Translations
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead className="bg-slate-800 text-slate-400">
-                            <tr>
-                              <th className="px-3 py-2 text-left">File</th>
-                              <th className="px-3 py-2 text-left">Service</th>
-                              <th className="px-3 py-2 text-right">Chars</th>
-                              <th className="px-3 py-2 text-left">Status</th>
-                              <th className="px-3 py-2 text-left">
-                                Date & Time
-                              </th>
-                              <th className="px-3 py-2 text-center">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-700/50 text-slate-300">
-                            {recentTranslations.map((tx) => {
-                              // Smart filename truncation
-                              const fileName =
-                                tx.file_name.split("/").pop() || tx.file_name;
-                              const maxLen = 30;
-                              const truncatedName =
-                                fileName.length > maxLen
-                                  ? `${fileName.slice(0, 12)}...${fileName.slice(-15)}`
-                                  : fileName;
-
-                              return (
-                                <tr key={tx.id}>
-                                  <td
-                                    className="px-3 py-2 max-w-[200px] font-mono"
-                                    title={tx.file_name}
-                                  >
-                                    {truncatedName}
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    <span
-                                      className={`px-1.5 py-0.5 rounded text-[10px] ${
-                                        tx.service_used === "deepl"
-                                          ? "bg-violet-500/20 text-violet-400"
-                                          : tx.service_used === "google"
-                                            ? "bg-cyan-500/20 text-cyan-400"
-                                            : "bg-slate-500/20 text-slate-400"
-                                      }`}
-                                    >
-                                      {tx.service_used}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2 text-right font-mono">
-                                    {tx.characters_billed.toLocaleString()}
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    <span
-                                      className={`${
-                                        tx.status === "success"
-                                          ? "text-emerald-400"
-                                          : "text-red-400"
-                                      }`}
-                                    >
-                                      {tx.status}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2 text-slate-500">
-                                    {new Date(tx.timestamp).toLocaleString(
-                                      undefined,
-                                      {
-                                        month: "short",
-                                        day: "numeric",
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      },
-                                    )}
-                                  </td>
-                                  <td className="px-3 py-2 text-center">
-                                    {tx.output_file_path ? (
-                                      <button
-                                        onClick={async () => {
-                                          try {
-                                            const token =
-                                              useAuthStore.getState()
-                                                .accessToken;
-                                            const response = await fetch(
-                                              `/api/v1/files/download?path=${encodeURIComponent(tx.output_file_path!)}`,
-                                              {
-                                                headers: {
-                                                  Authorization: `Bearer ${token}`,
-                                                },
-                                              },
-                                            );
-                                            if (!response.ok) {
-                                              const err = await response.json();
-                                              const message =
-                                                err.detail || "Download failed";
-                                              if (
-                                                message.includes("not found")
-                                              ) {
-                                                setDownloadError(
-                                                  "This translated file is no longer available on the server. It may have been moved or deleted.",
-                                                );
-                                              } else if (
-                                                message.includes(
-                                                  "Access denied",
-                                                )
-                                              ) {
-                                                setDownloadError(
-                                                  "You don't have permission to download this file.",
-                                                );
-                                              } else {
-                                                setDownloadError(message);
-                                              }
-                                              return;
-                                            }
-                                            const blob = await response.blob();
-                                            const url =
-                                              window.URL.createObjectURL(blob);
-                                            const a =
-                                              document.createElement("a");
-                                            a.href = url;
-                                            a.download =
-                                              tx
-                                                .output_file_path!.split("/")
-                                                .pop() || "download";
-                                            document.body.appendChild(a);
-                                            a.click();
-                                            document.body.removeChild(a);
-                                            window.URL.revokeObjectURL(url);
-                                          } catch {
-                                            setDownloadError(
-                                              "Something went wrong while downloading the file. Please try again.",
-                                            );
-                                          }
-                                        }}
-                                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white shadow-md hover:shadow-lg transition-all"
-                                        title="Download translated file"
-                                      >
-                                        <svg
-                                          className="w-4 h-4"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          viewBox="0 0 24 24"
-                                        >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                                          />
-                                        </svg>
-                                      </button>
-                                    ) : (
-                                      <span
-                                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-700/50 text-slate-500"
-                                        title="File not available"
-                                      >
-                                        <svg
-                                          className="w-4 h-4"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          viewBox="0 0 24 24"
-                                        >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-                                          />
-                                        </svg>
-                                      </span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
                       </div>
                     </div>
                   )}
