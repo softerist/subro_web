@@ -101,7 +101,12 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
                   <TableCell className="font-medium">{user.email}</TableCell>
                   <TableCell>
                     <Badge
-                      variant={user.is_superuser ? "destructive" : "secondary"}
+                      variant={user.is_superuser ? "outline" : "secondary"}
+                      className={
+                        user.is_superuser
+                          ? "bg-purple-500/20 text-purple-400 border-purple-500/20 hover:bg-purple-500/30"
+                          : ""
+                      }
                     >
                       {user.is_superuser
                         ? "Superuser"

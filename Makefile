@@ -178,7 +178,7 @@ db-migrate-and-apply: db-makemigrations db-apply-migration ## Generate migration
 	@echo "IMPORTANT: Review the migration file in backend/alembic/versions/ before applying it."
 
 
-.PHONY: dev ensure-migrations stop-prod prod
+.PHONY: dev ensure-migrations stop-prod prod reset-prod
 dev: stop-prod ensure-migrations compose-up ## Start the full stack (generates initial migration if needed, uses existing volumes)
 	@echo "Development stack is up."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
@@ -206,6 +206,8 @@ prod: ensure-dev-cleanup ## Deploy to production using blue-green deployment scr
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8080"
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
 	@echo "API Docs available at https://localhost:8443/api/v1/docs"
+
+reset-prod: reset-prod-db ## Alias for reset-prod-db
 
 reset-prod-db: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
 	@echo "WARNING: This will DELETE ALL DATA in the production database."
