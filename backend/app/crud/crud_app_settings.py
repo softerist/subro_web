@@ -205,6 +205,35 @@ class CRUDAppSettings:
             setattr(settings, db_field, processed_value)
             populated_fields.append(db_field)
 
+        # Special handling for Google Cloud Credentials
+        if not settings.google_cloud_credentials and getattr(
+            env_settings, "GOOGLE_CREDENTIALS_PATH", None
+        ):
+            cred_path_str = env_settings.GOOGLE_CREDENTIALS_PATH
+            try:
+                from pathlib import Path
+
+                cred_path = Path(cred_path_str)
+                if cred_path.exists():
+                    cred_content = cred_path.read_text(encoding="utf-8")
+                    # Validate JSON
+                    json.loads(cred_content)
+                    settings.google_cloud_credentials = encrypt_value(cred_content)
+                    populated_fields.append("google_cloud_credentials")
+                    logger.info(f"Loaded Google Credentials from file: {cred_path}")
+                else:
+                    logger.warning(
+                        f"GOOGLE_CREDENTIALS_PATH set to {cred_path} but file not found."
+                    )
+            except Exception as e:
+                logger.error(f"Failed to load Google Credentials from path {cred_path_str}: {e}")
+
+        if not settings.google_cloud_project_id and getattr(
+            env_settings, "GOOGLE_PROJECT_ID", None
+        ):
+            settings.google_cloud_project_id = env_settings.GOOGLE_PROJECT_ID
+            populated_fields.append("google_cloud_project_id")
+
         if populated_fields:
             await db.commit()
             await db.refresh(settings)
