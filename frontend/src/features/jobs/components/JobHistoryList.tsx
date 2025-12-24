@@ -48,14 +48,6 @@ export function JobHistoryList({
 
   const cancelMutation = useMutation({
     mutationFn: jobsApi.cancel,
-    onSuccess: (_, deletedJobId) => {
-      toast.success("Job cancelled/deleted successfully");
-      queryClient.invalidateQueries({ queryKey: ["jobs"] });
-      if (selectedJobId === deletedJobId) {
-        onSelectJob(null);
-      }
-      setJobToDelete(null);
-    },
     onError: (error: Error) => {
       toast.error(`Failed to cancel job: ${error.message}`);
     },
@@ -68,7 +60,16 @@ export function JobHistoryList({
 
   const confirmDelete = () => {
     if (jobToDelete) {
-      cancelMutation.mutate(jobToDelete.id);
+      cancelMutation.mutate(jobToDelete.id, {
+        onSuccess: (_, deletedJobId) => {
+          toast.success("Job cancelled/deleted successfully");
+          queryClient.invalidateQueries({ queryKey: ["jobs"] });
+          if (selectedJobId === deletedJobId) {
+            onSelectJob(null);
+          }
+          setJobToDelete(null);
+        },
+      });
     }
   };
 
