@@ -198,6 +198,20 @@ prod: ## Deploy to production using blue-green deployment script
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
 	@echo "API Docs available at https://localhost:8443/api/v1/docs"
 
+reset-prod-db: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
+	@echo "WARNING: This will DELETE ALL DATA in the production database."
+	@echo "Stopping containers..."
+	@docker rm -f infra-caddy-1 infra-db-1 infra-redis-1 infra-backup-1 infra-scheduler-1 green-api-1 green-worker-1 green-frontend-1 blue-api-1 blue-worker-1 blue-frontend-1 || true
+	@echo "Removing network to clear locks..."
+	@docker network rm infra_internal_net || true
+	@echo "Wiping database volume..."
+	@docker volume rm infra_postgres_data || true
+	@echo "Restarting infrastructure..."
+	@docker compose -f infra/docker/compose.data.yml -f infra/docker/compose.gateway.yml -p infra up -d
+	@echo "Redeploying application..."
+	@make prod
+	@echo "Database reset complete. Please visit the Setup page."
+
 
 # ==============================================================================
 # Linting & Formatting (Run locally)
