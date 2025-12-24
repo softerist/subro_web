@@ -2,8 +2,8 @@ import { api } from "@/lib/apiClient";
 import { Job, JobCreate } from "../types";
 
 export const jobsApi = {
-  getAll: async () => {
-    const response = await api.get<Job[]>("/v1/jobs/");
+  getAll: async (params?: { limit?: number; skip?: number }) => {
+    const response = await api.get<Job[]>("/v1/jobs/", { params });
     return response.data;
   },
 

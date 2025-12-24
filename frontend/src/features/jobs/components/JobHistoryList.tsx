@@ -41,8 +41,8 @@ export function JobHistoryList({
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["jobs"],
-    queryFn: jobsApi.getAll,
+    queryKey: ["jobs", { limit: 7 }],
+    queryFn: () => jobsApi.getAll({ limit: 7 }),
     refetchInterval: 5000,
   });
 
