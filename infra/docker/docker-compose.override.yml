@@ -23,17 +23,23 @@ services:
         "--reload",
         "--reload-dir",
         "/app",
+        "--reload-dir",
+        "/app",
       ]
+    environment:
+      - JWT_SECRET_KEY=testsecretkey
 
   worker:
+    user: root # Run as root to write to root-owned media folders
     volumes:
       # CORRECTED PATH: Mount project's backend code into /app
       - ../../backend:/app
+      - /mnt/usb3/Media/Movies:/mnt/usb3/Media/Movies # Media folder mount
     # PYTHONPATH is inherited from the base docker-compose.yml
     # environment:
     #   - PYTHONPATH=/app
-    # Command to run celery worker. '-P solo' is useful for local debugging (disables concurrency).
-    # Remove '-P solo' if you need to test concurrency.
+    # Command to run celery worker with concurrency for parallel job processing
+    # Use --concurrency to control how many tasks can run simultaneously
     command:
       [
         "poetry",
@@ -43,8 +49,7 @@ services:
         "app.tasks.celery_app",
         "worker",
         "--loglevel=info",
-        "-P",
-        "solo",
+        "--concurrency=4",
       ]
 
   frontend:
@@ -60,7 +65,7 @@ services:
     ports:
       # Expose Vite's port directly to the host (optional, Caddy is the primary entry)
       # Useful for direct access during debugging if Caddy has issues.
-      - "5173:5173"
+      - "5174:5173"
     # Healthcheck for the Vite dev server (can be slow to start)
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5173"]
@@ -86,6 +91,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  redis:
+    ports:
+      - "6379:6379"
 
 # Define networks used in this override file
 

@@ -1,0 +1,34 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    command: caddy run --config /etc/caddy/Caddyfile.prod --adapter caddyfile
+    ports:
+      - "8080:80"
+      - "8443:443"
+      - "8443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile.prod
+      - caddy_data:/data
+      - caddy_config:/config
+      # Mount media for serving static files if needed
+      - /mnt/sata0/Media:/mnt/sata0/Media
+    networks:
+      - caddy_net
+      - internal_net
+    env_file:
+      - ../../.env.prod
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  caddy_net:
+    driver: bridge
+  internal_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16

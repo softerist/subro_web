@@ -4,25 +4,54 @@
   "files.insertFinalNewline": true,
   "files.trimTrailingWhitespace": true,
   "editor.rulers": [100], // Visual guide for line length
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": true,
+  "editor.minimap.enabled": false, // Less clutter
+  "editor.tabSize": 2, // Consistent with frontend
+  "editor.formatOnSave": true,
+  // File associations
+  "files.associations": {
+    "*.env.*": "dotenv"
+  },
+  // Better search/exclude patterns
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/dist": true,
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/coverage": true
+  },
+  // Git integration
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  // Terminal configuration
+  "terminal.integrated.defaultProfile.linux": "bash",
+  "terminal.integrated.cwd": "${workspaceFolder}",
   // Python Specific Settings (using Ruff)
-  "python.defaultInterpreterPath": "/app/.venv/bin/python", // Set interpreter for Dev Container
-  "python.linting.enabled": true,
-  "python.linting.pylintEnabled": false,
-  "python.linting.flake8Enabled": false,
-  "python.linting.ruffEnabled": true,
-  "python.formatting.provider": "none", // Let Ruff handle formatting via editor integration
+  "python.analysis.typeCheckingMode": "basic", // Basic type checking
+  "python.analysis.diagnosticMode": "workspace", // Analyze entire workspace
+  "python.analysis.indexing": true, // Enable indexing for better performance
+  "python.analysis.autoSearchPaths": true, // Automatically add paths
+  "python.analysis.useLibraryCodeForTypes": true, // Use library code for type info
+  "python.analysis.extraPaths": [
+    ".backend", // Include backend source for analysis
+    ".frontend" // Include frontend source for analysis
+  ],
+  "python.defaultInterpreterPath": "/home/user/subro_web/backend/.venv/bin/python", // Set interpreter for Dev Container
   "python.testing.pytestArgs": [
     "backend/tests" // Point pytest to the tests directory
   ],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,
-  // Ruff Integration
+  // Python formatting with Ruff
   "[python]": {
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.codeActionsOnSave": {
-      "source.fixAll": "explicit", // Use Ruff's fixAll
-      "source.organizeImports": "explicit" // Use Ruff's import sorting
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
     }
   },
   // Frontend Specific Settings (ESLint & Prettier)
@@ -38,23 +67,50 @@
     "typescript",
     "typescriptreact"
   ],
-  "editor.formatOnSave": true,
+  // Frontend formatting with Prettier and ESLint
   "[typescript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "vscode.typescript-language-features",
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
   },
   "[typescriptreact]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
   },
   "[javascript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
   },
   "[json]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
   },
   "[yaml]": {
     "editor.defaultFormatter": "redhat.vscode-yaml"
   },
   "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[scss]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[html]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   // Tailwind CSS Integration

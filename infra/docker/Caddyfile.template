@@ -1,0 +1,85 @@
+# infra/docker/Caddyfile.template
+{
+	# In production, remove debug if not needed, but keep for initial troubleshooting if desired.
+	# email your-email@example.com # Optional: for Let's Encrypt notifications
+}
+
+(common_security_headers) {
+	header {
+		# HSTS (Strict-Transport-Security): Enforce HTTPS for 1 year, include subdomains
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+		# Prevent Clickjacking
+		X-Frame-Options "DENY"
+
+		# Prevent MIME Sniffing
+		X-Content-Type-Options "nosniff"
+
+		# Referrer Policy
+		Referrer-Policy "strict-origin-when-cross-origin"
+
+		# Permissions Policy (Restrict browser features)
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+
+		# Remove Server header for obscurity
+		-Server
+
+		# Content-Security-Policy (CSP)
+		# default-src 'self': Only allow resources from same origin by default
+		# script-src 'self' 'unsafe-inline': Allow local scripts and inline scripts (required for some React hydration/tooling)
+		# style-src 'self' 'unsafe-inline': Allow local styles and inline styles (required for CSS-in-JS/Tailwind)
+		# img-src 'self' data:: Allow local images and data URIs (base64)
+		# connect-src 'self' wss:: Allow XHR/Fetch to same origin and WebSockets to secure protocols
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:;"
+	}
+}
+
+# Match requests for your domain (or catch-all for single-tenant VPS)
+localhost {
+	# TLS is automatic with Caddy
+	tls internal # Use this for local/testing if no domain, otherwise remove for real Let's Encrypt
+
+	import common_security_headers
+
+	# Define named matchers
+	@api path /api*
+	@websockets path /ws*
+
+	# 1. Handle API requests (including WebSockets at /api/v1/ws/...)
+	route @api {
+		reverse_proxy {{UPSTREAM_API}}:8000 {
+			header_up Host {http.request.host}
+			header_up X-Real-IP {http.request.remote}
+		}
+	}
+
+	# 2. Handle WebSocket requests
+	route @websockets {
+		reverse_proxy {{UPSTREAM_API}}:8000 {
+			header_up Host {http.request.host}
+			header_up X-Real-IP {http.request.remote}
+			header_up Connection {http.request.header.Connection}
+			header_up Upgrade {http.request.header.Upgrade}
+		}
+	}
+
+	# 3. Handle Frontend (SPA)
+	route {
+		# Serve static files from /srv (needs to be mounted/copied in prod Dockerfile)
+		# OR reverse proxy to a node server if using SSR / separate frontend container
+		# Since we have a 'frontend' service in docker-compose.prod which is likely nginx or similar:
+		reverse_proxy {{UPSTREAM_FRONTEND}}:8080 {
+			header_up Connection {http.request.header.Connection}
+			header_up Upgrade {http.request.header.Upgrade}
+		}
+	}
+
+	# Logging
+	log {
+		output stderr
+		format console
+		level INFO
+	}
+}
+
+# Redirect HTTP to HTTPS is automatic in Caddy for typical setups.

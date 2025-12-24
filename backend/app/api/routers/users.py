@@ -9,9 +9,10 @@ from app.schemas.user import UserRead, UserUpdate  # Pydantic schemas for User
 # from app.core.users import current_active_user # Not strictly needed here unless defining custom routes
 
 router = APIRouter(
-    prefix="/users",  # All routes here will be under /api/users/... (when combined with main app's /api prefix)
+    # prefix="/users",  # REMOVED: Managed by include_router in main.py to avoid double prefixing (/users/users/...)
     tags=["Users - User Management"],  # Tag for OpenAPI documentation, more specific tag
 )
+
 
 # Include the standard users routes from fastapi-users
 # This provides:
@@ -26,11 +27,9 @@ router = APIRouter(
 # you might use a different dependency like `current_active_verified_user` in custom endpoints
 # or configure fastapi-users differently if it supports per-route verification requirements.
 router.include_router(
-    fastapi_users_instance.get_users_router(UserRead, UserUpdate, requires_verification=False)
-    # No additional prefix here, as the routes like "/me" and "/{id}" are relative to this router's prefix.
-    # Tags can be inherited or overridden if needed, but the router's tag is usually sufficient.
+    fastapi_users_instance.get_users_router(UserRead, UserUpdate),
+    tags=["Users - User Management"],
 )
-
 # Example of a custom user-related endpoint (if needed in the future):
 # from app.db.models.user import User # Would be needed for type hinting current_user
 # from app.core.users import current_active_user # Would be needed for dependency

@@ -9,6 +9,7 @@
 # --- Python ---
 __pycache__/
 *.pyc
+*.pyi
 *.pyo
 *.pyd
 .Python
@@ -18,7 +19,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+
 lib64/
 parts/
 sdist/

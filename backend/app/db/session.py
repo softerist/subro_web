@@ -1,99 +1,332 @@
 # backend/app/db/session.py
-from collections.abc import AsyncGenerator  # For precise type hinting of the generator
+import asyncio
+import contextlib
+import logging
+from collections.abc import AsyncGenerator, Generator
+from typing import TYPE_CHECKING
 
+from celery.utils.log import get_task_logger
 from fastapi import Depends
-from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+from sqlalchemy import Engine as SaEngine
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.orm import Session as SyncSessionORM
+from sqlalchemy.orm import sessionmaker
 
-from app.core.config import settings  # Your Pydantic settings instance
+from app.core.config import settings
 
-from .models.user import User  # Assuming User model is in .models.user
+# Import the base exception class. The specific subclasses will be handled by `isinstance`.
+from app.exceptions import TaskSetupError
 
-# 1. Create the async engine
-async_engine = create_async_engine(
-    str(settings.ASYNC_DATABASE_URI),  # Ensure ASYNC_DATABASE_URI is a string
-    pool_pre_ping=True,
-    echo=settings.DB_ECHO,  # Control SQL echoing via settings (e.g., settings.DEBUG)
-)
-
-# 2. Create a configured "AsyncSessionLocal" factory
-AsyncSessionLocal = async_sessionmaker(
-    bind=async_engine,
-    autocommit=False,
-    autoflush=False,
-    expire_on_commit=False,  # Good practice for async, prevents issues with detached objects
-    class_=AsyncSession,  # Explicitly specify the class, though often inferred
-)
+if TYPE_CHECKING:
+    from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
 
-# 3. Dependency to get an Async DB session
+logger = logging.getLogger(__name__)
+celery_logger = get_task_logger(__name__)
+
+
+# --- Asynchronous Engine and Session Setup (for FastAPI) ---
+fastapi_async_engine: AsyncEngine | None = None
+FastAPISessionLocal: async_sessionmaker[AsyncSession] | None = None
+
+
+def _initialize_fastapi_db_resources_sync():
+    """
+    Synchronous function to initialize FastAPI's async database engine and session maker.
+    Called by the lifespan manager.
+    """
+    global fastapi_async_engine, FastAPISessionLocal
+
+    if fastapi_async_engine is not None:
+        logger.info("FastAPI: Asynchronous database resources already initialized.")
+        return
+
+    logger.info("FastAPI: Initializing asynchronous database engine and session maker.")
+    try:
+        db_url_fastapi_obj = settings.ASYNC_SQLALCHEMY_DATABASE_URL
+        if not db_url_fastapi_obj:
+            logger.critical(
+                "CRITICAL: FastAPI: ASYNC_SQLALCHEMY_DATABASE_URL computed to None or empty."
+            )
+            raise ValueError(
+                "FastAPI: ASYNC_SQLALCHEMY_DATABASE_URL is empty or None after computation."
+            )
+        db_url_fastapi_str = str(db_url_fastapi_obj)
+
+        current_engine = create_async_engine(
+            db_url_fastapi_str,
+            pool_pre_ping=True,
+            echo=getattr(settings, "DB_ECHO", False),
+        )
+        current_session_local = async_sessionmaker(
+            bind=current_engine,
+            autocommit=False,
+            autoflush=False,
+            expire_on_commit=False,
+            class_=AsyncSession,
+        )
+        fastapi_async_engine = current_engine
+        FastAPISessionLocal = current_session_local
+        logger.info(
+            f"FastAPI: Asynchronous database engine ({db_url_fastapi_str.split('@')[0]}@...) and session maker configured successfully."
+        )
+    except Exception as e:
+        logger.critical(
+            f"CRITICAL: FastAPI: Failed to initialize asynchronous database engine: {e}",
+            exc_info=True,
+        )
+        fastapi_async_engine = None
+        FastAPISessionLocal = None
+        raise RuntimeError(
+            f"FastAPI: Failed to initialize asynchronous database engine during startup: {e}"
+        ) from e
+
+
+async def _dispose_fastapi_db_resources_async():
+    global fastapi_async_engine, FastAPISessionLocal
+    if fastapi_async_engine:
+        logger.info("FastAPI: Disposing FastAPI asynchronous database engine.")
+        await fastapi_async_engine.dispose()
+        fastapi_async_engine = None
+        FastAPISessionLocal = None
+        logger.info("FastAPI: FastAPI asynchronous database engine disposed.")
+    else:
+        logger.info("FastAPI: No FastAPI asynchronous database engine to dispose.")
+
+
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Dependency to get an asynchronous database session.
-    Ensures the session is closed and rolled back on error.
-    """
-    async with AsyncSessionLocal() as session:
+    if FastAPISessionLocal is None:
+        logger.critical("FastAPI: FastAPISessionLocal is not initialized.")
+        raise RuntimeError(
+            "FastAPI: FastAPISessionLocal is not initialized. "
+            "Ensure DB resources are initialized via lifespan."
+        )
+    async with FastAPISessionLocal() as session:
         try:
             yield session
-            # No explicit commit here, route handlers should manage commits.
+            # Note: Explicit commit is generally handled by the calling CRUD function
+            # or endpoint logic, not in the session getter itself.
         except Exception:
             await session.rollback()
+            logger.error(
+                "FastAPI: Async DB session rolled back due to an exception.", exc_info=True
+            )
             raise
-        finally:
-            # The 'async with' context manager handles closing the session.
-            # An explicit session.close() is generally not needed here with async_sessionmaker context manager.
-            # However, if you were not using 'async with AsyncSessionLocal() as session:',
-            # then await session.close() would be crucial.
-            # For consistency and explicitness, keeping it doesn't harm,
-            # but it's good to understand the context manager handles it.
-            await session.close()  # Often redundant with `async with`, but ensures closure.
 
 
-# --- fastapi-users Database Adapter Setup ---
 async def get_user_db(
     session: AsyncSession = Depends(get_async_session),
-) -> AsyncGenerator[SQLAlchemyUserDatabase, None]:
-    """
-    Dependency to get the SQLAlchemyUserDatabase adapter for FastAPI-Users.
-    """
+) -> AsyncGenerator["SQLAlchemyUserDatabase", None]:
+    from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+
+    from app.db.models.user import User
+
     yield SQLAlchemyUserDatabase(session, User)
 
 
-# --- Synchronous Session for Alembic or Scripts (Optional) ---
-# Keep this section if you need synchronous sessions for tasks outside FastAPI (e.g., Alembic migrations, standalone scripts).
-# Ensure SYNC_DATABASE_URI is configured in your settings if you use this.
-#
-# from sqlalchemy import create_engine
-# from sqlalchemy.orm import sessionmaker, Session as SyncSession # Alias Session to avoid name clash
-#
-# if settings.SYNC_DATABASE_URI: # Conditionally create if configured
-#     sync_engine = create_engine(
-#         str(settings.SYNC_DATABASE_URI),
-#         echo=settings.DB_ECHO, # Can use the same echo setting
-#     )
-#     SyncSessionLocal = sessionmaker(
-#         autocommit=False,
-#         autoflush=False,
-#         bind=sync_engine,
-#         class_=SyncSession # Use the aliased SyncSession
-#     )
-#
-#     def get_sync_db_session() -> SyncSession: # Use type hint for clarity
-#         """
-#         Provides a synchronous database session.
-#         Remember to close the session manually or use a context manager.
-#         """
-#         db = SyncSessionLocal()
-#         try:
-#             yield db
-#         finally:
-#             db.close()
-# else:
-#     sync_engine = None
-#     SyncSessionLocal = None
-#     get_sync_db_session = None
-#     print("Warning: SYNC_DATABASE_URI not configured. Synchronous DB session utilities will not be available.")
+# --- Synchronous Engine and Session Setup (for Alembic, scripts, etc.) ---
+sync_engine: SaEngine | None = None
+SyncSessionLocal: sessionmaker[SyncSessionORM] | None = None
+
+try:
+    sync_db_url_obj = settings.SYNC_SQLALCHEMY_DATABASE_URL
+    if not sync_db_url_obj:
+        logger.critical("SYNC: SYNC_SQLALCHEMY_DATABASE_URL computed to None or empty.")
+        raise ValueError("SYNC: SYNC_SQLALCHEMY_DATABASE_URL is empty or None after computation.")
+    sync_db_url_str = str(sync_db_url_obj)
+
+    sync_engine = create_engine(
+        sync_db_url_str,
+        echo=getattr(settings, "DB_ECHO", False),
+        pool_pre_ping=True,
+    )
+    SyncSessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=sync_engine,
+        class_=SyncSessionORM,
+    )
+    logger.info(
+        f"SYNC: Synchronous database engine ({sync_db_url_str.split('@')[0]}@...) and session maker configured successfully."
+    )
+except Exception as e:
+    logger.error(
+        f"SYNC: Failed to configure synchronous database engine using SYNC_SQLALCHEMY_DATABASE_URL: {e}",
+        exc_info=True,
+    )
+    sync_engine = None
+    SyncSessionLocal = None
+
+
+def get_sync_db_session() -> Generator[SyncSessionORM, None, None]:
+    if SyncSessionLocal is None:
+        raise RuntimeError(
+            "SYNC: Synchronous session factory (SyncSessionLocal) is not initialized. "
+            "Ensure SYNC_SQLALCHEMY_DATABASE_URL is configured and engine initialized successfully."
+        )
+    db: SyncSessionORM = SyncSessionLocal()
+    try:
+        yield db
+    except Exception:
+        db.rollback()
+        logger.error("SYNC: Sync DB session rolled back due to an exception.", exc_info=True)
+        raise
+    finally:
+        db.close()
+
+
+# --- Resources for Celery Worker ---
+worker_async_engine: AsyncEngine | None = None
+WorkerSessionLocal: async_sessionmaker[AsyncSession] | None = None
+
+
+def initialize_worker_db_resources():
+    global worker_async_engine, WorkerSessionLocal
+    if worker_async_engine is None:
+        celery_logger.info("CELERY_WORKER: Initializing database engine and session factory.")
+        try:
+            db_url_worker_obj = settings.ASYNC_SQLALCHEMY_DATABASE_URL_WORKER
+            if not db_url_worker_obj:
+                celery_logger.critical(
+                    "CELERY_WORKER: ASYNC_SQLALCHEMY_DATABASE_URL_WORKER computed to None or empty."
+                )
+                raise ValueError(
+                    "Database URI for Celery worker (ASYNC_SQLALCHEMY_DATABASE_URL_WORKER) is empty or None."
+                )
+            db_url_worker_str = str(db_url_worker_obj)
+
+            current_worker_engine = create_async_engine(
+                db_url_worker_str,
+                pool_pre_ping=True,
+                echo=getattr(settings, "DB_ECHO_WORKER", getattr(settings, "DB_ECHO", False)),
+            )
+            current_worker_session_local = async_sessionmaker(
+                bind=current_worker_engine,
+                class_=AsyncSession,
+                expire_on_commit=False,
+                autocommit=False,
+                autoflush=False,
+            )
+            worker_async_engine = current_worker_engine
+            WorkerSessionLocal = current_worker_session_local
+            celery_logger.info(
+                f"CELERY_WORKER: Database engine ({db_url_worker_str.split('@')[0]}@...) and session factory initialized."
+            )
+        except Exception as e:
+            celery_logger.critical(
+                f"CRITICAL: CELERY_WORKER: Failed to initialize database engine: {e}", exc_info=True
+            )
+            worker_async_engine = None
+            WorkerSessionLocal = None
+            raise RuntimeError(f"CELERY_WORKER: Failed to initialize database engine: {e}") from e
+    else:
+        celery_logger.info(
+            "CELERY_WORKER: Database engine and session factory already initialized for this process."
+        )
+
+
+def dispose_worker_db_resources_sync():
+    global worker_async_engine, WorkerSessionLocal
+    if worker_async_engine:
+        celery_logger.info("CELERY_WORKER: Disposing database engine (sync call).")
+        try:
+            asyncio.run(worker_async_engine.dispose())
+        except RuntimeError as e:
+            celery_logger.warning(
+                f"CELERY_WORKER: asyncio.run() failed during dispose: {e}. Common during shutdown."
+            )
+        except Exception as e:
+            celery_logger.error(
+                f"CELERY_WORKER: Unexpected exception during worker_async_engine.dispose(): {e}",
+                exc_info=True,
+            )
+        finally:
+            worker_async_engine = None
+            WorkerSessionLocal = None
+            celery_logger.info(
+                "CELERY_WORKER: Database engine disposal process completed (or attempted)."
+            )
+    else:
+        celery_logger.info("CELERY_WORKER: No database engine to dispose for this worker process.")
+
+
+@contextlib.asynccontextmanager
+async def get_worker_db_session() -> AsyncGenerator[AsyncSession, None]:
+    if WorkerSessionLocal is None:
+        celery_logger.critical(
+            "CELERY_WORKER: WorkerSessionLocal not initialized! DB init failed or signal not handled."
+        )
+        raise RuntimeError(
+            "Database session factory (WorkerSessionLocal) not initialized for Celery worker."
+        )
+
+    # Use a specific logger for this context manager to distinguish its logs
+    session_logger = get_task_logger("db_session_manager")
+
+    async with WorkerSessionLocal() as session:
+        try:
+            yield session
+            # Successful block exit: commit any changes made.
+            await session.commit()
+        except Exception as e:
+            # --- THIS IS THE INTEGRATED LOGIC ---
+            # Check if the exception is an "expected" control-flow exception
+            if isinstance(e, TaskSetupError):
+                session_logger.info(
+                    f"Controlled exception ({type(e).__name__}) caught. "
+                    "Rolling back transaction as a safeguard."
+                )
+            else:
+                # This is a genuinely unexpected error (e.g., SQLAlchemyError)
+                session_logger.error(
+                    "Unexpected exception in DB session block. Rolling back.",
+                    exc_info=True,
+                )
+
+            await session.rollback()
+            raise  # Always re-raise the exception for the task logic to handle.
+        finally:
+            # This block runs regardless of exceptions, ensuring the session is closed.
+            await session.close()
+
+
+# --- FastAPI Lifespan Event Handler Integration ---
+# (This part is unchanged)
+async def lifespan_db_manager(_app_instance, event_type: str):
+    lifespan_logger = logging.getLogger("app.db.lifespan")
+
+    if event_type == "startup":
+        lifespan_logger.info("FastAPI Lifespan: Startup event - Initializing DB resources.")
+        _initialize_fastapi_db_resources_sync()
+
+        if fastapi_async_engine:
+            lifespan_logger.info("FastAPI Lifespan: Testing DB connection.")
+            try:
+                async with fastapi_async_engine.connect() as connection:
+                    await connection.run_sync(lambda conn: conn.execute(text("SELECT 1")))
+                lifespan_logger.info("FastAPI Lifespan: Database connection successful on startup.")
+            except Exception as e:
+                lifespan_logger.error(
+                    f"FastAPI Lifespan: Database connection test failed: {e}", exc_info=True
+                )
+                await _dispose_fastapi_db_resources_async()
+                raise RuntimeError(
+                    f"FastAPI: Database connection test failed on startup: {e}"
+                ) from e
+        else:
+            lifespan_logger.critical(
+                "FastAPI Lifespan: fastapi_async_engine is None after initialization attempt."
+            )
+            raise RuntimeError(
+                "FastAPI engine failed to initialize during startup and did not raise."
+            )
+
+    elif event_type == "shutdown":
+        lifespan_logger.info("FastAPI Lifespan: Shutdown event - Disposing DB resources.")
+        await _dispose_fastapi_db_resources_async()

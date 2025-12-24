@@ -1,0 +1,60 @@
+name: Security Audit
+
+on:
+  push:
+    branches: ["main", "master", "develop"]
+  pull_request:
+    branches: ["main", "master", "develop"]
+  schedule:
+    - cron: "0 0 * * 0" # Weekly run
+
+jobs:
+  backend-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Security Tools
+        run: pip install bandit safety poetry
+
+      - name: Run Bandit (SAST)
+        run: bandit -r backend/app -ll # Scan app code, low severity threshold (or specific config)
+
+      - name: Export requirements for Safety
+        run: |
+          cd backend
+          poetry export --without-hashes --format=requirements.txt > requirements.txt
+
+      - name: Run Safety (Dependency Scan)
+        run: |
+          cd backend
+          # Safety might require an API key for full db access now, but basic scan works or it warns.
+          # We'll run it and continue on error if it's just an API key warning, but fail on vulns if possible.
+          safety check -r requirements.txt --continue-on-error
+
+  frontend-security:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run NPM Audit
+        # Fail only on high/critical vulnerabilities
+        run: npm audit --audit-level=high

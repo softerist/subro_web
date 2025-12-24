@@ -69,4 +69,5 @@ jobs:
           push: false # Don't push image in CI build test
           tags: subsapp-test-build-frontend:ci
           cache-from: type=gha
+
           cache-to: type=gha,mode=max

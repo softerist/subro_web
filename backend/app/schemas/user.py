@@ -1,6 +1,7 @@
 # backend/app/schemas/user.py
 import uuid
 from datetime import datetime
+from enum import Enum  # Import Enum
 from typing import Literal
 
 from fastapi_users import schemas
@@ -8,6 +9,12 @@ from pydantic import BaseModel, EmailStr
 
 # --- Base Schemas from fastapi-users ---
 # These provide the standard fields. We inherit from them.
+
+
+# --- Define UserRole Enum ---
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    STANDARD = "standard"
 
 
 class UserRead(schemas.BaseUser[uuid.UUID]):
@@ -22,13 +29,10 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
 
 
 class UserCreate(schemas.BaseUserCreate):
-    # Inherits email, password
-    # Add custom fields required during creation, if any.
-    # The 'role' could be set here, but often it's better handled
-    # by admin logic or defaults, rather than direct user input on creation.
-    # We rely on the DB default 'standard' for role.
-    # If OPEN_SIGNUP=False, this schema might only be used by admins.
-    pass
+    role: UserRole = UserRole.STANDARD  # Example: default to standard
+    is_superuser: bool = False  # Example: default to False
+    is_active: bool = True  # Example: default to True
+    is_verified: bool = False  # Example: default to False
 
 
 class UserUpdate(schemas.BaseUserUpdate):

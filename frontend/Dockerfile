@@ -1,73 +1,42 @@
-# frontend/Dockerfile
-
-# --- Base Stage ---
-# Use an official Node.js LTS version
-FROM node:22-alpine AS base
-
-# Set working directory
+# Base stage
+FROM node:20-alpine AS base
 WORKDIR /app
-
-# Set PYTHONPATH environment variable
-ENV PYTHONPATH=/app
-
-# --- Dependencies Stage ---
-# Install dependencies separately for better caching
-FROM base AS dependencies
-
-# Copy package definition files
-COPY package.json package-lock.json* ./
-
-# Install dependencies
-RUN npm ci --omit=dev
-
-# --- Development Stage ---
-FROM node:lts-alpine AS development
-
-# Install curl for healthcheck
-RUN apk add --no-cache curl
-
-WORKDIR /app
-
-# Copy package files and install dependencies
 COPY package*.json ./
-RUN npm install
+# Install dependencies including devDependencies
+RUN npm ci
 
-# Copy the rest of the application code
+# Development stage
+FROM base AS development
+# Copy source code (though usually mounted via volume in dev)
 COPY . .
-
-EXPOSE 5173
-
-# Default command might be overridden by compose, but good to have a default
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
-# --- Builder Stage ---
-# Build the production version of the application
-FROM dependencies AS builder
-
-# Install dev dependencies needed for build
-RUN npm install
-
-# Copy the entire application source code
+# Build stage
+FROM base AS build
 COPY . .
 
-# Run the build command
+# Accept build args for Vite environment variables
+ARG VITE_API_BASE_URL
+ARG VITE_WS_BASE_URL
+
+# Set as environment variables for the build process
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_WS_BASE_URL=${VITE_WS_BASE_URL}
+
 RUN npm run build
 
-# --- Production Stage ---
-# Serve the static files using Nginx
-FROM nginx:1.25-alpine AS production
+# Production stage
+FROM nginx:stable-alpine AS production
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy nginx configuration file
-COPY infra/nginx/nginx.conf /etc/nginx/nginx.conf
+# Support running as non-root
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chmod -R 755 /usr/share/nginx/html && \
+        chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx/conf.d
+RUN touch /var/run/nginx.pid && \
+        chown -R nginx:nginx /var/run/nginx.pid
 
-# Remove default Nginx welcome page
-RUN rm /usr/share/nginx/html/*
-
-# Copy the built static assets from the builder stage
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Expose port 80
-EXPOSE 80
-
-# Start Nginx server
+USER nginx
+EXPOSE 8080
 CMD ["nginx", "-g", "daemon off;"]

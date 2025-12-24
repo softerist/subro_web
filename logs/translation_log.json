@@ -1,0 +1,290 @@
+{
+  "log_schema_version": "1.1",
+  "cumulative_totals": {
+    "deepl": 601850,
+    "google": 113134,
+    "overall": 714984,
+    "last_updated": "2025-12-16T18:02:42.582259+00:00"
+  },
+  "jobs": [
+    {
+      "file_basename": "Severance.S02E10.Cold.Harbor.2160p.ATVP.WEB-DL.DDP5.1.DV.HDR.H.265-NTb.en.srt",
+      "timestamp_utc": "2025-03-31T06:49:27.683370+00:00",
+      "billed_chars": {
+        "deepl": 0,
+        "google": 0,
+        "total": 0
+      },
+      "services_used_raw": ["failed_no_fallback"],
+      "overall_status": "failed"
+    },
+    {
+      "file_basename": "Severance.S02E10.Cold.Harbor.2160p.ATVP.WEB-DL.DDP5.1.DV.HDR.H.265-NTb.en.srt",
+      "timestamp_utc": "2025-03-31T06:54:34.199289+00:00",
+      "billed_chars": {
+        "deepl": 0,
+        "google": 14158,
+        "total": 14158
+      },
+      "services_used_raw": ["google_api"],
+      "overall_status": "google"
+    },
+    {
+      "file_basename": "Severance.S02E10.Cold.Harbor.2160p.ATVP.WEB-DL.DDP5.1.DV.HDR.H.265-NTb.en.srt",
+      "timestamp_utc": "2025-03-31T09:45:44.038294+00:00",
+      "billed_chars": {
+        "deepl": 0,
+        "google": 14158,
+        "total": 14158
+      },
+      "services_used_raw": ["google_api"],
+      "overall_status": "google"
+    },
+    {
+      "file_basename": "Severance.S02E10.Cold.Harbor.2160p.ATVP.WEB-DL.DDP5.1.DV.HDR.H.265-NTb.en.srt",
+      "timestamp_utc": "2025-03-31T10:05:14.103614+00:00",
+      "billed_chars": {
+        "deepl": 0,
+        "google": 14158,
+        "total": 14158
+      },
+      "services_used_raw": ["google_api"],
+      "overall_status": "google"
+    },
+    {
+      "file_basename": "Severance.S02E10.Cold.Harbor.2160p.ATVP.WEB-DL.DDP5.1.DV.HDR.H.265-NTb.en.srt",
+      "timestamp_utc": "2025-03-31T10:10:56.948231+00:00",
+      "billed_chars": {
+        "deepl": 0,
+        "google": 14158,
+        "total": 14158
+      },
+      "services_used_raw": ["google_api"],
+      "overall_status": "google"
+    },
+    {
+      "file_basename": "Severance.S02E10.Cold.Harbor.2160p.ATVP.WEB-DL.DDP5.1.DV.HDR.H.265-NTb.en.srt",
+      "timestamp_utc": "2025-03-31T10:16:49.042885+00:00",
+      "billed_chars": {
+        "deepl": 0,
+        "google": 14158,
+        "total": 14158
+      },
+      "services_used_raw": ["google_api"],
+      "overall_status": "google"
+    },
+    {
+      "file_basename": "Black.Bag.2025.2160p.AMZN.WEB-DL.DDP5.1.HDR.H.265-APEX.en.srt",
+      "timestamp_utc": "2025-04-01T08:51:30.662149+00:00",
+      "billed_chars": {
+        "deepl": 0,
+        "google": 42344,
+        "total": 42344
+      },
+      "services_used_raw": ["google_api"],
+      "overall_status": "google"
+    },
+    {
+      "file_basename": "Black.Bag.2025.2160p.AMZN.WEB-DL.DDP5.1.HDR.H.265-APEX.en.srt",
+      "timestamp_utc": "2025-04-01T08:54:36.942682+00:00",
+      "billed_chars": {
+        "deepl": 42344,
+        "google": 0,
+        "total": 42344
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "MobLand.S01E02.Jigsaw.Puzzle.2160p.PMTP.WEB-DL.DDP5.1.DV.HDR.H.265-FLUX.en.srt",
+      "timestamp_utc": "2025-04-06T05:53:12.747910+00:00",
+      "billed_chars": {
+        "deepl": 27963,
+        "google": 0,
+        "total": 27963
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "MobLand.S01E03.Plan.B.2160p.PMTP.WEB-DL.DD+5.1.DoVi.HDR.H.265-playWEB.en.srt",
+      "timestamp_utc": "2025-04-13T16:08:10.287364+00:00",
+      "billed_chars": {
+        "deepl": 24097,
+        "google": 0,
+        "total": 24097
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "MobLand.S01E04.Rat.Trap.2160p.PMTP.WEB-DL.DDP5.1.DV.HDR.H.265-FLUX.en.srt",
+      "timestamp_utc": "2025-04-20T18:26:00.719937+00:00",
+      "billed_chars": {
+        "deepl": 19326,
+        "google": 0,
+        "total": 19326
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "FREAKY.TALES.2025.2160p.AMZN.WEB-DL.DDP5.1.HDR.H.265-APEX.en.srt",
+      "timestamp_utc": "2025-04-26T18:23:55.488808+00:00",
+      "billed_chars": {
+        "deepl": 38770,
+        "google": 0,
+        "total": 38770
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "MobLand.S01E06.Antwerp.Blues.2160p.PMTP.WEB-DL.DD+5.1.DoVi.HDR.H.265-playWEB.en.srt",
+      "timestamp_utc": "2025-05-04T07:51:06.668118+00:00",
+      "billed_chars": {
+        "deepl": 20207,
+        "google": 0,
+        "total": 20207
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "Murderbot.S01E01.FreeCommerce.2160p.ATVP.WEB-DL.DD+5.1.Atmos.DoVi.HDR.H.265-playWEB.en.srt",
+      "timestamp_utc": "2025-05-16T07:14:39.611715+00:00",
+      "billed_chars": {
+        "deepl": 16732,
+        "google": 0,
+        "total": 16732
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "Murderbot.S01E02.Eye.Contact.2160p.ATVP.WEB-DL.DD+5.1.Atmos.DoVi.HDR.H.265-playWEB.en.srt",
+      "timestamp_utc": "2025-05-16T07:16:16.118547+00:00",
+      "billed_chars": {
+        "deepl": 13522,
+        "google": 0,
+        "total": 13522
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "Clown.in.a.Cornfield.2025.2160p.AMZN.WEB-DL.DDP5.1.H.265-BYNDR.en.srt",
+      "timestamp_utc": "2025-06-10T16:51:38.033743+00:00",
+      "billed_chars": {
+        "deepl": 36151,
+        "google": 0,
+        "total": 36151
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "The Bad Guys 2 (2025) (2160p WEB-DL Hybrid H265 DV HDR DDP Atmos 5.1 English - HONE).en.srt",
+      "timestamp_utc": "2025-08-20T16:55:59.640337+00:00",
+      "billed_chars": {
+        "deepl": 55931,
+        "google": 0,
+        "total": 55931
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "The.Roses.2025.Hybrid.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H265-AOC.en.srt",
+      "timestamp_utc": "2025-10-20T19:10:27.318985+00:00",
+      "billed_chars": {
+        "deepl": 66328,
+        "google": 0,
+        "total": 66328
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "IT.Welcome.to.Derry.S01E02.NORDiC.2160p.HMAX.WEB-DL.DV.HDR10.H.265.DDP5.1.Atmos-DKV.en.srt",
+      "timestamp_utc": "2025-10-31T09:24:25.856488+00:00",
+      "billed_chars": {
+        "deepl": 29541,
+        "google": 0,
+        "total": 29541
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "Good.Fortune.2025.2160p.iT.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-BYNDR.en.srt",
+      "timestamp_utc": "2025-11-07T07:29:28.179962+00:00",
+      "billed_chars": {
+        "deepl": 60419,
+        "google": 0,
+        "total": 60419
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "Pluribus.S01E06.HDP.2160p.ATVP.WEB-DL.DD+5.1.Atmos.DoVi.HDR.H.265-playWEB.en.srt",
+      "timestamp_utc": "2025-12-05T18:10:16.284215+00:00",
+      "billed_chars": {
+        "deepl": 12124,
+        "google": 0,
+        "total": 12124
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "The Running Man (2025) 2160p AMZN CBR HDR WEB-DL H.265 English DDP5.1 ESubs - GTM.en.srt",
+      "timestamp_utc": "2025-12-11T18:23:24.544656+00:00",
+      "billed_chars": {
+        "deepl": 73703,
+        "google": 0,
+        "total": 73703
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    },
+    {
+      "file_basename": "Now.You.See.Me.Now.You.Dont.2025.2160p.iT.WEB-DL.DDP5.1.Atmos.HDR.H.265-BYNDR.en.srt",
+      "timestamp_utc": "2025-12-16T18:02:42.582259+00:00",
+      "billed_chars": {
+        "deepl": 64692,
+        "google": 0,
+        "total": 64692
+      },
+      "services_used_raw": ["deepl_key_1"],
+      "overall_status": "deepl"
+    }
+  ],
+  "deepl_keys_snapshot": {
+    "key_1": {
+      "count": 144590,
+      "limit": 500000,
+      "valid": true,
+      "snapshot_timestamp_utc": "2025-12-16T18:02:42.582259+00:00"
+    },
+    "key_2": {
+      "count": 0,
+      "limit": 500000,
+      "valid": true,
+      "snapshot_timestamp_utc": "2025-12-16T18:02:42.582259+00:00"
+    },
+    "key_3": {
+      "count": 0,
+      "limit": 500000,
+      "valid": true,
+      "snapshot_timestamp_utc": "2025-12-16T18:02:42.582259+00:00"
+    },
+    "key_4": {
+      "count": 0,
+      "limit": 500000,
+      "valid": true,
+      "snapshot_timestamp_utc": "2025-12-16T18:02:42.582259+00:00"
+    }
+  }
+}

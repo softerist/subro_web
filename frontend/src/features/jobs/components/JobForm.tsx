@@ -1,0 +1,189 @@
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, FolderOpen } from "lucide-react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+// Removed Input import as it is no longer used
+// import { Input } from "@/components/ui/input";
+
+import { jobsApi } from "../api/jobs";
+import { LANGUAGES } from "../constants/languages";
+
+// Validation Schema
+const formSchema = z.object({
+  folder_path: z.string().min(1, "Target folder is required"),
+  language: z.string().optional(),
+  log_level: z.enum(["DEBUG", "INFO", "WARNING", "ERROR"]),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+const LOG_LEVELS = [
+  { value: "DEBUG", label: "Debug (Verbose)" },
+  { value: "INFO", label: "Info (Default)" },
+  { value: "WARNING", label: "Warning" },
+  { value: "ERROR", label: "Error (Minimal)" },
+] as const;
+
+export function JobForm() {
+  const queryClient = useQueryClient();
+
+  // Fetch Allowed Folders from API
+  const { data: allowedFolders, isLoading: isLoadingFolders } = useQuery({
+    queryKey: ["allowed-folders"],
+    queryFn: jobsApi.getAllowedFolders,
+  });
+
+  // Setup Form
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      folder_path: "",
+      language: "ro",
+      log_level: "INFO",
+    },
+  });
+
+  // Create Job Mutation
+  const mutation = useMutation({
+    mutationFn: jobsApi.create,
+    onSuccess: () => {
+      toast.success("Job started successfully");
+      form.reset();
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    },
+    onError: (error: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(
+        `Failed to start job: ${error.response?.data?.detail || error.message}`,
+      );
+    },
+  });
+
+  const onSubmit = (values: FormValues) => {
+    mutation.mutate(values);
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
+          name="folder_path"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Target Folder</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a folder..." />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {isLoadingFolders ? (
+                    <div className="p-2 text-center text-sm text-muted-foreground">
+                      Loading folders...
+                    </div>
+                  ) : (
+                    allowedFolders?.map((folder) => (
+                      <SelectItem key={folder} value={folder}>
+                        <div className="flex items-center gap-2">
+                          <FolderOpen className="h-4 w-4" />
+                          {folder}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                The folder on the server where subtitles will be downloaded.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="space-y-6">
+          <FormField
+            control={form.control}
+            name="language"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Language</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select language..." />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {LANGUAGES.map((lang) => (
+                      <SelectItem key={lang.value} value={lang.value}>
+                        {lang.label} ({lang.value})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="log_level"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Log Level</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select log level..." />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {LOG_LEVELS.map((level) => (
+                      <SelectItem key={level.value} value={level.value}>
+                        {level.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  Controls verbosity of logs shown during processing.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <Button type="submit" disabled={mutation.isPending}>
+          {mutation.isPending && (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          )}
+          Start Job
+        </Button>
+      </form>
+    </Form>
+  );
+}
