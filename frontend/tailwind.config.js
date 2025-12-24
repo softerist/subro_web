@@ -81,10 +81,28 @@ module.exports = {
             height: "0",
           },
         },
+        shimmer: {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
+        "glow-pulse": {
+          "0%, 100%": { boxShadow: "0 0 5px rgba(99, 102, 241, 0.2)" },
+          "50%": { boxShadow: "0 0 20px rgba(99, 102, 241, 0.4)" },
+        },
+        spin: {
+          to: { transform: "rotate(360deg)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        shimmer: "shimmer 1.5s infinite",
+        "glow-pulse": "glow-pulse 2s var(--ease-apple-soft) infinite",
+        spin: "spin 800ms linear infinite",
+      },
+      transitionTimingFunction: {
+        apple: "var(--ease-apple)",
+        "apple-soft": "var(--ease-apple-soft)",
       },
     },
   },

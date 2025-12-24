@@ -27,9 +27,9 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6 pb-8 xl:flex xl:flex-col xl:h-full xl:pb-0 xl:overflow-hidden">
+    <div className="space-y-6 pb-8 xl:flex xl:flex-col xl:h-full xl:pb-0 xl:overflow-hidden page-enter page-stagger">
       {/* Dashboard Tiles Section */}
-      <Card>
+      <Card className="soft-hover">
         <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
           <CardTitle>Launchpad</CardTitle>
           {isAdmin && (
@@ -58,7 +58,7 @@ export default function DashboardPage() {
         {/* Left Column: Form & List - scrolls independently on xl */}
         <div className="w-full xl:w-1/3 space-y-6 xl:overflow-y-auto">
           {/* New Job Form */}
-          <Card>
+          <Card className="soft-hover">
             <CardHeader>
               <CardTitle>New Job</CardTitle>
               <CardDescription className="text-slate-400">
@@ -71,7 +71,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Job History */}
-          <Card>
+          <Card className="soft-hover">
             <CardHeader>
               <CardTitle>Job History</CardTitle>
             </CardHeader>
@@ -86,7 +86,7 @@ export default function DashboardPage() {
 
         {/* Right Column: Log Viewer - fills height and scrolls internally on xl */}
         <div className="w-full xl:w-2/3 xl:flex xl:flex-col xl:min-h-0">
-          <Card className="xl:flex-1 xl:flex xl:flex-col xl:min-h-0 xl:overflow-hidden">
+          <Card className="xl:flex-1 xl:flex xl:flex-col xl:min-h-0 xl:overflow-hidden soft-hover">
             <CardHeader className="py-4 shrink-0">
               <CardTitle>Log Viewer</CardTitle>
             </CardHeader>

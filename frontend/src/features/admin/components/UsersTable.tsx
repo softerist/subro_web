@@ -28,7 +28,6 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
     user: User | null;
-    positionY?: number;
   }>({ open: false, user: null });
 
   const deleteMutation = useMutation({
@@ -55,12 +54,10 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
     },
   });
 
-  const handleDeleteRequest = (user: User, event: React.MouseEvent) => {
-    const rect = event.currentTarget.getBoundingClientRect();
+  const handleDeleteRequest = (user: User) => {
     setConfirmState({
       open: true,
       user,
-      positionY: rect.top + window.scrollY,
     });
   };
 
@@ -80,7 +77,7 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
 
   return (
     <>
-      <div className="rounded-md border">
+      <div className="rounded-md border soft-hover">
         <Table>
           <TableHeader>
             <TableRow>
@@ -137,7 +134,7 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={(e) => handleDeleteRequest(user, e)}
+                      onClick={() => handleDeleteRequest(user)}
                       disabled={deleteMutation.isPending}
                       title="Delete User"
                     >
@@ -169,7 +166,6 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
         isLoading={deleteMutation.isPending}
         variant="destructive"
         confirmLabel="Delete"
-        positionY={confirmState.positionY}
       />
     </>
   );

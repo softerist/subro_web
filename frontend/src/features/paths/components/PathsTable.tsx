@@ -23,7 +23,6 @@ export function PathsTable() {
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
     path: StoragePath | null;
-    positionY?: number;
   }>({ open: false, path: null });
 
   const {
@@ -48,12 +47,10 @@ export function PathsTable() {
     },
   });
 
-  const handleDeleteRequest = (path: StoragePath, event: React.MouseEvent) => {
-    const rect = event.currentTarget.getBoundingClientRect();
+  const handleDeleteRequest = (path: StoragePath) => {
     setConfirmState({
       open: true,
       path,
-      positionY: rect.top + window.scrollY,
     });
   };
 
@@ -77,7 +74,7 @@ export function PathsTable() {
 
   return (
     <>
-      <div className="rounded-md border">
+      <div className="rounded-md border soft-hover">
         <Table>
           <TableHeader>
             <TableRow>
@@ -108,7 +105,7 @@ export function PathsTable() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={(e) => handleDeleteRequest(path, e)}
+                      onClick={() => handleDeleteRequest(path)}
                       disabled={
                         deleteMutation.isPending &&
                         confirmState.path?.id === path.id
@@ -151,7 +148,6 @@ export function PathsTable() {
         isLoading={deleteMutation.isPending}
         variant="destructive"
         confirmLabel="Remove"
-        positionY={confirmState.positionY}
       />
     </>
   );

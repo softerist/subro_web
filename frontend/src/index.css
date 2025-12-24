@@ -43,6 +43,9 @@
     --chart-4: 43 74% 66%;
 
     --chart-5: 27 87% 67%;
+
+    --ease-apple: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-apple-soft: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .dark {
@@ -70,8 +73,8 @@
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 20% 98%;
 
-    --border: 215 27.9% 16.9%;
-    --input: 215 27.9% 16.9%;
+    --border: 215 27.9% 14%;
+    --input: 215 27.9% 14%;
     --ring: 216 12.2% 83.9%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
@@ -131,4 +134,296 @@ textarea,
   cursor: text;
   user-select: text;
   -webkit-user-select: text;
+}
+
+@layer utilities {
+  /* ===== Page Entrance ===== */
+  .page-enter {
+    animation: page-enter 700ms var(--ease-apple) both;
+    will-change: opacity, transform, filter;
+  }
+
+  /* ===== Stagger Animation (supports 12 children) ===== */
+  .page-stagger > * {
+    animation: rise-in 600ms var(--ease-apple-soft) both;
+    will-change: opacity, transform;
+  }
+
+  .page-stagger > *:nth-child(1) {
+    animation-delay: 50ms;
+  }
+  .page-stagger > *:nth-child(2) {
+    animation-delay: 100ms;
+  }
+  .page-stagger > *:nth-child(3) {
+    animation-delay: 150ms;
+  }
+  .page-stagger > *:nth-child(4) {
+    animation-delay: 200ms;
+  }
+  .page-stagger > *:nth-child(5) {
+    animation-delay: 250ms;
+  }
+  .page-stagger > *:nth-child(6) {
+    animation-delay: 300ms;
+  }
+  .page-stagger > *:nth-child(7) {
+    animation-delay: 350ms;
+  }
+  .page-stagger > *:nth-child(8) {
+    animation-delay: 400ms;
+  }
+  .page-stagger > *:nth-child(9) {
+    animation-delay: 450ms;
+  }
+  .page-stagger > *:nth-child(10) {
+    animation-delay: 500ms;
+  }
+  .page-stagger > *:nth-child(11) {
+    animation-delay: 550ms;
+  }
+  .page-stagger > *:nth-child(12) {
+    animation-delay: 600ms;
+  }
+
+  /* ===== Fade-in-up (individual element entrance) ===== */
+  .fade-in-up {
+    animation: rise-in 500ms var(--ease-apple-soft) both;
+  }
+
+  /* ===== Soft Hover (card lift) ===== */
+  .soft-hover {
+    position: relative;
+    overflow: hidden;
+    transition:
+      transform 600ms var(--ease-apple),
+      box-shadow 600ms var(--ease-apple),
+      border-color 400ms var(--ease-apple);
+  }
+
+  .soft-hover::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.03),
+      transparent
+    );
+    transition: left 800ms var(--ease-apple);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .soft-hover:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      0 20px 50px -20px rgba(0, 0, 0, 0.5),
+      0 0 40px -15px rgba(99, 102, 241, 0.15);
+  }
+
+  .soft-hover:hover::before {
+    left: 150%;
+  }
+
+  /* ===== Glass Card (glassmorphism) ===== */
+  .glass-card {
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+  }
+
+  /* ===== Glow Effect (focus/active states) ===== */
+  .glow-focus:focus-within {
+    box-shadow:
+      0 0 0 2px rgba(99, 102, 241, 0.3),
+      0 0 20px -5px rgba(99, 102, 241, 0.4);
+  }
+
+  .glow-pulse {
+    animation: glow-pulse 2s var(--ease-apple-soft) infinite;
+  }
+
+  /* ===== Icon Animation ===== */
+  .icon-hover {
+    transition: transform 300ms var(--ease-apple);
+  }
+
+  .icon-hover:hover {
+    transform: scale(1.1);
+  }
+
+  .icon-spin {
+    animation: spin 600ms var(--ease-apple);
+  }
+
+  /* ===== Loading Spinner ===== */
+  .spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 800ms linear infinite;
+  }
+
+  .spinner-lg {
+    width: 32px;
+    height: 32px;
+    border-width: 3px;
+  }
+
+  /* ===== Shimmer (loading placeholder) ===== */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* ===== Pulse (subtle attention) ===== */
+  .pulse-subtle {
+    animation: pulse-subtle 2s var(--ease-apple-soft) infinite;
+  }
+
+  /* ===== Premium Glassmorphism ===== */
+  .glass-morphism {
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .glass-pill {
+    background: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.1),
+      0 2px 4px -1px rgba(0, 0, 0, 0.06),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .glow-pulse-red {
+    animation: glow-pulse-red 2s var(--ease-apple-soft) infinite;
+  }
+}
+
+/* ===== Keyframes ===== */
+@keyframes page-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+    filter: blur(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes rise-in {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(99, 102, 241, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+  }
+}
+
+@keyframes pulse-subtle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes glow-pulse-red {
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(239, 68, 68, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+  }
+}
+
+/* ===== Reduced Motion Support ===== */
+@media (prefers-reduced-motion: reduce) {
+  .page-enter,
+  .page-stagger > *,
+  .fade-in-up,
+  .glow-pulse,
+  .pulse-subtle {
+    animation: none !important;
+    filter: none;
+    transform: none;
+    opacity: 1;
+  }
+
+  .soft-hover,
+  .icon-hover {
+    transition: none;
+  }
+
+  .soft-hover:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .soft-hover::before {
+    display: none;
+  }
+
+  .spinner {
+    animation: none;
+    border-color: currentColor;
+    opacity: 0.5;
+  }
+
+  .shimmer {
+    animation: none;
+    background: rgba(255, 255, 255, 0.05);
+  }
 }
