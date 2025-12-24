@@ -292,6 +292,7 @@ async def _run_streaming_session(  # noqa: C901
             )
 
             # Fetch and send history from Redis list for late subscribers
+            history_found = False
             try:
                 history_redis = AsyncRedis.from_url(
                     str(settings.REDIS_PUBSUB_URL), encoding="utf-8", decode_responses=False
@@ -300,6 +301,7 @@ async def _run_streaming_session(  # noqa: C901
                     history_key = f"job:{job_id}:history"
                     history_items = await history_redis.lrange(history_key, 0, -1)
                     if history_items:
+                        history_found = True
                         logger.debug(
                             f"Sending {len(history_items)} historical log items for job {job_id}"
                         )
@@ -310,6 +312,31 @@ async def _run_streaming_session(  # noqa: C901
                     await history_redis.aclose()
             except Exception as e_hist:
                 logger.error(f"Failed to fetch log history for job {job_id}: {e_hist}")
+
+            # Fallback: If no Redis history, load from database
+            if not history_found:
+                try:
+                    job = await db.get(Job, job_id)
+                    if job and (job.full_logs or job.log_snippet):
+                        logs_content = job.full_logs or job.log_snippet
+                        logger.info(f"Sending database logs for completed job {job_id}")
+                        # Send as a single log message
+                        import json
+
+                        await websocket.send_text(
+                            json.dumps(
+                                {
+                                    "type": "log",
+                                    "payload": {
+                                        "stream": "stdout",
+                                        "message": logs_content,
+                                        "source": "database",
+                                    },
+                                }
+                            )
+                        )
+                except Exception as e_db:
+                    logger.error(f"Failed to fetch logs from database for job {job_id}: {e_db}")
 
             monitor_task = asyncio.create_task(
                 _websocket_monitor_task(websocket, job_id), name=f"monitor-{job_id}"

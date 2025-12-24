@@ -85,8 +85,8 @@ async def _publish_to_redis_pubsub_async(
         # We store all messages to preserve complete context
         history_key = f"job:{job_db_id_str}:history"
         await redis_client.rpush(history_key, json_message)
-        # Refresh expiry on every push (sliding window) - 24h
-        await redis_client.expire(history_key, 86400)
+        # Refresh expiry on every push (sliding window) - 7 days
+        await redis_client.expire(history_key, 604800)
 
         if message_type == "status":
             logger.info(
@@ -1485,6 +1485,13 @@ async def _finalize_job_after_script(
             final_exit_code = -102  # Use a specific code for this race condition scenario.
             final_message = "Job cancelled by user during execution."
 
+        # Build full logs for database storage (limit to 1MB to prevent DB bloat)
+        full_logs = stdout_str + ("\n--- STDERR ---\n" + stderr_str if stderr_str.strip() else "")
+        if len(full_logs) > 1_000_000:
+            full_logs = (
+                full_logs[:500_000] + "\n\n... [LOGS TRUNCATED] ...\n\n" + full_logs[-500_000:]
+            )
+
         # Now, update the database with the definitively correct final state.
         await crud_ops.update_job_completion_details(
             db=db,
@@ -1493,6 +1500,7 @@ async def _finalize_job_after_script(
             exit_code=final_exit_code,
             result_message=final_message,
             log_snippet=log_snippet,
+            full_logs=full_logs,
             completed_at=datetime.now(UTC),
         )
         await db.commit()

@@ -81,6 +81,7 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
         exit_code: int | None = None,
         result_message: str | None = None,
         log_snippet: str | None = None,
+        full_logs: str | None = None,
         started_at: datetime | None = None,
         celery_task_id: str | None = None,
     ) -> Job | None:
@@ -106,6 +107,7 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
             exit_code,
             result_message,
             log_snippet,
+            full_logs,
             started_at,
             celery_task_id,
         )
@@ -131,6 +133,7 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
         exit_code: int | None,
         result_message: str | None,
         log_snippet: str | None,
+        full_logs: str | None,
         started_at: datetime | None,
         celery_task_id: str | None = None,
     ) -> dict[str, Any]:  # Added type hint for return
@@ -148,6 +151,8 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
             update_data["exit_code"] = exit_code
         if log_snippet is not None:
             update_data["log_snippet"] = log_snippet
+        if full_logs is not None:
+            update_data["full_logs"] = full_logs
         if celery_task_id is not None:
             update_data["celery_task_id"] = celery_task_id
 

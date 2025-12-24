@@ -94,6 +94,9 @@ class Job(Base):
     # A snippet of the job's logs, e.g., last N lines or relevant error output
     log_snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Complete logs from job execution (stdout + stderr combined)
+    full_logs: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # The actual command string executed by the Celery worker
     script_command: Mapped[str | None] = mapped_column(Text, nullable=True)
 

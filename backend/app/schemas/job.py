@@ -63,6 +63,10 @@ class JobUpdate(BaseModel):
         default=None,
         description="A snippet of the job's logs, especially errors",  # Potentially large
     )
+    full_logs: str | None = Field(
+        default=None,
+        description="Complete logs from job execution",
+    )
     # New fields from model, typically set by the worker, not direct user update
     script_command: str | None = Field(default=None, description="The command executed for the job")
     script_pid: int | None = Field(
