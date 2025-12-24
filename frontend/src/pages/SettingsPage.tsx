@@ -284,7 +284,9 @@ export default function SettingsPage() {
     <div className="space-y-6 page-enter page-stagger">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Settings</h1>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+            Settings
+          </h1>
           <p className="text-slate-400">
             Manage your application configuration
           </p>
@@ -319,15 +321,14 @@ export default function SettingsPage() {
       </div>
 
       {/* Tab Content */}
-      <Card
-        ref={cardRef}
-        className="bg-slate-800/50 border-slate-700 soft-hover"
-      >
+      <Card ref={cardRef} className="soft-hover">
         {/* API Integrations */}
         {currentTab === "integrations" && (
           <>
             <CardHeader>
-              <CardTitle className="text-white">External Services</CardTitle>
+              <CardTitle className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+                External Services
+              </CardTitle>
               <CardDescription className="text-slate-400">
                 Configure API keys for metadata providers and subtitle services.
                 Masked values indicate configured credentials from env.prod
@@ -991,7 +992,9 @@ export default function SettingsPage() {
         {currentTab === "qbittorrent" && (
           <>
             <CardHeader>
-              <CardTitle className="text-white">qBittorrent Settings</CardTitle>
+              <CardTitle className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+                qBittorrent Settings
+              </CardTitle>
               <CardDescription className="text-slate-400">
                 Configure connection to your qBittorrent instance for torrent
                 monitoring.
@@ -1077,7 +1080,7 @@ export default function SettingsPage() {
         {currentTab === "paths" && (
           <>
             <CardHeader>
-              <CardTitle className="text-white">
+              <CardTitle className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
                 Allowed Media Folders
               </CardTitle>
               <CardDescription className="text-slate-400">

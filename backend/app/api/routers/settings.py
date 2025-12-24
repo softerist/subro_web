@@ -143,11 +143,10 @@ async def get_raw_setting(
 # Removed test_deepl_key endpoint as validation is now automatic on save
 
 
-async def _process_google_cloud_credentials(  # noqa: C901
+async def _process_google_cloud_credentials(
     db: AsyncSession, settings_update: SettingsUpdate
 ) -> str | None:
     """Process and validate Google Cloud credentials if provided. Returns error message if failed."""
-    import json
 
     from sqlalchemy import select
 
@@ -171,94 +170,19 @@ async def _process_google_cloud_credentials(  # noqa: C901
     if not creds_json:
         return None
 
-    # Parse JSON and validate structure
-    try:
-        creds = json.loads(creds_json)
-    except json.JSONDecodeError as e:
-        logger.warning(f"Invalid Google Cloud credentials JSON: {e}")
-        return f"Invalid JSON: {e}"
+    # Parse JSON and validate structure using central service
+    from app.services.api_validation import validate_google_cloud
 
-    # Check required fields
-    required_fields = ["type", "project_id", "private_key", "client_email"]
-    missing = [f for f in required_fields if f not in creds]
-    if missing:
-        logger.warning(f"Google Cloud credentials missing required fields: {missing}")
-        # Still save but mark as invalid
-        result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
-        settings = result.scalar_one_or_none()
-        if settings:
-            settings.google_cloud_valid = False
-            settings.google_cloud_project_id = creds.get("project_id")
-            await db.commit()
-        if settings:
-            settings.google_cloud_valid = False
-            settings.google_cloud_project_id = creds.get("project_id")
-            await db.commit()
-        return f"Missing required fields: {', '.join(missing)}"
+    is_valid, project_id, error_msg = await validate_google_cloud(creds_json)
 
-    # Validate type is service_account
-    if creds.get("type") != "service_account":
-        logger.warning(f"Google Cloud credentials type is not service_account: {creds.get('type')}")
-        result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
-        settings = result.scalar_one_or_none()
-        if settings:
-            settings.google_cloud_valid = False
-            settings.google_cloud_project_id = creds.get("project_id")
-            await db.commit()
-        if settings:
-            settings.google_cloud_valid = False
-            settings.google_cloud_project_id = creds.get("project_id")
-            await db.commit()
-        return f"Invalid type: {creds.get('type')} (expected 'service_account')"
-
-    # Extract and save project_id
-    project_id = creds.get("project_id")
     result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
     settings = result.scalar_one_or_none()
 
     if settings:
         settings.google_cloud_project_id = project_id
-
-        # Perform live validation check
-        try:
-            from google.cloud import translate_v3 as translate
-            from google.oauth2 import service_account
-
-            # Create credentials and client
-            credentials = service_account.Credentials.from_service_account_info(creds)
-            client = translate.TranslationServiceClient(credentials=credentials)
-
-            # Make a lightweight API call to verify access
-            parent = f"projects/{project_id}/locations/global"
-            client.get_supported_languages(parent=parent, display_language_code="en")
-
-            settings.google_cloud_valid = True
-            logger.info(
-                f"Google Cloud credentials validated successfully for project: {project_id}"
-            )
-
-        except ImportError:
-            logger.warning("Google Cloud libraries not installed, skipping live validation")
-            # Fallback to structural validity if libraries missing
-            settings.google_cloud_valid = True
-        except Exception as e:
-            logger.error(f"Google Cloud live validation failed: {e}")
-            settings.google_cloud_valid = False
-
-            # Map common errors to friendly messages
-            raw_error = str(e)
-            if "401" in raw_error and "invalid authentication credentials" in raw_error:
-                error_msg = (
-                    "Authentication Failed: The provided Service Account key is invalid or expired."
-                )
-            elif "Cloud Translation API" in raw_error and "not enabled" in raw_error:
-                error_msg = "API Not Enabled: The Cloud Translation API is not enabled for this project. Please enable it in the Google Cloud Console."
-            elif "404" in raw_error and ("Project" in raw_error or "project" in raw_error):
-                error_msg = "Project Not Found: The specified Project ID does not exist or the Service Account lacks access to it."
-            else:
-                # Fallback generic message to prevent leaking details/IDs
-                error_msg = "Validation Failed: Unable to verify credentials with Google Cloud. Please check your Project ID and permissions."
-
+        settings.google_cloud_valid = is_valid
         await db.commit()
-        logger.info(f"Google Cloud credentials saved for project: {creds.get('project_id')}")
-        return error_msg if "error_msg" in locals() else None
+        logger.info(f"Google Cloud credentials saved for project: {project_id}")
+        return error_msg
+
+    return None

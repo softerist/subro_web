@@ -6,7 +6,9 @@ export function PathsPage() {
     <div className="space-y-6 page-enter page-stagger">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Storage Paths</h2>
+          <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+            Storage Paths
+          </h2>
           <p className="text-muted-foreground">
             Manage allowed directories for subtitle operations.
           </p>

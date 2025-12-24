@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 
 import { pathsApi } from "../api/paths";
@@ -74,7 +75,7 @@ export function PathsTable() {
 
   return (
     <>
-      <div className="rounded-md border soft-hover">
+      <Card className="soft-hover overflow-hidden border-slate-700/50">
         <Table>
           <TableHeader>
             <TableRow>
@@ -125,7 +126,7 @@ export function PathsTable() {
             )}
           </TableBody>
         </Table>
-      </div>
+      </Card>
 
       <ConfirmDialog
         open={confirmState.open}

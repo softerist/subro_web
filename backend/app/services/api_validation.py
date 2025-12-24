@@ -184,6 +184,68 @@ async def validate_deepl(api_key: str) -> dict:
             return {"valid": False, "error": str(e)}
 
 
+async def validate_google_cloud(creds_json: str) -> tuple[bool | None, str | None, str | None]:
+    """
+    Validate Google Cloud JSON credentials.
+    Returns: (is_valid, project_id, error_message)
+    """
+    import json
+
+    if not creds_json or not creds_json.strip():
+        return None, None, None
+
+    try:
+        creds = json.loads(creds_json)
+    except json.JSONDecodeError as e:
+        return False, None, f"Invalid JSON: {e}"
+
+    required_fields = ["type", "project_id", "private_key", "client_email"]
+    missing = [f for f in required_fields if f not in creds]
+    if missing:
+        return False, creds.get("project_id"), f"Missing required fields: {', '.join(missing)}"
+
+    if creds.get("type") != "service_account":
+        return (
+            False,
+            creds.get("project_id"),
+            f"Invalid type: {creds.get('type')} (expected 'service_account')",
+        )
+
+    project_id = creds.get("project_id")
+
+    # Live validation
+    try:
+        from google.cloud import translate_v3 as translate
+        from google.oauth2 import service_account
+
+        credentials = service_account.Credentials.from_service_account_info(creds)
+        client = translate.TranslationServiceClient(credentials=credentials)
+
+        # Make a lightweight API call to verify access
+        parent = f"projects/{project_id}/locations/global"
+        client.get_supported_languages(parent=parent, display_language_code="en")
+
+        return True, project_id, None
+
+    except ImportError:
+        logger.warning("Google Cloud libraries not installed, skipping live validation")
+        return True, project_id, None
+    except Exception as e:
+        logger.warning(f"Google Cloud live validation failed: {e}")
+        raw_error = str(e)
+        if "401" in raw_error and "invalid authentication credentials" in raw_error:
+            error_msg = (
+                "Authentication Failed: The provided Service Account key is invalid or expired."
+            )
+        elif "Cloud Translation API" in raw_error and "not enabled" in raw_error:
+            error_msg = "API Not Enabled: The Cloud Translation API is not enabled for this project. Please enable it in the Google Cloud Console."
+        elif "404" in raw_error and ("Project" in raw_error or "project" in raw_error):
+            error_msg = "Project Not Found: The specified Project ID does not exist or the Service Account lacks access to it."
+        else:
+            error_msg = "Validation Failed: Unable to verify credentials with Google Cloud. Please check your Project ID and permissions."
+        return False, project_id, error_msg
+
+
 async def validate_deepl_keys_background(  # noqa: C901
     keys: list[str], db_session_factory
 ) -> None:
@@ -312,9 +374,26 @@ async def validate_all_settings(db: AsyncSession) -> None:
             settings_row.opensubtitles_key_valid = None
             settings_row.opensubtitles_valid = None
 
+        # 2. Validate Google Cloud Translation
+        google_creds = await crud_app_settings.get_decrypted_value(db, "google_cloud_credentials")
+        if google_creds:
+            is_valid, project_id, _error_msg = await validate_google_cloud(google_creds)
+            settings_row.google_cloud_valid = is_valid
+            settings_row.google_cloud_project_id = project_id
+        else:
+            # Check env fallback if DB is empty
+            from app.core.config import settings as env_settings
+
+            if getattr(env_settings, "GOOGLE_CREDENTIALS_PATH", None):
+                # We don't perform live validation for env file path here to avoid blocking
+                # but we mark as potentially valid if it exists.
+                # Actually, better to leave as None or True based on config presence.
+                # SettingsRead.google_cloud_valid handles the display logic for env.
+                pass
+
         await db.commit()
 
-        # 2. Trigger DeepL Validation in Background
+        # 3. Trigger DeepL Validation in Background
         # We need to get the keys first
         deepl_keys = await crud_app_settings.get_decrypted_value(db, "deepl_api_keys")
         logger.info(

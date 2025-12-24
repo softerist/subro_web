@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { User } from "../types";
 import { adminApi } from "../api/admin";
@@ -77,7 +78,7 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
 
   return (
     <>
-      <div className="rounded-md border soft-hover">
+      <Card className="soft-hover overflow-hidden border-slate-700/50">
         <Table>
           <TableHeader>
             <TableRow>
@@ -108,7 +109,14 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={user.is_active ? "default" : "outline"}>
+                    <Badge
+                      variant={user.is_active ? "default" : "outline"}
+                      className={
+                        user.is_active
+                          ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/30"
+                          : ""
+                      }
+                    >
                       {user.is_active ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>
@@ -151,7 +159,7 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
             )}
           </TableBody>
         </Table>
-      </div>
+      </Card>
 
       <ConfirmDialog
         open={confirmState.open}
