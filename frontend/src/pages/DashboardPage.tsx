@@ -22,8 +22,8 @@ export default function DashboardPage() {
 
   const isAdmin = user?.role === "admin" || user?.is_superuser;
 
-  const handleSelectJob = (job: Job) => {
-    setSelectedJobId(job.id);
+  const handleSelectJob = (job: Job | null) => {
+    setSelectedJobId(job ? job.id : null);
   };
 
   return (

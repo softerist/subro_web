@@ -26,7 +26,7 @@ import { JobStatusBadge } from "./JobStatusBadge";
 import { Job } from "../types";
 
 interface JobHistoryListProps {
-  onSelectJob: (job: Job) => void;
+  onSelectJob: (job: Job | null) => void;
   selectedJobId?: string;
 }
 
@@ -48,9 +48,12 @@ export function JobHistoryList({
 
   const cancelMutation = useMutation({
     mutationFn: jobsApi.cancel,
-    onSuccess: () => {
+    onSuccess: (_, deletedJobId) => {
       toast.success("Job cancelled/deleted successfully");
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      if (selectedJobId === deletedJobId) {
+        onSelectJob(null);
+      }
       setJobToDelete(null);
     },
     onError: (error: Error) => {
