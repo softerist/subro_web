@@ -99,7 +99,7 @@ export function JobForm() {
                 </FormControl>
                 <SelectContent>
                   {isLoadingFolders ? (
-                    <div className="p-2 text-center text-sm text-muted-foreground">
+                    <div className="p-2 text-center text-sm text-slate-500">
                       Loading folders...
                     </div>
                   ) : (

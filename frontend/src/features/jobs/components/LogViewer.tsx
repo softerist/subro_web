@@ -28,7 +28,7 @@ export function LogViewer({ jobId, className }: LogViewerProps) {
     return (
       <div
         className={cn(
-          "flex h-full items-center justify-center text-muted-foreground border rounded-md bg-muted/10",
+          "flex h-full items-center justify-center text-slate-400",
           className,
         )}
       >

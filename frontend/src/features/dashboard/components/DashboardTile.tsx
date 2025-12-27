@@ -53,7 +53,7 @@ export function DashboardTile({
     >
       <Card className="h-full cursor-pointer hover:border-primary/50 relative">
         {isEditable && (
-          <div className="absolute top-2 right-2 flex space-x-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 rounded-md p-1 z-10">
+          <div className="absolute top-2 right-2 flex space-x-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900/80 rounded-md p-1 z-10">
             <Button
               variant="ghost"
               size="icon"
@@ -82,15 +82,13 @@ export function DashboardTile({
           <CardTitle className="text-sm font-medium">
             {tile.title}{" "}
             {!tile.is_active && isEditable && (
-              <span className="text-xs text-muted-foreground">(Hidden)</span>
+              <span className="text-xs text-slate-400">(Hidden)</span>
             )}
           </CardTitle>
-          <IconComponent className="h-4 w-4 text-muted-foreground" />
+          <IconComponent className="h-4 w-4 text-slate-400" />
         </CardHeader>
         <CardContent>
-          <div className="text-xs text-muted-foreground truncate">
-            {tile.url}
-          </div>
+          <div className="text-xs text-slate-400 truncate">{tile.url}</div>
         </CardContent>
       </Card>
     </Wrapper>
