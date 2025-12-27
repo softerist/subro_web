@@ -51,44 +51,58 @@ export function DashboardTile({
       className="block h-full group relative transition-transform hover:scale-[1.02] active:scale-[0.98]"
       onClick={onClick}
     >
-      <Card className="h-full cursor-pointer hover:border-primary/50 relative">
-        {isEditable && (
-          <div className="absolute top-2 right-2 flex space-x-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900/80 rounded-md p-1 z-10">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit?.(tile);
-              }}
-            >
-              <Edit className="h-3 w-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-destructive hover:text-destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete?.(tile);
-              }}
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          </div>
-        )}
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">
-            {tile.title}{" "}
+      <Card className="h-full cursor-pointer hover:border-primary/50 overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2 gap-2">
+          <CardTitle
+            className="text-sm font-medium truncate flex-1"
+            title={tile.title}
+          >
+            {tile.title}
             {!tile.is_active && isEditable && (
-              <span className="text-xs text-slate-400">(Hidden)</span>
+              <span className="ml-1 text-[10px] text-slate-500 font-normal">
+                (Hidden)
+              </span>
             )}
           </CardTitle>
-          <IconComponent className="h-4 w-4 text-slate-400" />
+
+          {isEditable ? (
+            <div className="flex items-center space-x-1 shrink-0 bg-slate-800/80 rounded-md p-0.5 border border-slate-700/50">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 hover:bg-slate-700 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit?.(tile);
+                }}
+                title="Edit Tile"
+              >
+                <Edit className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete?.(tile);
+                }}
+                title="Delete Tile"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <IconComponent className="h-4 w-4 text-slate-400 shrink-0" />
+          )}
         </CardHeader>
-        <CardContent>
-          <div className="text-xs text-slate-400 truncate">{tile.url}</div>
+        <CardContent className="p-3 pt-0">
+          <div
+            className="text-xs text-slate-400 truncate opacity-70"
+            title={tile.url}
+          >
+            {tile.url}
+          </div>
         </CardContent>
       </Card>
     </Wrapper>

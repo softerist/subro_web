@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { jobsApi } from "../api/jobs";
 import { JobStatusBadge } from "./JobStatusBadge";
 import { Job } from "../types";
+import { PathCell } from "@/components/ui/path-cell";
 
 interface JobHistoryListProps {
   onSelectJob: (job: Job | null) => void;
@@ -111,11 +112,8 @@ export function JobHistoryList({
                   className={selectedJobId === job.id ? "bg-slate-800/60" : ""}
                   onClick={() => onSelectJob(job)}
                 >
-                  <TableCell
-                    className="font-medium max-w-[200px] truncate py-2"
-                    title={job.folder_path}
-                  >
-                    {job.folder_path}
+                  <TableCell className="py-2">
+                    <PathCell path={job.folder_path} />
                   </TableCell>
                   <TableCell className="py-2">
                     <JobStatusBadge status={job.status} />

@@ -186,7 +186,7 @@ export default function SetupPage() {
           {currentStep === "welcome" && (
             <>
               <CardHeader className="text-center">
-                <CardTitle className="text-3xl text-white">
+                <CardTitle className="text-2xl sm:text-3xl text-white">
                   Welcome to Subro Web
                 </CardTitle>
                 <CardDescription className="text-slate-400">
@@ -229,7 +229,7 @@ export default function SetupPage() {
           {currentStep === "admin" && (
             <>
               <CardHeader>
-                <CardTitle className="text-2xl text-white">
+                <CardTitle className="text-xl sm:text-2xl text-white">
                   Create Admin Account
                 </CardTitle>
                 <CardDescription className="text-slate-400">
@@ -313,7 +313,7 @@ export default function SetupPage() {
           {currentStep === "integrations" && (
             <>
               <CardHeader>
-                <CardTitle className="text-2xl text-white">
+                <CardTitle className="text-xl sm:text-2xl text-white">
                   Configure Integrations
                 </CardTitle>
                 <CardDescription className="text-slate-400">
@@ -550,7 +550,7 @@ export default function SetupPage() {
           {currentStep === "finish" && (
             <>
               <CardHeader className="text-center">
-                <CardTitle className="text-2xl text-white">
+                <CardTitle className="text-xl sm:text-2xl text-white">
                   Ready to Go!
                 </CardTitle>
                 <CardDescription className="text-slate-400">

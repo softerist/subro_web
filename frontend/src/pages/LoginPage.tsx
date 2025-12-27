@@ -13,7 +13,9 @@ export default function LoginPage() {
       <div className="w-full max-w-md page-stagger">
         <Card className="bg-slate-800/50 border-slate-700 backdrop-blur soft-hover">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl text-white">Login</CardTitle>
+            <CardTitle className="text-xl sm:text-2xl text-white">
+              Login
+            </CardTitle>
             <CardDescription className="text-slate-400">
               Enter your email below to login to your account.
             </CardDescription>

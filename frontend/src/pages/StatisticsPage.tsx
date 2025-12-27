@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PathCell } from "@/components/ui/path-cell";
 
 export default function StatisticsPage() {
   const [stats, setStats] = useState<TranslationStatsResponse | null>(null);
@@ -69,7 +70,7 @@ export default function StatisticsPage() {
   return (
     <div className="space-y-6 page-enter page-stagger">
       <div>
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+        <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
           Translation Statistics
         </h1>
         <p className="text-slate-400">
@@ -166,7 +167,7 @@ export default function StatisticsPage() {
       {/* Recent Translations Table */}
       <Card className="bg-slate-800/50 border-slate-700 soft-hover">
         <CardHeader>
-          <CardTitle className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+          <CardTitle className="text-lg sm:text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
             Recent Translations
           </CardTitle>
           <CardDescription className="text-slate-400">
@@ -192,8 +193,11 @@ export default function StatisticsPage() {
               <TableBody>
                 {history.map((entry) => (
                   <TableRow key={entry.id} className="border-slate-700">
-                    <TableCell className="text-white font-mono text-sm truncate max-w-[200px]">
-                      {entry.file_name}
+                    <TableCell className="p-2">
+                      <PathCell
+                        path={entry.file_name}
+                        className="text-white font-mono text-sm"
+                      />
                     </TableCell>
                     <TableCell>
                       <span

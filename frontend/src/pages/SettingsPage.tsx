@@ -284,7 +284,7 @@ export default function SettingsPage() {
     <div className="space-y-6 page-enter page-stagger">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+          <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
             Settings
           </h1>
           <p className="text-slate-400">
@@ -326,7 +326,7 @@ export default function SettingsPage() {
         {currentTab === "integrations" && (
           <>
             <CardHeader>
-              <CardTitle className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+              <CardTitle className="text-lg sm:text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
                 External Services
               </CardTitle>
               <CardDescription className="text-slate-400">
@@ -992,7 +992,7 @@ export default function SettingsPage() {
         {currentTab === "qbittorrent" && (
           <>
             <CardHeader>
-              <CardTitle className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+              <CardTitle className="text-lg sm:text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
                 qBittorrent Settings
               </CardTitle>
               <CardDescription className="text-slate-400">
@@ -1080,7 +1080,7 @@ export default function SettingsPage() {
         {currentTab === "paths" && (
           <>
             <CardHeader>
-              <CardTitle className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+              <CardTitle className="text-lg sm:text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
                 Allowed Media Folders
               </CardTitle>
               <CardDescription className="text-slate-400">
