@@ -10,11 +10,13 @@ export function UsersPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-enter page-stagger">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">User Management</h2>
-          <p className="text-muted-foreground">
+          <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+            User Management
+          </h2>
+          <p className="text-slate-400">
             Manage users, roles, and permissions.
           </p>
         </div>

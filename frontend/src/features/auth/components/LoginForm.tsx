@@ -60,7 +60,9 @@ export function LoginForm({
       <form onSubmit={handleSubmit} action="/login" method="post">
         <div className={cn("grid gap-4")}>
           <div className="grid gap-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email" className="text-slate-300">
+              Email
+            </Label>
             <Input
               id="email"
               name="email"
@@ -76,7 +78,9 @@ export function LoginForm({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password" className="text-slate-300">
+              Password
+            </Label>
             <Input
               id="password"
               name="password"
@@ -89,7 +93,7 @@ export function LoginForm({
               required
             />
           </div>
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && <p className="text-sm text-red-400">{error}</p>}
           <Button disabled={mutation.isPending}>
             {mutation.isPending && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

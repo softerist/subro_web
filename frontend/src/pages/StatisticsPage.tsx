@@ -50,7 +50,7 @@ export default function StatisticsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64 page-enter">
         <div className="text-slate-400">Loading statistics...</div>
       </div>
     );
@@ -58,7 +58,7 @@ export default function StatisticsPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64 page-enter">
         <div className="text-red-400">{error}</div>
       </div>
     );
@@ -67,9 +67,9 @@ export default function StatisticsPage() {
   const formatNumber = (n: number) => n.toLocaleString();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-enter page-stagger">
       <div>
-        <h1 className="text-2xl font-bold text-white">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
           Translation Statistics
         </h1>
         <p className="text-slate-400">
@@ -80,7 +80,7 @@ export default function StatisticsPage() {
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         {/* All Time */}
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-slate-800/50 border-slate-700 soft-hover">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-slate-400">
               All Time
@@ -107,7 +107,7 @@ export default function StatisticsPage() {
         </Card>
 
         {/* Last 30 Days */}
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-slate-800/50 border-slate-700 soft-hover">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-slate-400">
               Last 30 Days
@@ -135,7 +135,7 @@ export default function StatisticsPage() {
         </Card>
 
         {/* Last 7 Days */}
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-slate-800/50 border-slate-700 soft-hover">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-slate-400">
               Last 7 Days
@@ -164,9 +164,11 @@ export default function StatisticsPage() {
       </div>
 
       {/* Recent Translations Table */}
-      <Card className="bg-slate-800/50 border-slate-700">
+      <Card className="bg-slate-800/50 border-slate-700 soft-hover">
         <CardHeader>
-          <CardTitle className="text-white">Recent Translations</CardTitle>
+          <CardTitle className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+            Recent Translations
+          </CardTitle>
           <CardDescription className="text-slate-400">
             Last 10 translation jobs
           </CardDescription>

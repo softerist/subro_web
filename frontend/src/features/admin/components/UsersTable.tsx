@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { User } from "../types";
 import { adminApi } from "../api/admin";
@@ -28,7 +29,6 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
     user: User | null;
-    positionY?: number;
   }>({ open: false, user: null });
 
   const deleteMutation = useMutation({
@@ -55,12 +55,10 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
     },
   });
 
-  const handleDeleteRequest = (user: User, event: React.MouseEvent) => {
-    const rect = event.currentTarget.getBoundingClientRect();
+  const handleDeleteRequest = (user: User) => {
     setConfirmState({
       open: true,
       user,
-      positionY: rect.top + window.scrollY,
     });
   };
 
@@ -80,7 +78,7 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
 
   return (
     <>
-      <div className="rounded-md border">
+      <Card className="soft-hover overflow-hidden border-slate-700/50">
         <Table>
           <TableHeader>
             <TableRow>
@@ -103,7 +101,12 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
                   <TableCell className="font-medium">{user.email}</TableCell>
                   <TableCell>
                     <Badge
-                      variant={user.is_superuser ? "destructive" : "secondary"}
+                      variant={user.is_superuser ? "outline" : "secondary"}
+                      className={
+                        user.is_superuser
+                          ? "bg-purple-500/20 text-purple-400 border-purple-500/20 hover:bg-purple-500/30"
+                          : ""
+                      }
                     >
                       {user.is_superuser
                         ? "Superuser"
@@ -111,7 +114,14 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={user.is_active ? "default" : "outline"}>
+                    <Badge
+                      variant={user.is_active ? "default" : "outline"}
+                      className={
+                        user.is_active
+                          ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/30"
+                          : ""
+                      }
+                    >
                       {user.is_active ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>
@@ -137,7 +147,7 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={(e) => handleDeleteRequest(user, e)}
+                      onClick={() => handleDeleteRequest(user)}
                       disabled={deleteMutation.isPending}
                       title="Delete User"
                     >
@@ -154,7 +164,7 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
             )}
           </TableBody>
         </Table>
-      </div>
+      </Card>
 
       <ConfirmDialog
         open={confirmState.open}
@@ -169,7 +179,6 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
         isLoading={deleteMutation.isPending}
         variant="destructive"
         confirmLabel="Delete"
-        positionY={confirmState.positionY}
       />
     </>
   );

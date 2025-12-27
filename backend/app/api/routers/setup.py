@@ -165,12 +165,27 @@ async def skip_setup(
             detail="Setup has already been completed.",
         )
 
-    # Optionally create admin user
+    # Create admin user from provided credentials or fall back to env vars
+    admin_email = None
+    admin_password = None
+
     if skip_data and skip_data.admin_email and skip_data.admin_password:
+        admin_email = skip_data.admin_email
+        admin_password = skip_data.admin_password
+    else:
+        # Fall back to environment variables
+        from app.core.config import settings
+
+        if settings.FIRST_SUPERUSER_EMAIL and settings.FIRST_SUPERUSER_PASSWORD:
+            admin_email = settings.FIRST_SUPERUSER_EMAIL
+            admin_password = settings.FIRST_SUPERUSER_PASSWORD
+            logger.info(f"Using FIRST_SUPERUSER_EMAIL from environment: {admin_email}")
+
+    if admin_email and admin_password:
         try:
             admin_user = UserCreate(
-                email=skip_data.admin_email,
-                password=skip_data.admin_password,
+                email=admin_email,
+                password=admin_password,
                 is_superuser=True,
                 is_active=True,
                 is_verified=True,
@@ -180,6 +195,10 @@ async def skip_setup(
             logger.info(f"Admin user created during skip: {created_user.email}")
         except Exception as e:
             logger.warning(f"Failed to create admin during skip (may already exist): {e}")
+    else:
+        logger.warning(
+            "No admin credentials provided and FIRST_SUPERUSER env vars not set. No admin user created."
+        )
 
     # Mark setup as completed (settings remain empty, system uses env defaults)
     await crud_app_settings.mark_setup_completed(db)

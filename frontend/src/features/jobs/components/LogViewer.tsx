@@ -12,12 +12,15 @@ interface LogViewerProps {
 
 export function LogViewer({ jobId, className }: LogViewerProps) {
   const { logs, status } = useJobLogs(jobId);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom on new logs
   useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    const viewport = scrollAreaRef.current?.querySelector(
+      "[data-radix-scroll-area-viewport]",
+    ) as HTMLElement | null;
+    if (viewport) {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
     }
   }, [logs]);
 
@@ -25,7 +28,7 @@ export function LogViewer({ jobId, className }: LogViewerProps) {
     return (
       <div
         className={cn(
-          "flex h-full items-center justify-center text-muted-foreground border rounded-md bg-muted/10",
+          "flex h-full items-center justify-center text-slate-400",
           className,
         )}
       >
@@ -67,7 +70,7 @@ export function LogViewer({ jobId, className }: LogViewerProps) {
       </div>
 
       {/* Log Content */}
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
         <div className="space-y-1">
           {logs.length === 0 && (
             <div className="text-gray-500 italic">Waiting for logs...</div>
@@ -94,7 +97,6 @@ export function LogViewer({ jobId, className }: LogViewerProps) {
               </span>
             </div>
           ))}
-          <div ref={bottomRef} />
         </div>
       </ScrollArea>
     </div>

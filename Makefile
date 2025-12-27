@@ -73,7 +73,7 @@ PYTHON_MIGRATION_FILES_EXIST := $(shell find backend/alembic/versions -maxdepth 
 # THIS IS THE SECTION WHERE THE OLD 'dev' WAS. IT'S NOW GONE.
 # The .PHONY for dev is handled by the later definition.
 # We still keep the other .PHONY targets from the old block if they are unique.
-.PHONY: rebuild-dev compose-up compose-down compose-down-keep-volumes
+.PHONY: rebuild-dev compose-up compose-down compose-down-keep-volumes ensure-dev-cleanup
 
 stop-prod: ## Stop production stacks to free up ports
 	@echo "Stopping production stacks (if running)..."
@@ -84,7 +84,7 @@ stop-prod: ## Stop production stacks to free up ports
 # rebuild-dev now correctly depends on the later 'dev' implicitly through compose-up if needed,
 # or you might adjust its dependencies if 'ensure-migrations' logic should also apply here.
 # For now, let's assume its current dependencies are fine.
-rebuild-dev: compose-down db-migrate compose-up ## Clean rebuild: stop, wipe volumes, migrate, then start fresh
+rebuild-dev: ensure-dev-cleanup compose-down db-migrate compose-up ## Clean rebuild: stop, wipe volumes, migrate, then start fresh
 	@echo "Development stack fully rebuilt and started."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8444"
@@ -103,6 +103,15 @@ compose-down: ## Stop and remove the Docker Compose stack AND volumes
 compose-down-keep-volumes: ## Stop and remove Docker Compose stack, but KEEP volumes
 	@echo "Stopping Docker Compose stack, keeping volumes..."
 	docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) down --remove-orphans
+
+ensure-dev-cleanup: ## Remove conflicting containers/ports before dev/prod starts
+	@echo "Ensuring no conflicting dev containers or ports are in use..."
+	@docker rm -f $(PROJECT_NAME)_db 2>/dev/null || true
+	@conflicting_redis_containers=$$(docker ps -q --filter "publish=6379"); \
+	if [ -n "$$conflicting_redis_containers" ]; then \
+		echo "Stopping containers using port 6379: $$conflicting_redis_containers"; \
+		docker stop $$conflicting_redis_containers; \
+	fi
 
 # ==============================================================================
 # Logging
@@ -169,7 +178,7 @@ db-migrate-and-apply: db-makemigrations db-apply-migration ## Generate migration
 	@echo "IMPORTANT: Review the migration file in backend/alembic/versions/ before applying it."
 
 
-.PHONY: dev ensure-migrations stop-prod prod
+.PHONY: dev ensure-migrations stop-prod prod reset-prod add-test-statistics reset-prod-with-stats reset-dev reset-dev-db add-test-statistics-dev reset-dev-with-stats rebuild-prod rebuild-dev-with-stats rebuild-prod-with-stats
 dev: stop-prod ensure-migrations compose-up ## Start the full stack (generates initial migration if needed, uses existing volumes)
 	@echo "Development stack is up."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
@@ -190,7 +199,7 @@ ensure-migrations:
 	fi
 	@echo "Running database migrations..."
 
-prod: ## Deploy to production using blue-green deployment script
+prod: ensure-dev-cleanup ## Deploy to production using blue-green deployment script
 	@echo "Deploying to production..."
 	./infra/scripts/blue_green_deploy.sh
 	@echo "Production stack deployed."
@@ -198,7 +207,9 @@ prod: ## Deploy to production using blue-green deployment script
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
 	@echo "API Docs available at https://localhost:8443/api/v1/docs"
 
-reset-prod-db: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
+reset-prod: rebuild-prod ## Alias for rebuild-prod
+
+rebuild-prod: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
 	@echo "WARNING: This will DELETE ALL DATA in the production database."
 	@echo "Stopping containers..."
 	@docker rm -f infra-caddy-1 infra-db-1 infra-redis-1 infra-backup-1 infra-scheduler-1 green-api-1 green-worker-1 green-frontend-1 blue-api-1 blue-worker-1 blue-frontend-1 || true
@@ -211,6 +222,31 @@ reset-prod-db: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
 	@echo "Redeploying application..."
 	@make prod
 	@echo "Database reset complete. Please visit the Setup page."
+
+add-test-statistics: ## Populate translation_log and deepl_usage tables from logs/translation_log.json
+	@echo "Copying and running population script..."
+	@docker cp backend/scripts/populate_db_from_json.py blue-api-1:/app/scripts/
+	@docker exec -u appuser blue-api-1 python3 scripts/populate_db_from_json.py
+	@echo "Test statistics populated."
+
+reset-prod-with-stats: reset-prod add-test-statistics ## Reset prod database AND populate test statistics
+
+rebuild-prod-with-stats: rebuild-prod add-test-statistics ## Rebuild prod AND populate test statistics
+
+reset-dev: reset-dev-db ## Alias for reset-dev-db
+
+reset-dev-db: rebuild-dev ## Reset dev database (rebuild-dev already wipes volumes)
+
+add-test-statistics-dev: ## Populate translation_log and deepl_usage tables for DEV
+	@echo "Copying and running population script for DEV..."
+	@docker cp backend/scripts/populate_db_from_json.py subapp_dev-api-1:/app/scripts/
+	@docker exec -u appuser subapp_dev-api-1 python3 scripts/populate_db_from_json.py
+	@echo "Dev test statistics populated."
+
+reset-dev-with-stats: reset-dev add-test-statistics-dev ## Reset dev database AND populate test statistics
+
+rebuild-dev-with-stats: rebuild-dev add-test-statistics-dev ## Rebuild dev AND populate test statistics
+
 
 
 # ==============================================================================

@@ -149,8 +149,8 @@ export default function SetupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4 page-enter">
+      <div className="w-full max-w-lg page-stagger">
         {/* Progress indicator */}
         <div className="flex justify-center mb-8">
           <div className="flex items-center gap-2">
@@ -181,7 +181,7 @@ export default function SetupPage() {
           </div>
         </div>
 
-        <Card className="bg-slate-800/50 border-slate-700 backdrop-blur">
+        <Card className="bg-slate-800/50 border-slate-700 backdrop-blur soft-hover">
           {/* Welcome Step */}
           {currentStep === "welcome" && (
             <>

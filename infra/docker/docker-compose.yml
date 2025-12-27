@@ -33,7 +33,8 @@ services:
       - ../../backend:/app # Mount source for reference, but override focuses on dev workflow
       - /tmp:/tmp # Share /tmp between host and container
       - /mnt/usb3/Media/Movies:/mnt/usb3/Media/Movies # Media folder mount
-      - /app/.venv # <--- ADD THIS LINE (It hides the host .venv)
+      - /app/.venv
+      - ../../logs:/app/logs:ro # Mount logs directory (read-only)
 
     env_file:
       - ../../.env # Load shared environment variables from project root

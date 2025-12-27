@@ -108,7 +108,7 @@ export function JobHistoryList({
               jobs.map((job) => (
                 <TableRow
                   key={job.id}
-                  className={selectedJobId === job.id ? "bg-muted/50" : ""}
+                  className={selectedJobId === job.id ? "bg-slate-800/60" : ""}
                   onClick={() => onSelectJob(job)}
                 >
                   <TableCell
