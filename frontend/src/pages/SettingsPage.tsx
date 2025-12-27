@@ -354,26 +354,38 @@ export default function SettingsPage() {
                 <div className="pl-10 space-y-6 max-w-xl">
                   {/* TMDB API Key */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs uppercase tracking-wider text-slate-500">
-                        TMDB API Key
-                      </Label>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs uppercase tracking-wider text-slate-500">
+                          TMDB API Key
+                        </Label>
+                        {settings?.tmdb_api_key &&
+                          settings.tmdb_api_key.trim() !== "" && (
+                            <span className="text-xs text-slate-500">
+                              (Free: ~40 req/10s)
+                            </span>
+                          )}
+                      </div>
                       {settings?.tmdb_api_key &&
                       settings.tmdb_api_key.trim() !== "" ? (
                         <span
                           className={`px-2 py-0.5 text-xs rounded-full ${
-                            settings?.tmdb_valid === true
+                            settings?.tmdb_valid === "valid"
                               ? "bg-emerald-500/20 text-emerald-400"
-                              : settings?.tmdb_valid === false
-                                ? "bg-red-500/20 text-red-400"
-                                : "bg-yellow-500/20 text-yellow-400"
+                              : settings?.tmdb_valid === "limit_reached"
+                                ? "bg-amber-500/20 text-amber-400"
+                                : settings?.tmdb_valid === "invalid"
+                                  ? "bg-red-500/20 text-red-400"
+                                  : "bg-yellow-500/20 text-yellow-400"
                           }`}
                         >
-                          {settings?.tmdb_valid === true
+                          {settings?.tmdb_valid === "valid"
                             ? "Valid"
-                            : settings?.tmdb_valid === false
-                              ? "Invalid"
-                              : "Not Validated"}
+                            : settings?.tmdb_valid === "limit_reached"
+                              ? "Limit Reached"
+                              : settings?.tmdb_valid === "invalid"
+                                ? "Invalid"
+                                : "Not Validated"}
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
@@ -394,26 +406,39 @@ export default function SettingsPage() {
 
                   {/* OMDB API Key */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs uppercase tracking-wider text-slate-500">
-                        OMDB API Key
-                      </Label>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs uppercase tracking-wider text-slate-500">
+                          OMDB API Key
+                        </Label>
+                        {/* Free tier quota hint - always show when key is configured */}
+                        {settings?.omdb_api_key &&
+                          settings.omdb_api_key.trim() !== "" && (
+                            <span className="text-xs text-slate-500">
+                              (Free: 1000/day)
+                            </span>
+                          )}
+                      </div>
                       {settings?.omdb_api_key &&
                       settings.omdb_api_key.trim() !== "" ? (
                         <span
                           className={`px-2 py-0.5 text-xs rounded-full ${
-                            settings?.omdb_valid === true
+                            settings?.omdb_valid === "valid"
                               ? "bg-emerald-500/20 text-emerald-400"
-                              : settings?.omdb_valid === false
-                                ? "bg-red-500/20 text-red-400"
-                                : "bg-yellow-500/20 text-yellow-400"
+                              : settings?.omdb_valid === "limit_reached"
+                                ? "bg-amber-500/20 text-amber-400"
+                                : settings?.omdb_valid === "invalid"
+                                  ? "bg-red-500/20 text-red-400"
+                                  : "bg-yellow-500/20 text-yellow-400"
                           }`}
                         >
-                          {settings?.omdb_valid === true
+                          {settings?.omdb_valid === "valid"
                             ? "Valid"
-                            : settings?.omdb_valid === false
-                              ? "Invalid"
-                              : "Not Validated"}
+                            : settings?.omdb_valid === "limit_reached"
+                              ? "Limit Reached"
+                              : settings?.omdb_valid === "invalid"
+                                ? "Invalid"
+                                : "Not Validated"}
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
@@ -436,13 +461,37 @@ export default function SettingsPage() {
 
               {/* OpenSubtitles Section */}
               <div className="space-y-4">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
                     <span className="text-white text-sm font-bold">💬</span>
                   </div>
                   <h3 className="text-lg font-semibold text-white">
                     OpenSubtitles
                   </h3>
+                  {/* Subscription tier badge */}
+                  {settings?.opensubtitles_level && (
+                    <span
+                      className={`ml-1 px-2 py-0.5 text-xs rounded-full ${
+                        settings.opensubtitles_vip
+                          ? "bg-amber-500/20 text-amber-400"
+                          : "bg-slate-600/30 text-slate-400"
+                      }`}
+                    >
+                      {settings.opensubtitles_level}
+                    </span>
+                  )}
+                  {/* Downloads allowance */}
+                  {settings?.opensubtitles_allowed_downloads && (
+                    <span className="text-xs text-slate-500">
+                      ({settings.opensubtitles_allowed_downloads}/day)
+                    </span>
+                  )}
+                  {/* Rate limit warning */}
+                  {settings?.opensubtitles_rate_limited && (
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-red-500/20 text-red-400">
+                      Limit Reached
+                    </span>
+                  )}
                 </div>
                 <div className="pl-10 space-y-6 max-w-xl">
                   {/* API Key */}

@@ -56,11 +56,18 @@ class AppSettings(Base):
 
     # --- Validation Status (cached after API validation) ---
     tmdb_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
+    tmdb_rate_limited: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     omdb_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
+    omdb_rate_limited: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     opensubtitles_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
     opensubtitles_key_valid: Mapped[bool | None] = mapped_column(
         Boolean, default=None, nullable=True
     )
+    # OpenSubtitles subscription info (from login response)
+    opensubtitles_level: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    opensubtitles_vip: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    opensubtitles_allowed_downloads: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    opensubtitles_rate_limited: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     def __repr__(self) -> str:
         return f"<AppSettings(id={self.id}, setup_completed={self.setup_completed})>"

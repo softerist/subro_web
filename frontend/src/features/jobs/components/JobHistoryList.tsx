@@ -36,6 +36,7 @@ export function JobHistoryList({
   selectedJobId,
 }: JobHistoryListProps) {
   const [jobToDelete, setJobToDelete] = useState<Job | null>(null);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const {
     data: jobs,
@@ -110,10 +111,21 @@ export function JobHistoryList({
                 <TableRow
                   key={job.id}
                   className={selectedJobId === job.id ? "bg-slate-800/60" : ""}
-                  onClick={() => onSelectJob(job)}
+                  onClick={() => {
+                    setExpandedJobId(expandedJobId === job.id ? null : job.id);
+                    onSelectJob(job);
+                  }}
                 >
                   <TableCell className="py-2">
-                    <PathCell path={job.folder_path} />
+                    <PathCell
+                      path={job.folder_path}
+                      isExpanded={expandedJobId === job.id}
+                      onToggle={() =>
+                        setExpandedJobId(
+                          expandedJobId === job.id ? null : job.id,
+                        )
+                      }
+                    />
                   </TableCell>
                   <TableCell className="py-2">
                     <JobStatusBadge status={job.status} />
@@ -127,6 +139,9 @@ export function JobHistoryList({
                       size="icon"
                       onClick={(e) => {
                         e.stopPropagation();
+                        setExpandedJobId(
+                          expandedJobId === job.id ? null : job.id,
+                        );
                         onSelectJob(job);
                       }}
                       title="View Logs"

@@ -12,17 +12,16 @@ from app.db.models.deepl_usage import DeepLUsage
 logger = logging.getLogger(__name__)
 
 
-async def validate_tmdb(api_key: str) -> bool | None:
+async def validate_tmdb(api_key: str) -> dict:
     """
     Validate TMDB API key by making a test request.
-    Returns:
-        True: Valid
-        False: Invalid (401/403)
-        None: Network error / Unknown
+    Returns: dict with 'valid' (True/False/None) and 'rate_limited' (bool)
     """
+    result = {"valid": None, "rate_limited": False}
+
     if not api_key or not api_key.strip():
-        return None  # Changed from False to None if empty? No, keep behavior consistent.
-        # If user explicitly clears it, it's "Not Configured" -> None.
+        # Empty key, consider it not configured/None
+        return result
 
     api_key = api_key.strip()
     url = f"https://api.themoviedb.org/3/configuration?api_key={api_key}"
@@ -31,25 +30,42 @@ async def validate_tmdb(api_key: str) -> bool | None:
         try:
             response = await client.get(url, timeout=5.0)
             if response.status_code == 200:
-                return True
+                result["valid"] = True
+                return result
+
+            if response.status_code == 429:
+                # Rate limit exceeded
+                result["valid"] = False  # Or keep True if we consider it "valid but throttled"?
+                # Standard practice: if rate limited, the key is structurally valid (auth worked enough to count quota),
+                # but for usage purposes it's currently failing.
+                # However, returning valid=False matches OMDB logic where usable=False.
+                # The rate_limited flag adds the context.
+                result["rate_limited"] = True
+                result["valid"] = False
+                return result
+
             if response.status_code in (401, 403):
-                return False
-            return None
+                result["valid"] = False
+                return result
+
+            return result
         except httpx.TransportError as e:
             logger.warning(f"TMDB connection error: {e}")
-            return None
+            return result
         except Exception as e:
             logger.warning(f"TMDB validation error: {e}")
-            return None
+            return result
 
 
-async def validate_omdb(api_key: str) -> bool | None:
+async def validate_omdb(api_key: str) -> dict:
     """
     Validate OMDB API key.
-    Returns: True/False/None
+    Returns: dict with 'valid' (True/False/None) and 'rate_limited' (bool)
     """
+    result = {"valid": None, "rate_limited": False}
+
     if not api_key or not api_key.strip():
-        return None
+        return result
 
     api_key = api_key.strip()
     url = f"http://www.omdbapi.com/?apikey={api_key}&t=test"
@@ -57,31 +73,69 @@ async def validate_omdb(api_key: str) -> bool | None:
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, timeout=5.0)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("Response") == "False" and "Invalid API" in data.get("Error", ""):
-                    return False
-                return True
-            if response.status_code in (401, 403):
-                return False
-            return None
+            if response.status_code in (200, 401, 403):
+                try:
+                    data = response.json()
+                except ValueError:
+                    # Not JSON
+                    result["valid"] = False
+                    return result
+
+                error_msg = data.get("Error", "")
+
+                if data.get("Response") == "False":
+                    # Check for rate limit error
+                    if "Request limit" in error_msg or "limit reached" in error_msg.lower():
+                        result["valid"] = False
+                        result["rate_limited"] = True
+                    # Check for invalid key
+                    elif "Invalid API" in error_msg:
+                        result["valid"] = False
+                        result["rate_limited"] = False
+                    else:
+                        # Some other error, default to invalid
+                        result["valid"] = False
+                else:
+                    # Success
+                    result["valid"] = True
+                    result["rate_limited"] = False
+                return result
+
+            # Other status codes
+            return result
+            return result
         except httpx.TransportError as e:
             logger.warning(f"OMDB connection error: {e}")
-            return None
+            return result
         except Exception as e:
             logger.warning(f"OMDB validation error: {e}")
-            return None
+            return result
 
 
 async def validate_opensubtitles(  # noqa: C901
     api_key: str, username: str | None, password: str | None
-) -> tuple[bool | None, bool | None]:
+) -> dict:
     """
     Validate OpenSubtitles credentials.
-    Returns: (key_valid, login_valid)
+    Returns a dict with:
+    - key_valid: bool | None
+    - login_valid: bool | None
+    - rate_limited: bool
+    - level: str | None (subscription level e.g. "VIP Member")
+    - vip: bool | None
+    - allowed_downloads: int | None
     """
+    result = {
+        "key_valid": None,
+        "login_valid": None,
+        "rate_limited": False,
+        "level": None,
+        "vip": None,
+        "allowed_downloads": None,
+    }
+
     if not api_key:
-        return (None, None)
+        return result
 
     api_key = api_key.strip()
     if username:
@@ -107,6 +161,13 @@ async def validate_opensubtitles(  # noqa: C901
                 if response.status_code == 200:
                     data = response.json()
                     token = data.get("token")
+                    user = data.get("user", {})
+
+                    # Extract subscription info
+                    result["level"] = user.get("level")
+                    result["vip"] = user.get("vip")
+                    result["allowed_downloads"] = user.get("allowed_downloads")
+
                     if token:
                         # Logout
                         logout_headers = {
@@ -118,22 +179,35 @@ async def validate_opensubtitles(  # noqa: C901
                             await client.delete(logout_url, headers=logout_headers, timeout=5.0)
                         except Exception:
                             pass
-                        return (True, True)
-                    return (None, None)
+                        result["key_valid"] = True
+                        result["login_valid"] = True
+                        return result
+                    return result
+
+                if response.status_code == 429:
+                    # Rate limited - daily quota exceeded
+                    logger.warning("OpenSubtitles rate limit exceeded (429)")
+                    result["key_valid"] = True
+                    result["login_valid"] = True
+                    result["rate_limited"] = True
+                    return result
 
                 if response.status_code == 403:
-                    return (False, None)
+                    result["key_valid"] = False
+                    return result
 
                 if response.status_code == 401:
-                    return (True, False)
+                    result["key_valid"] = True
+                    result["login_valid"] = False
+                    return result
 
-                return (None, None)
+                return result
             except httpx.TransportError as e:
                 logger.warning(f"OpenSubtitles connection error: {e}")
-                return (None, None)
+                return result
             except Exception as e:
                 logger.warning(f"OpenSubtitles validation error: {e}")
-                return (None, None)
+                return result
 
     # Fallback: Validate Key Only (if missing login details)
     check_url = "https://api.opensubtitles.com/api/v1/infos/formats"
@@ -146,13 +220,20 @@ async def validate_opensubtitles(  # noqa: C901
         try:
             response = await client.get(check_url, headers=headers, timeout=5.0)
             if response.status_code == 200:
-                return (True, None)
+                result["key_valid"] = True
+                return result
+            if response.status_code == 429:
+                logger.warning("OpenSubtitles rate limit exceeded (429)")
+                result["key_valid"] = True
+                result["rate_limited"] = True
+                return result
             if response.status_code == 403:
-                return (False, None)
-            return (None, None)
+                result["key_valid"] = False
+                return result
+            return result
         except Exception as e:
             logger.warning(f"OpenSubtitles key check error: {e}")
-            return (None, None)
+            return result
 
 
 async def validate_deepl(api_key: str) -> dict:
@@ -360,19 +441,41 @@ async def validate_all_settings(db: AsyncSession) -> None:
         os_password = await crud_app_settings.get_decrypted_value(db, "opensubtitles_password")
 
         # 1. Validate General API keys (fast)
-        settings_row.tmdb_valid = await validate_tmdb(tmdb_key) if tmdb_key else None
-        settings_row.omdb_valid = await validate_omdb(omdb_key) if omdb_key else None
+        if tmdb_key:
+            tmdb_result = await validate_tmdb(tmdb_key)
+            settings_row.tmdb_valid = tmdb_result["valid"]
+            settings_row.tmdb_rate_limited = tmdb_result["rate_limited"]
+        else:
+            settings_row.tmdb_valid = None
+            settings_row.tmdb_rate_limited = None
+
+        # OMDB validation with direct rate limit detection
+        if omdb_key:
+            omdb_result = await validate_omdb(omdb_key)
+            settings_row.omdb_valid = omdb_result["valid"]
+            settings_row.omdb_rate_limited = omdb_result["rate_limited"]
+        else:
+            settings_row.omdb_valid = None
+            settings_row.omdb_rate_limited = None
 
         if os_api_key:
             u_arg = str(os_username) if os_username else None
             p_arg = str(os_password) if os_password else None
 
-            key_valid, login_valid = await validate_opensubtitles(str(os_api_key), u_arg, p_arg)
-            settings_row.opensubtitles_key_valid = key_valid
-            settings_row.opensubtitles_valid = login_valid
+            os_result = await validate_opensubtitles(str(os_api_key), u_arg, p_arg)
+            settings_row.opensubtitles_key_valid = os_result["key_valid"]
+            settings_row.opensubtitles_valid = os_result["login_valid"]
+            settings_row.opensubtitles_rate_limited = os_result["rate_limited"]
+            settings_row.opensubtitles_level = os_result["level"]
+            settings_row.opensubtitles_vip = os_result["vip"]
+            settings_row.opensubtitles_allowed_downloads = os_result["allowed_downloads"]
         else:
             settings_row.opensubtitles_key_valid = None
             settings_row.opensubtitles_valid = None
+            settings_row.opensubtitles_rate_limited = None
+            settings_row.opensubtitles_level = None
+            settings_row.opensubtitles_vip = None
+            settings_row.opensubtitles_allowed_downloads = None
 
         # 2. Validate Google Cloud Translation
         google_creds = await crud_app_settings.get_decrypted_value(db, "google_cloud_credentials")

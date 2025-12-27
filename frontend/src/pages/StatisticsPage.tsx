@@ -27,6 +27,7 @@ export default function StatisticsPage() {
   const [history, setHistory] = useState<TranslationLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedEntryId, setExpandedEntryId] = useState<number | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -192,11 +193,25 @@ export default function StatisticsPage() {
               </TableHeader>
               <TableBody>
                 {history.map((entry) => (
-                  <TableRow key={entry.id} className="border-slate-700">
+                  <TableRow
+                    key={entry.id}
+                    className="border-slate-700 cursor-pointer hover:bg-slate-800/40 transition-colors"
+                    onClick={() =>
+                      setExpandedEntryId(
+                        expandedEntryId === entry.id ? null : entry.id,
+                      )
+                    }
+                  >
                     <TableCell className="p-2">
                       <PathCell
                         path={entry.file_name}
                         className="text-white font-mono text-sm"
+                        isExpanded={expandedEntryId === entry.id}
+                        onToggle={() =>
+                          setExpandedEntryId(
+                            expandedEntryId === entry.id ? null : entry.id,
+                          )
+                        }
                       />
                     </TableCell>
                     <TableCell>

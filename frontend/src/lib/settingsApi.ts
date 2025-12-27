@@ -32,10 +32,15 @@ export interface SettingsRead extends SettingsUpdate {
   setup_completed: boolean;
   deepl_usage?: DeepLUsage[];
   // Validation status from backend
-  tmdb_valid?: boolean;
-  omdb_valid?: boolean;
+  tmdb_valid?: string; // "valid", "invalid", "limit_reached", or undefined
+  omdb_valid?: string; // "valid", "invalid", "limit_reached", or undefined
   opensubtitles_valid?: boolean;
   opensubtitles_key_valid?: boolean;
+  // OpenSubtitles subscription info
+  opensubtitles_level?: string; // e.g. "VIP Member", "Standard"
+  opensubtitles_vip?: boolean;
+  opensubtitles_allowed_downloads?: number;
+  opensubtitles_rate_limited?: boolean;
   // Google Cloud status
   google_cloud_configured?: boolean;
   google_cloud_project_id?: string | null;

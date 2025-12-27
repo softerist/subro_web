@@ -366,10 +366,18 @@ class CRUDAppSettings:
             ),
             setup_completed=db_settings.setup_completed,
             # Validation status from DB cache
-            tmdb_valid=db_settings.tmdb_valid,
-            omdb_valid=db_settings.omdb_valid,
+            tmdb_valid=self._convert_tmdb_status(
+                db_settings.tmdb_valid, db_settings.tmdb_rate_limited
+            ),
+            omdb_valid=self._convert_omdb_status(
+                db_settings.omdb_valid, db_settings.omdb_rate_limited
+            ),
             opensubtitles_valid=db_settings.opensubtitles_valid,
             opensubtitles_key_valid=db_settings.opensubtitles_key_valid,
+            opensubtitles_level=db_settings.opensubtitles_level,
+            opensubtitles_vip=db_settings.opensubtitles_vip,
+            opensubtitles_allowed_downloads=db_settings.opensubtitles_allowed_downloads,
+            opensubtitles_rate_limited=db_settings.opensubtitles_rate_limited,
             # Google Cloud status - check DB first, then env path
             # Logic: If DB has value (even empty string), use it. If DB is None, check Env.
             google_cloud_configured=bool(
@@ -433,6 +441,41 @@ class CRUDAppSettings:
             return mask_sensitive_value(str(raw))
 
         return ""
+
+    def _convert_tmdb_status(
+        self, db_valid: bool | None, db_rate_limited: bool | None = None
+    ) -> str | None:
+        """
+        Convert TMDB boolean validation status to string.
+        Returns: 'valid', 'invalid', 'limit_reached', or None
+        """
+        if db_valid is None:
+            return None
+        if db_valid is True:
+            return "valid"
+        # False - check if it's due to rate limiting or genuinely invalid
+        if db_rate_limited is True:
+            return "limit_reached"
+        return "invalid"
+
+    def _convert_omdb_status(
+        self, db_valid: bool | None, db_rate_limited: bool | None = None
+    ) -> str | None:
+        """
+        Convert OMDB boolean validation status to string.
+        Returns: 'valid', 'invalid', 'limit_reached', or None
+        Note: 'limit_reached' is detected in the validation layer based on
+        whether a previously valid key starts failing. The rate_limited flag
+        indicates this scenario.
+        """
+        if db_valid is None:
+            return None
+        if db_valid is True:
+            return "valid"
+        # False - check if it's due to rate limiting or genuinely invalid
+        if db_rate_limited is True:
+            return "limit_reached"
+        return "invalid"
 
     def _get_effective_plain(
         self, db_settings: AppSettings, _env_settings: Any, field_name: str
