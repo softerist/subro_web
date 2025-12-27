@@ -110,3 +110,9 @@ Desktop.ini
 # --- Secrets ---
 *.pem
 *.key
+
+# --- NLTK Data (downloaded at build time) ---
+nltk_data/
+**/nltk_data/
+*.pickle
+punkt.zip

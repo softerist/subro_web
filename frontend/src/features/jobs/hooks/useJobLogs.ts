@@ -80,10 +80,11 @@ export function useJobLogs(jobId: string | null) {
       // Don't connect if component unmounted or job changed
       if (activeJobIdRef.current !== wsJobId) return;
 
-      // Construct WebSocket URL
+      // Construct WebSocket URL - use window.location to work with proxies/Caddy
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const baseUrl = import.meta.env.VITE_WS_BASE_URL
         ? import.meta.env.VITE_WS_BASE_URL
-        : `ws://${window.location.hostname}:8000/api/v1`;
+        : `${protocol}//${window.location.host}/api/v1`;
 
       const url = `${baseUrl}/ws/jobs/${wsJobId}/logs?token=${token}`;
 

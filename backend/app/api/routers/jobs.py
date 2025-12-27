@@ -22,6 +22,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud  # Assuming crud.job is available
+from app.core.api_key_auth import get_current_user_with_api_key_or_jwt
 from app.core.config import settings
 from app.core.rate_limit import limiter  # Import limiter
 from app.core.security import current_active_user  # Your user dependency
@@ -36,6 +37,7 @@ from app.schemas.job import (  # Removed JobUpdate as we'll set directly
     JobRead,
     JobReadLite,
 )
+from app.schemas.storage_path import StoragePathCreate
 from app.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -81,18 +83,12 @@ def _is_path_allowed(resolved_path_to_check: Path, allowed_paths_list: list[str]
 
 
 async def _validate_and_resolve_job_path(
-    folder_path_str: str, allowed_folders: list[str], user_email: str
+    db: AsyncSession, folder_path_str: str, allowed_folders: list[str], user_email: str
 ) -> Path:
-    """Validates the job folder path against allowed directories and resolves it."""
-    if not allowed_folders:
-        logger.error(
-            "CRITICAL: ALLOWED_MEDIA_FOLDERS is not configured or empty. Denying all job submissions."
-        )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="SERVER_CONFIGURATION_ERROR_MEDIA_FOLDERS",
-        )
-
+    """
+    Validates the job folder path against allowed directories.
+    If valid (exists) but not allowed, AUTOMATICALLY adds it to allowed storage paths.
+    """
     try:
         resolved_input_path = Path(folder_path_str).resolve(strict=True)
     except FileNotFoundError as e:
@@ -121,19 +117,30 @@ async def _validate_and_resolve_job_path(
         ) from e
 
     if not _is_path_allowed(resolved_input_path, allowed_folders):
-        logger.warning(
-            f"User {user_email} attempted to submit job for disallowed path: '{resolved_input_path!s}'. "
-            f"Original input: '{folder_path_str}'. Allowed bases: {allowed_folders}"
+        # Auto-Add Logic for valid but unconfigured paths
+        logger.info(
+            f"Path '{resolved_input_path}' is valid but not in allowed folders. Auto-adding it for user {user_email}."
         )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"The provided folder path '{resolved_input_path!s}' (resolved from '{folder_path_str}') "
-                f"is not within the allowed media directories. "
-                f"Ensure the path is valid and starts with one of the configured base paths."
-            ),
-        )
-    logger.info(f"Folder path '{resolved_input_path!s}' is allowed for user {user_email}.")
+        try:
+            new_path_str = str(resolved_input_path)
+            # Check if it already exists in DB to avoid race conditions or duplicates
+            # (though _is_path_allowed checked the list we passed, the DB checks are stricter)
+            existing = await crud.storage_path.get_by_path(db, path=new_path_str)
+            if not existing:
+                path_in = StoragePathCreate(path=new_path_str, label="Auto-added from Job")
+                await crud.storage_path.create(db, obj_in=path_in)
+                logger.info(f"Successfully auto-added allowed path: {new_path_str}")
+            else:
+                logger.info(f"Path {new_path_str} already in DB (race condition handled).")
+
+        except Exception as e:
+            logger.error(f"Failed to auto-add new path '{resolved_input_path}': {e}")
+            # Fallback: Deny if we failed to add it
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to auto-add new storage path configuration.",
+            ) from e
+
     return resolved_input_path
 
 
@@ -269,7 +276,7 @@ async def _enqueue_celery_task_and_handle_errors(
     status_code=status.HTTP_201_CREATED,
     summary="Submit a new subtitle download job",
     description=(
-        "Allows authenticated users to submit a new subtitle download job for a specified folder path. "
+        "Allows authenticated users (via Cookie, Bearer Token, or X-API-Key) to submit a new subtitle download job. "
         "The path is validated against allowed media directories. "
         "A job record is created, and a task is enqueued for asynchronous processing."
     ),
@@ -278,7 +285,7 @@ async def _enqueue_celery_task_and_handle_errors(
 async def create_job(
     job_in: Annotated[JobCreate, Body(...)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
-    current_user: Annotated[User, Depends(current_active_user)],
+    current_user: Annotated[User, Depends(get_current_user_with_api_key_or_jwt)],
     request: Request = None,  # Required for SlowAPI  # noqa: ARG001
 ) -> Job:
     # Fetch dynamic allowed paths from DB
@@ -288,7 +295,7 @@ async def create_job(
 
     # Ensure settings.ALLOWED_MEDIA_FOLDERS is the correct config variable name
     resolved_input_path = await _validate_and_resolve_job_path(
-        job_in.folder_path, allowed_folders, current_user.email
+        db, job_in.folder_path, allowed_folders, current_user.email
     )
     normalized_job_folder_path_str = str(resolved_input_path)
 

@@ -5,6 +5,7 @@ interface User {
   id: string;
   email: string;
   role: string | null;
+  api_key?: string | null;
   is_superuser: boolean;
 }
 

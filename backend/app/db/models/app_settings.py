@@ -5,7 +5,9 @@ This is a singleton table (only one row with id=1) that stores
 user-configurable settings like API keys and preferences.
 """
 
-from sqlalchemy import Boolean, Integer, String, Text
+from datetime import datetime
+
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base_class import Base
@@ -50,6 +52,13 @@ class AppSettings(Base):
     # Extracted project_id for display purposes (not encrypted)
     google_cloud_project_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     google_cloud_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
+
+    # --- Google Usage Cache (Fallback) ---
+    google_usage_total_chars: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    google_usage_month_chars: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    google_usage_last_updated: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # --- Setup State ---
     setup_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

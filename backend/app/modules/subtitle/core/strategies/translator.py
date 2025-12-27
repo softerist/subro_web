@@ -16,6 +16,11 @@ class Translator(ProcessingStrategy):
     Uses the TranslationManager obtained via the DI container.
     """
 
+    @property
+    def is_critical(self) -> bool:
+        """Translation is critical for the user's workflow."""
+        return True
+
     def execute(self, context: ProcessingContext) -> bool:  # noqa: C901
         """
         Executes the translation logic.
@@ -138,13 +143,14 @@ class Translator(ProcessingStrategy):
             return False  # Failed to read source, consider this a strategy failure
 
         # --- Perform Translation ---
+        # Note: We pass source_lang=None to allow the API (DeepL/Google) to Auto-Detect the language.
+        # This handles cases where tracks are mislabeled (e.g., German labeled as English).
         try:
             # Call the METHOD on the manager instance
             result = translator_manager.translate_file_content(
-                # manager=translator_manager, # <-- REMOVE THIS ARGUMENT
                 input_file=en_path_to_translate,
                 content=en_content,
-                source_lang="en",  # Still pass source/target
+                source_lang=None,  # Use API Auto-Detect
                 target_lang="ro",
             )
 
@@ -197,9 +203,8 @@ class Translator(ProcessingStrategy):
                     f"Translation failed for '{Path(en_path_to_translate).name}'. Status: {fail_reason}"
                 )
                 context.add_error(self.name, f"Translation failed (Status: {fail_reason})")
-                # Return True because the strategy *ran*, even if the API call failed.
-                # The pipeline checks context flags to see if the goal was met.
-                return True
+                # Return False to indicate a critical failure, causing the job to fail as requested.
+                return False
 
         except AttributeError as attr_err:
             # Add specific handling for AttributeError if it occurs again

@@ -143,11 +143,29 @@ def make_request(session, method, url, **kwargs):  # noqa: C901
         status_code = e.response.status_code
         # Use appropriate log level based on client/server error
         log_level = logging.ERROR if status_code >= 500 else logging.WARNING
-        # Log response text snippet for context
-        logging.log(log_level, f"{e}")
-        # Return the response object even on error when raise_for_status=True was initially set,
-        # as the exception is caught here. Caller needs to check response.ok or status_code.
-        # If you want to propagate the exception, remove this try/except block or re-raise.
+
+        # Build a clean error message
+        if status_code == 404:
+            error_info = f"Resource not found (404): {url} - The page may no longer exist or the ID is invalid."
+        elif status_code == 401:
+            error_info = f"Unauthorized (401): {url} - Check your API key or credentials."
+        elif status_code == 403:
+            error_info = f"Forbidden (403): {url} - Access denied. Check your API key permissions."
+        elif status_code == 429:
+            error_info = (
+                f"Rate limited (429): {url} - Too many requests. Please wait before retrying."
+            )
+        else:
+            # For other errors, include truncated response body
+            error_info = f"{e}"
+            if status_code < 500:
+                try:
+                    body_snippet = e.response.text[:200]
+                    error_info += f" | Response: {body_snippet}"
+                except Exception:
+                    pass
+        logging.log(log_level, error_info)
+
         return e.response  # Return the response containing the error status/body
 
     except (ConnectTimeout, ReadTimeout) as e:

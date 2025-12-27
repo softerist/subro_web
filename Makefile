@@ -207,6 +207,14 @@ prod: ensure-dev-cleanup ## Deploy to production using blue-green deployment scr
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
 	@echo "API Docs available at https://localhost:8443/api/v1/docs"
 
+prod-hardened: ensure-dev-cleanup ## Deploy with security hardening (read-only fs, capability dropping)
+	@echo "Deploying hardened production stack..."
+	docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.prod.yml \
+		--project-name subapp_prod up --build --detach
+	@echo "Hardened production stack deployed."
+	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
+	@echo "API Docs available at http://localhost:8001/api/v1/docs"
+
 reset-prod: rebuild-prod ## Alias for rebuild-prod
 
 rebuild-prod: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy

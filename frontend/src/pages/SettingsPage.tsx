@@ -1,5 +1,17 @@
 import { useEffect, useState, useRef } from "react";
-import { Plus, Trash2, AlertCircle } from "lucide-react";
+import {
+  AlertCircle,
+  Check,
+  Plus,
+  Trash2,
+  Copy,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  Terminal,
+} from "lucide-react";
+import { usersApi } from "@/lib/users";
+import { useAuthStore } from "@/store/authStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +51,10 @@ export default function SettingsPage() {
   const [editingKeyIndex, setEditingKeyIndex] = useState<number | null>(null);
 
   // Confirmation Dialog State
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isGeneratingKey, setIsGeneratingKey] = useState(false);
+
+  const { user, setUser } = useAuthStore();
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
     type: "deepl" | "google" | null;
@@ -57,6 +73,21 @@ export default function SettingsPage() {
   const cardRef = useRef<HTMLDivElement>(null);
 
   const hasChanges = Object.keys(formData).length > 0;
+
+  const handleRegenerateApiKey = async () => {
+    try {
+      setIsGeneratingKey(true);
+      const updatedUser = await usersApi.regenerateApiKey();
+      setUser({ ...user!, api_key: updatedUser.api_key });
+      setSuccess("API Key regenerated successfully.");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (error) {
+      setError("Failed to regenerate API key.");
+      console.error(error);
+    } finally {
+      setIsGeneratingKey(false);
+    }
+  };
 
   useEffect(() => {
     loadSettings();
@@ -295,7 +326,15 @@ export default function SettingsPage() {
 
       {error && (
         <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {success && (
+        <Alert className="border-green-500/50 bg-green-500/10 text-green-400">
+          <Check className="h-4 w-4" />
+          <AlertDescription>{success}</AlertDescription>
         </Alert>
       )}
 
@@ -940,6 +979,60 @@ export default function SettingsPage() {
                               </AlertDescription>
                             </Alert>
                           )}
+                        {/* Google Translate Usage Stats (from Cloud Monitoring API) */}
+                        {settings?.google_usage && (
+                          <div className="mt-4 p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs uppercase tracking-wider text-slate-500">
+                                Translation Usage
+                              </span>
+                              {settings.google_usage.source ===
+                              "google_cloud_monitoring" ? (
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                  Live
+                                </span>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700 text-slate-300 border border-slate-600">
+                                    Local
+                                  </span>
+                                  <div
+                                    className="group relative"
+                                    title={
+                                      settings.google_usage.last_updated
+                                        ? `Last updated: ${new Date(settings.google_usage.last_updated).toLocaleString()}`
+                                        : "Using cached data"
+                                    }
+                                  >
+                                    <span className="px-2 py-0.5 text-xs rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 cursor-help">
+                                      API Unreachable
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <span className="text-xs text-slate-400">
+                                  This Month
+                                </span>
+                                <div className="text-sm font-mono text-slate-200">
+                                  {settings.google_usage.this_month_characters.toLocaleString()}{" "}
+                                  <span className="text-slate-500">chars</span>
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <span className="text-xs text-slate-400">
+                                  All Time
+                                </span>
+                                <div className="text-sm font-mono text-slate-200">
+                                  {settings.google_usage.total_characters.toLocaleString()}{" "}
+                                  <span className="text-slate-500">chars</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </motion.div>
                     ) : (
                       <motion.div
@@ -1050,6 +1143,120 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* API Key Section */}
+              <div className="bg-slate-900/40 rounded-lg p-4 border border-slate-700/50">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className="text-sm font-medium text-white flex items-center gap-2">
+                      <Terminal className="h-4 w-4 text-purple-400" />
+                      Webhook Integration / API Key
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Use this key to trigger downloads from qBittorrent
+                      (&quot;Run external program&quot;).
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRegenerateApiKey}
+                    disabled={isGeneratingKey}
+                    className="h-8 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
+                  >
+                    <RefreshCw
+                      className={`h-3.5 w-3.5 mr-2 ${isGeneratingKey ? "animate-spin" : ""}`}
+                    />
+                    {user?.api_key ? "Regenerate Key" : "Generate Key"}
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* API Key Value */}
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase tracking-wider text-slate-500">
+                      Your API Key
+                    </Label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Input
+                          readOnly
+                          value={user?.api_key || "No API Key generated"}
+                          type={showApiKey ? "text" : "password"}
+                          className="font-mono bg-slate-950/50 border-slate-700 text-slate-200 pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0 h-full text-slate-400 hover:text-white"
+                          onClick={() => setShowApiKey(!showApiKey)}
+                          disabled={!user?.api_key}
+                        >
+                          {showApiKey ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-300"
+                        onClick={() => {
+                          if (user?.api_key) {
+                            navigator.clipboard.writeText(user.api_key);
+                            setSuccess("API Key copied to clipboard.");
+                            setTimeout(() => setSuccess(null), 2000);
+                          }
+                        }}
+                        disabled={!user?.api_key}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* qBittorrent Command Helper */}
+                  {user?.api_key && (
+                    <div className="space-y-2">
+                      <Label className="text-xs uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                        <span>
+                          qBittorrent Command (&quot;Run external program&quot;)
+                        </span>
+                        <span className="text-[10px] normal-case text-slate-500">
+                          Click to copy
+                        </span>
+                      </Label>
+                      <div
+                        className="bg-black/40 rounded p-3 font-mono text-xs text-green-400/90 break-all cursor-pointer hover:bg-black/60 transition-colors border border-transparent hover:border-slate-700"
+                        onClick={() => {
+                          const cmd = `curl -X POST ${window.location.origin}/api/v1/jobs/ -H "X-API-Key: ${user.api_key}" -H "Content-Type: application/json" -d "{\\"folder_path\\": \\"%R/%N\\", \\"log_level\\": \\"INFO\\"}"`;
+                          navigator.clipboard.writeText(cmd);
+                          setSuccess("Command copied to clipboard.");
+                          setTimeout(() => setSuccess(null), 2000);
+                        }}
+                      >
+                        curl -X POST {window.location.origin}/api/v1/jobs/ \
+                        <br />
+                        &nbsp;&nbsp;-H &quot;X-API-Key: {user.api_key}&quot; \
+                        <br />
+                        &nbsp;&nbsp;-H &quot;Content-Type:
+                        application/json&quot; \<br />
+                        &nbsp;&nbsp;-d &quot;&#123;\&quot;folder_path\&quot;:
+                        \&quot;%R/%N\&quot;, \&quot;log_level\&quot;:
+                        \&quot;INFO\&quot;&#125;&quot;
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        Note: Replace <code>%R/%N</code> with qBittorrent&apos;s
+                        path variables if needed (e.g., <code>%D/%N</code> or{" "}
+                        <code>%F</code>).
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="pl-10 space-y-6 max-w-xl">
                 <div className="space-y-2">
                   <Label className="text-xs uppercase tracking-wider text-slate-500">

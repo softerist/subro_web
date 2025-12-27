@@ -575,6 +575,7 @@ def check_and_extract_embedded_subtitle(  # noqa: C901
         if output_dir:  # Ensure output dir exists if it's not the current dir
             output_dir.mkdir(parents=True, exist_ok=True)
 
+        # Use global stream index!
         map_specifier = f"0:{stream_index}"
         temp_srt_path = str(Path(temp_dir) / f"stream_{stream_index}_temp.srt")
         temp_sup_path = str(Path(temp_dir) / f"stream_{stream_index}_temp.sup")  # For image subs
@@ -584,7 +585,9 @@ def check_and_extract_embedded_subtitle(  # noqa: C901
         resolved_ffmpeg_path = shutil.which(FFMPEG_PATH) or FFMPEG_PATH
 
         if stream_codec in TEXT_SUBTITLE_CODECS:
-            logger.info(f"Extracting text-based stream #{stream_index} to SRT format...")
+            logger.info(
+                f"Extracting text-based stream using global index #{stream_index} (map 0:{stream_index}) to SRT format..."
+            )
             ffmpeg_cmd = [
                 resolved_ffmpeg_path,
                 "-nostdin",
@@ -630,7 +633,9 @@ def check_and_extract_embedded_subtitle(  # noqa: C901
                         pass
 
         elif stream_codec in image_codecs_to_consider:  # Handle allowed image formats
-            logger.info(f"Extracting image-based stream #{stream_index} ({stream_codec})...")
+            logger.info(
+                f"Extracting image-based stream using global index #{stream_index} (map 0:{stream_index}) ({stream_codec})..."
+            )
             extract_cmd = [
                 resolved_ffmpeg_path,
                 "-nostdin",
@@ -1044,9 +1049,11 @@ def extract_embedded_stream_by_index(  # noqa: C901
         "-y",  # Overwrite output files without asking
         "-i",
         video_path_str,
+        # Use global stream index mapping since 'stream_index' comes from ffprobe's 'index' field which is global.
+        # Original Bug: using "0:s:{stream_index}" treated it as relative subtitle index (e.g. 3rd subtitle)
+        # instead of the 3rd stream overall.
         "-map",
-        f"0:s:{stream_index}",  # Map the specific subtitle stream index (more explicit)
-        # "-map", f"0:{stream_index}", # Alternative mapping
+        f"0:{stream_index}",
         "-c:s",
         "srt",  # Attempt to force output codec to SRT
         # "-vn", "-an",              # Not strictly necessary when only mapping subs, but harmless
@@ -1054,7 +1061,7 @@ def extract_embedded_stream_by_index(  # noqa: C901
     ]
 
     logger.info(
-        f"Attempting to extract subtitle stream #{stream_index} to '{Path(output_subtitle_path).name}'..."
+        f"Attempting to extract subtitle using global stream index #{stream_index} (map 0:{stream_index}) to '{Path(output_subtitle_path).name}'..."
     )
     logger.debug(f"Running ffmpeg command: {' '.join(command)}")
 

@@ -94,6 +94,7 @@ class SettingsRead(SettingsBase):
     google_cloud_project_id: str | None = None
     google_cloud_valid: bool | None = None
     google_cloud_error: str | None = None
+    google_usage: dict | None = None  # Only populated when Cloud Monitoring API is available
 
     # State
     setup_completed: bool = False

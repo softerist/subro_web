@@ -28,9 +28,17 @@ export interface DeepLUsage {
   valid: boolean | null | undefined;
 }
 
+export interface GoogleUsage {
+  total_characters: number;
+  this_month_characters: number;
+  source: "google_cloud_monitoring" | "google_cloud_monitoring_cached";
+  last_updated?: string | null;
+}
+
 export interface SettingsRead extends SettingsUpdate {
   setup_completed: boolean;
   deepl_usage?: DeepLUsage[];
+  google_usage?: GoogleUsage;
   // Validation status from backend
   tmdb_valid?: string; // "valid", "invalid", "limit_reached", or undefined
   omdb_valid?: string; // "valid", "invalid", "limit_reached", or undefined

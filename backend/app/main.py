@@ -5,6 +5,9 @@ from contextlib import asynccontextmanager
 # --- Project Specific Imports ---
 from app.core.config import settings
 
+# Import all models to ensure they are registered in the registry
+from app.db import base  # noqa: F401
+
 # Celery import (your existing fallback logic is good)
 try:
     from app.tasks.celery_app import celery_app  # type: ignore

@@ -28,8 +28,10 @@ ENV APP_HOME=/app \
 WORKDIR ${APP_HOME} # Use the ENV variable
 
 # Install Poetry globally using the build argument
-# Also update pip first
-RUN pip install --upgrade pip && pip install poetry==${POETRY_VERSION}
+# Also update pip first and install gosu
+RUN apt-get update && apt-get install -y --no-install-recommends gosu && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip install --upgrade pip && pip install poetry==${POETRY_VERSION}
 
 
 # Create a non-root user and group early for consistent permissions
@@ -123,9 +125,6 @@ RUN if [ ! -f /app/scripts/sub_downloader.py ]; then \
 # Make Python scripts executable
 RUN find /app/scripts -type f -iname "*.py" -exec chmod +x {} \;
 
-# Switch to non-root user for running the application
-USER appuser
-
 # Expose the port (good practice)
 EXPOSE 8000
 
@@ -177,7 +176,6 @@ RUN chmod +x /usr/local/bin/alass-cli
 COPY --chown=appuser:appuser --from=development /app/nltk_data /app/nltk_data
 ENV NLTK_DATA=/app/nltk_data
 
-USER appuser
 EXPOSE 8000
 
 # Use the venv Python via the updated PATH

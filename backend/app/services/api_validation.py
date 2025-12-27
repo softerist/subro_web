@@ -246,23 +246,31 @@ async def validate_deepl(api_key: str) -> dict:
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers, timeout=10.0)
-            if response.status_code == 200:
+            status_code = response.status_code
+            if status_code == 200:
                 data = response.json()
                 return {
                     "valid": True,
                     "character_count": data.get("character_count", 0),
                     "character_limit": data.get("character_limit", 0),
+                    "status_code": status_code,
                 }
-            elif response.status_code == 429:
+            if status_code == 429:
                 return {
                     "valid": False,
+                    "rate_limited": True,
                     "error": "Rate limit exceeded (429)",
                     "retry_after": int(response.headers.get("Retry-After", 1)),
+                    "status_code": status_code,
                 }
             else:
-                return {"valid": False, "error": f"Status {response.status_code}: {response.text}"}
+                return {
+                    "valid": False,
+                    "error": f"Status {status_code}: {response.text}",
+                    "status_code": status_code,
+                }
         except Exception as e:
-            return {"valid": False, "error": str(e)}
+            return {"valid": False, "error": str(e), "status_code": None}
 
 
 async def validate_google_cloud(creds_json: str) -> tuple[bool | None, str | None, str | None]:
@@ -367,22 +375,38 @@ async def validate_deepl_keys_background(  # noqa: C901
             )
             record = result.scalar_one_or_none()
 
-            if not record:
-                record = DeepLUsage(key_identifier=key_hash)
-                db.add(record)
-
-            if usage_data["valid"]:
+            status_code = usage_data.get("status_code")
+            if usage_data.get("valid"):
+                if not record:
+                    record = DeepLUsage(key_identifier=key_hash)
+                    db.add(record)
                 record.character_count = usage_data["character_count"]
                 record.character_limit = usage_data["character_limit"]
                 record.valid = True
+            elif usage_data.get("rate_limited"):
+                if not record:
+                    record = DeepLUsage(key_identifier=key_hash)
+                    db.add(record)
+                # Treat rate limiting as transient; keep key valid and preserve counts if possible.
+                if record.character_limit == 0:
+                    record.character_limit = 500000
+                record.valid = True
             else:
-                # If it failed, we mark it invalid.
-                # If it was a rate limit failure even after retry, we mark as invalid
-                # but maybe we should add an 'error_message' column in future.
-                # For now, valid=False is correct.
-                record.character_count = 0
-                record.character_limit = 0
-                record.valid = False
+                # Only mark invalid for hard failures; otherwise leave existing state.
+                if status_code in {403, 456}:
+                    if not record:
+                        record = DeepLUsage(key_identifier=key_hash)
+                        db.add(record)
+                    record.character_count = 0
+                    record.character_limit = 0
+                    record.valid = False
+                else:
+                    logger.warning(
+                        "DeepL validation failed for key %s due to transient error (%s); preserving existing status.",
+                        key[:8],
+                        usage_data.get("error"),
+                    )
+                    continue
 
             record.last_updated = datetime.now(UTC)
 

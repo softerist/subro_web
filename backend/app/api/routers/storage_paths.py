@@ -50,17 +50,32 @@ async def create_storage_path(
     """
     # 1. Check if path exists physically
     p = Path(path_in.path)
-    if not p.exists():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Path '{path_in.path}' does not exist on the server filesystem.",
-        )
 
-    if not p.is_dir():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Path '{path_in.path}' is not a directory.",
-        )
+    # Common host-style prefixes for providing tips
+    host_style_prefixes = ("/root", "/home", "/mnt", "/Users", "C:", "D:")
+    is_host_style = str(path_in.path).startswith(host_style_prefixes)
+    docker_tip = " TIP: You might be using a HOST path. Please use the path as it is MAPPED inside the container (e.g., '/downloads')."
+
+    try:
+        if not p.exists():
+            detail = f"Path '{path_in.path}' does not exist on the server filesystem."
+            if is_host_style:
+                detail += docker_tip
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+        if not p.is_dir():
+            detail = f"Path '{path_in.path}' is not a directory."
+            if is_host_style:
+                detail += docker_tip
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+    except PermissionError as e:
+        detail = f"Permission denied while accessing path '{path_in.path}'. Please ensure the backend has proper permissions for this folder."
+        if is_host_style:
+            detail += docker_tip
+
+        logger.error(f"PermissionError in create_storage_path: {e} | Path: {path_in.path}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from e
 
     # 2. Check for duplicates
     existing = await crud.storage_path.get_by_path(db, path=path_in.path)

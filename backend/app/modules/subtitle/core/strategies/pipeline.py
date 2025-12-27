@@ -87,16 +87,20 @@ class SubtitlePipeline:
 
                 # --- Handle Strategy Failure Reporting ---
                 if not strategy_success:
-                    # Log that the strategy reported failure, but continue the pipeline.
-                    # The context state (flags, errors) determines the final outcome.
-                    logger.warning(
-                        f"Strategy '{strategy.name}' reported failure or encountered an error. Pipeline continuing..."
-                    )
-                    # Optionally, you could add logic here to break the pipeline
-                    # if a specific *critical* strategy fails, e.g.:
-                    # if strategy.name in ['CriticalStrategy1', 'CriticalStrategy2'] and not strategy_success:
-                    #     logger.error(f"Critical strategy {strategy.name} failed. Aborting pipeline.")
-                    #     break
+                    # Log that the strategy reported failure.
+                    if strategy.is_critical:
+                        logger.error(
+                            f"CRITICAL failure in mandatory strategy '{strategy.name}'. "
+                            "Aborting pipeline execution to report failure."
+                        )
+                        # Ensure we don't accidentally report success if a critical step failed
+                        overall_success = False
+                        break  # Stop the pipeline
+                    else:
+                        logger.warning(
+                            f"Strategy '{strategy.name}' reported failure or encountered an error. "
+                            "Pipeline continuing (Non-critical)..."
+                        )
 
                 # --- Log RO Goal Achievement ---
                 # Check if the primary goal (RO sub) was achieved by *this* strategy

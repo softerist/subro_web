@@ -39,10 +39,45 @@ async def init_db(db: AsyncSession) -> None:
     - If setup_completed is False and env vars are set, it creates the user
       and marks setup as complete.
     - If a user already exists, it updates their password to match env vars.
+    - Populates settings from environment variables.
+    - Creates a default /downloads storage path.
     """
     logger.info("Running initial_data.py initialization...")
 
-    # Check setup status first
+    # 1. Populate Settings from Environment
+    # We do this first so the system is usable immediately
+    from app.services.api_validation import validate_all_settings
+
+    await crud_app_settings.populate_from_env_defaults(db)
+    logger.info("Populated app settings from environment variables.")
+
+    # 1.1 Trigger Validation
+    try:
+        await validate_all_settings(db)
+        logger.info("Initial settings validation completed.")
+    except Exception as e:
+        logger.warning(f"Initial settings validation encountered issues: {e}")
+
+    # 2. Handle Default Storage Paths
+    from app.crud.crud_storage_path import storage_path as crud_storage_path
+    from app.schemas.storage_path import StoragePathCreate
+
+    default_path = "/downloads"
+    if Path(default_path).exists():
+        existing_path = await crud_storage_path.get_by_path(db, path=default_path)
+        if not existing_path:
+            await crud_storage_path.create(
+                db, obj_in=StoragePathCreate(path=default_path, label="Default Downloads")
+            )
+            logger.info(f"Created default storage path: {default_path}")
+        else:
+            logger.info(f"Default storage path {default_path} already exists.")
+    else:
+        logger.warning(
+            f"Default path {default_path} does not exist in container. Skipping creation."
+        )
+
+    # 3. Handle Superuser and Setup Status
     app_settings = await crud_app_settings.get(db)
     setup_completed = app_settings.setup_completed
 
@@ -52,8 +87,7 @@ async def init_db(db: AsyncSession) -> None:
 
     # Check if superuser credentials are provided in environment
     if not settings.FIRST_SUPERUSER_EMAIL or not settings.FIRST_SUPERUSER_PASSWORD:
-        logger.info("No FIRST_SUPERUSER credentials in env. Skipping auto-bootstrap.")
-        logger.info("User must complete setup via the Setup Wizard.")
+        logger.info("No FIRST_SUPERUSER credentials in env. Skipping superuser bootstrap.")
         return
 
     superuser_email = settings.FIRST_SUPERUSER_EMAIL
@@ -61,9 +95,9 @@ async def init_db(db: AsyncSession) -> None:
     try:
         # Check if user already exists
         user_obj = await script_user_manager.get_by_email(superuser_email)
-        logger.info(f"User {superuser_email} already exists. Updating password...")
+        logger.info(f"User {superuser_email} already exists. Updating credentials...")
 
-        # Update password using UserUpdate schema
+        # Update password and ensuring role is admin
         user_update = UserUpdate(
             password=settings.FIRST_SUPERUSER_PASSWORD,
             is_superuser=True,
@@ -71,23 +105,18 @@ async def init_db(db: AsyncSession) -> None:
             is_verified=True,
         )
         await script_user_manager.update(user_update, user_obj, safe=True)
-        logger.info(f"Superuser {superuser_email} password updated successfully.")
+        # Update role manually as it's not in UserUpdate
+        user_obj.role = "admin"
+        db.add(user_obj)
 
-        # If setup wasn't completed yet, mark it as complete
-        # (User was already created, so wizard would be redundant)
+        logger.info(f"Superuser {superuser_email} updated successfully.")
+
         if not setup_completed:
             await crud_app_settings.mark_setup_completed(db)
             logger.info("Marked setup as completed (existing user found).")
 
     except UserNotExists:
-        logger.info(f"User {superuser_email} does not exist.")
-
-        if setup_completed:
-            # Setup was already done via wizard, but admin was deleted?
-            # Re-create from env vars as recovery mechanism
-            logger.warning(
-                "Setup was completed but admin user is missing. Re-creating from env vars..."
-            )
+        logger.info(f"Initial superuser {superuser_email} not found. Creating...")
 
         # Create the superuser
         superuser_in = UserCreate(
@@ -99,7 +128,7 @@ async def init_db(db: AsyncSession) -> None:
             is_verified=True,
         )
 
-        created_user = await script_user_manager.create(superuser_in, safe=True)
+        created_user = await script_user_manager.create(superuser_in, safe=False)
         logger.info(
             f"Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {created_user.id}) created successfully."
         )

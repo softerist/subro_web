@@ -48,7 +48,7 @@ class Job(Base):
         nullable=False,  # A job must have an associated user
     )
     user: Mapped["User"] = relationship(
-        "app.db.models.user.User",  # Fully qualified path for clarity if User is in another module
+        "User",
         back_populates="jobs",
     )
 

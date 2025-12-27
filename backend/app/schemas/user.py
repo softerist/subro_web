@@ -21,6 +21,7 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
     # Inherits id, email, is_active, is_superuser, is_verified
     # Add our custom fields that should be readable
     role: Literal["admin", "standard"]
+    api_key: str | None = None
     created_at: datetime
     updated_at: datetime
 
