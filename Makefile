@@ -178,7 +178,7 @@ db-migrate-and-apply: db-makemigrations db-apply-migration ## Generate migration
 	@echo "IMPORTANT: Review the migration file in backend/alembic/versions/ before applying it."
 
 
-.PHONY: dev ensure-migrations stop-prod prod reset-prod
+.PHONY: dev ensure-migrations stop-prod prod reset-prod add-test-statistics reset-prod-with-stats reset-dev reset-dev-db add-test-statistics-dev reset-dev-with-stats rebuild-prod rebuild-dev-with-stats rebuild-prod-with-stats
 dev: stop-prod ensure-migrations compose-up ## Start the full stack (generates initial migration if needed, uses existing volumes)
 	@echo "Development stack is up."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
@@ -207,9 +207,9 @@ prod: ensure-dev-cleanup ## Deploy to production using blue-green deployment scr
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
 	@echo "API Docs available at https://localhost:8443/api/v1/docs"
 
-reset-prod: reset-prod-db ## Alias for reset-prod-db
+reset-prod: rebuild-prod ## Alias for rebuild-prod
 
-reset-prod-db: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
+rebuild-prod: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
 	@echo "WARNING: This will DELETE ALL DATA in the production database."
 	@echo "Stopping containers..."
 	@docker rm -f infra-caddy-1 infra-db-1 infra-redis-1 infra-backup-1 infra-scheduler-1 green-api-1 green-worker-1 green-frontend-1 blue-api-1 blue-worker-1 blue-frontend-1 || true
@@ -222,6 +222,31 @@ reset-prod-db: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
 	@echo "Redeploying application..."
 	@make prod
 	@echo "Database reset complete. Please visit the Setup page."
+
+add-test-statistics: ## Populate translation_log and deepl_usage tables from logs/translation_log.json
+	@echo "Copying and running population script..."
+	@docker cp backend/scripts/populate_db_from_json.py blue-api-1:/app/scripts/
+	@docker exec -u appuser blue-api-1 python3 scripts/populate_db_from_json.py
+	@echo "Test statistics populated."
+
+reset-prod-with-stats: reset-prod add-test-statistics ## Reset prod database AND populate test statistics
+
+rebuild-prod-with-stats: rebuild-prod add-test-statistics ## Rebuild prod AND populate test statistics
+
+reset-dev: reset-dev-db ## Alias for reset-dev-db
+
+reset-dev-db: rebuild-dev ## Reset dev database (rebuild-dev already wipes volumes)
+
+add-test-statistics-dev: ## Populate translation_log and deepl_usage tables for DEV
+	@echo "Copying and running population script for DEV..."
+	@docker cp backend/scripts/populate_db_from_json.py subapp_dev-api-1:/app/scripts/
+	@docker exec -u appuser subapp_dev-api-1 python3 scripts/populate_db_from_json.py
+	@echo "Dev test statistics populated."
+
+reset-dev-with-stats: reset-dev add-test-statistics-dev ## Reset dev database AND populate test statistics
+
+rebuild-dev-with-stats: rebuild-dev add-test-statistics-dev ## Rebuild dev AND populate test statistics
+
 
 
 # ==============================================================================

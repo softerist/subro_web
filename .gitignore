@@ -1,6 +1,5 @@
 # --- General ---
 *.log
-*.logs
 *.bak
 *.swp
 *~
@@ -8,21 +7,20 @@
 
 # --- Python ---
 __pycache__/
-*.pyc
-*.pyi
-*.pyo
+*.py[cod]
 *.pyd
 .Python
+
+# Packaging / build artifacts
 build/
-develop-eggs/
 dist/
 downloads/
 eggs/
 .eggs/
-
-lib64/
+develop-eggs/
 parts/
 sdist/
+typings/
 var/
 wheels/
 *.egg-info/
@@ -31,30 +29,38 @@ wheels/
 MANIFEST
 *.manifest
 *.spec
-pip-log.txt
-pip-delete-this-directory.txt
+
+# Test / coverage / tooling
 htmlcov/
 .tox/
 .nox/
 .coverage
 .coverage.*
-.cache
-nosetests.xml
 coverage.xml
+nosetests.xml
 *.cover
 *.py,cover
 .hypothesis/
 .pytest_cache/
-# Environments
+.cache/
+
+# --- Environment Files ---
 .env
-.venv
-env/
+.env.*
+!.env.example
+!.env.test
+
+# Virtualenvs
+.venv/
 venv/
+env/
 ENV/
 env.bak/
 venv.bak/
+
 # Poetry
-.poetry
+.poetry/
+# NOTE: usually you *commit* poetry.lock for apps; ignore only if you mean to
 poetry.lock
 
 # --- Node ---
@@ -64,20 +70,22 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+
+# Yarn / PnP
 .pnp/
 .pnp.js
 .pnp.loader.mjs
-# Yarn Integrity check
 .yarn-integrity
-# Vite
+
+# Vite / builds / coverage
 dist/
 dist-ssr/
 .vite/
 coverage/
 
 # --- Docker ---
-docker-compose.override.yml # Often contains local paths/secrets
-.dockerignore # Should be specific per build context
+docker-compose.override.yml
+# .dockerignore
 
 # --- IDE / System ---
 .idea/
@@ -88,20 +96,16 @@ docker-compose.override.yml # Often contains local paths/secrets
 !.vscode/extensions.json
 *.sublime-workspace
 *.sublime-project
+
 # macOS
 .DS_Store
 .AppleDouble
 .LSOverride
+
 # Windows
 Thumbs.db
 ehthumbs.db
 Desktop.ini
-
-# --- Environment Files ---
-.env
-.env.*
-!.env.example
-!.env.test
 
 # --- Secrets ---
 *.pem
