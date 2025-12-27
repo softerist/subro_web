@@ -125,5 +125,6 @@
   "docker.commands.composeUp": "docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml --project-name subapp_dev up -d --build",
   "docker.commands.composeDown": "docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml --project-name subapp_dev down -v --remove-orphans",
   "containers.commands.composeUp": "docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml --project-name subapp_dev up -d --build",
-  "containers.commands.composeDown": "docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml --project-name subapp_dev down -v --remove-orphans"
+  "containers.commands.composeDown": "docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml --project-name subapp_dev down -v --remove-orphans",
+  "chatgpt.runCodexInWindowsSubsystemForLinux": true
 }
