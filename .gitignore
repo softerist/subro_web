@@ -120,3 +120,4 @@ nltk_data/
 punkt.zip
 heuristic-mcp
 heuristic-mcp-repo
+.smart-coding-cache/

@@ -186,7 +186,7 @@ export default function SetupPage() {
           {currentStep === "welcome" && (
             <>
               <CardHeader className="text-center">
-                <CardTitle className="text-2xl sm:text-3xl text-card-foreground">
+                <CardTitle className="text-2xl sm:text-3xl font-bold title-gradient">
                   Welcome to Subro Web
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
@@ -229,7 +229,7 @@ export default function SetupPage() {
           {currentStep === "admin" && (
             <>
               <CardHeader>
-                <CardTitle className="text-xl sm:text-2xl text-card-foreground">
+                <CardTitle className="text-xl sm:text-2xl font-bold title-gradient">
                   Create Admin Account
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
@@ -313,7 +313,7 @@ export default function SetupPage() {
           {currentStep === "integrations" && (
             <>
               <CardHeader>
-                <CardTitle className="text-xl sm:text-2xl text-card-foreground">
+                <CardTitle className="text-xl sm:text-2xl font-bold title-gradient">
                   Configure Integrations
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
@@ -553,7 +553,7 @@ export default function SetupPage() {
           {currentStep === "finish" && (
             <>
               <CardHeader className="text-center">
-                <CardTitle className="text-xl sm:text-2xl text-card-foreground">
+                <CardTitle className="text-xl sm:text-2xl font-bold title-gradient">
                   Ready to Go!
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">

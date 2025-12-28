@@ -6,7 +6,7 @@ export function PathsPage() {
     <div className="space-y-6 page-enter page-stagger">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight title-gradient">
             Media Paths
           </h2>
           <p className="text-muted-foreground">

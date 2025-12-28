@@ -71,7 +71,7 @@ export default function StatisticsPage() {
   return (
     <div className="space-y-6 page-enter page-stagger">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight title-gradient">
           Translation Statistics
         </h1>
         <p className="text-muted-foreground">
@@ -168,7 +168,7 @@ export default function StatisticsPage() {
       {/* Recent Translations Table */}
       <Card className="bg-card/50 border-border soft-hover">
         <CardHeader>
-          <CardTitle className="text-lg sm:text-xl font-bold text-card-foreground">
+          <CardTitle className="text-lg sm:text-xl font-bold title-gradient">
             Recent Translations
           </CardTitle>
           <CardDescription className="text-muted-foreground">

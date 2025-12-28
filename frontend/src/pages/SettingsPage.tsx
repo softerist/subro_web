@@ -337,7 +337,7 @@ export default function SettingsPage() {
     <div className="space-y-6 page-enter page-stagger">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight title-gradient">
             Settings
           </h1>
           <p className="text-muted-foreground">
@@ -405,7 +405,7 @@ export default function SettingsPage() {
         {currentTab === "integrations" && (
           <>
             <CardHeader>
-              <CardTitle className="text-lg sm:text-xl font-bold text-card-foreground">
+              <CardTitle className="text-lg sm:text-xl font-bold title-gradient">
                 External Services
               </CardTitle>
               <CardDescription className="text-muted-foreground">
@@ -1180,7 +1180,7 @@ export default function SettingsPage() {
         {currentTab === "qbittorrent" && (
           <>
             <CardHeader>
-              <CardTitle className="text-lg sm:text-xl font-bold text-card-foreground">
+              <CardTitle className="text-lg sm:text-xl font-bold title-gradient">
                 qBittorrent Settings
               </CardTitle>
               <CardDescription className="text-muted-foreground">

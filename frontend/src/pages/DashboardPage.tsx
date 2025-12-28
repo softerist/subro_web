@@ -31,7 +31,7 @@ export default function DashboardPage() {
       {/* Dashboard Tiles Section */}
       <Card className="soft-hover">
         <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0 gap-2 flex-wrap sm:flex-nowrap">
-          <CardTitle className="text-lg sm:text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent truncate flex-grow">
+          <CardTitle className="text-lg sm:text-xl font-bold title-gradient truncate flex-grow">
             Control Center
           </CardTitle>
           {isAdmin && (
@@ -62,7 +62,7 @@ export default function DashboardPage() {
           {/* New Job Form */}
           <Card className="soft-hover">
             <CardHeader>
-              <CardTitle className="text-lg sm:text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+              <CardTitle className="text-lg sm:text-xl font-bold title-gradient">
                 New Job
               </CardTitle>
               <CardDescription className="text-muted-foreground">
@@ -77,7 +77,7 @@ export default function DashboardPage() {
           {/* Job History - grows to fill remaining space */}
           <Card className="soft-hover xl:flex-1 xl:flex xl:flex-col xl:min-h-0 xl:overflow-hidden">
             <CardHeader>
-              <CardTitle className="text-lg sm:text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+              <CardTitle className="text-lg sm:text-xl font-bold title-gradient">
                 Job History
               </CardTitle>
             </CardHeader>
@@ -94,7 +94,7 @@ export default function DashboardPage() {
         <div className="w-full xl:w-2/3 xl:flex xl:flex-col xl:min-h-0">
           <Card className="xl:flex-1 xl:flex xl:flex-col xl:min-h-0 xl:overflow-hidden soft-hover">
             <CardHeader className="py-4 shrink-0">
-              <CardTitle className="text-lg sm:text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+              <CardTitle className="text-lg sm:text-xl font-bold title-gradient">
                 Log Viewer
               </CardTitle>
             </CardHeader>

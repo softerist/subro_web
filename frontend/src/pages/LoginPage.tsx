@@ -13,7 +13,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md page-stagger">
         <Card className="bg-card/50 border-border backdrop-blur soft-hover">
           <CardHeader className="text-center">
-            <CardTitle className="text-xl sm:text-2xl text-card-foreground">
+            <CardTitle className="text-xl sm:text-2xl font-bold title-gradient">
               Login
             </CardTitle>
             <CardDescription className="text-muted-foreground">

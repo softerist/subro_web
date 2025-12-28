@@ -94,7 +94,7 @@ export default function DashboardLayout() {
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:shadow-blue-500/40 transition-all duration-300">
               <UploadCloud className="h-5 w-5 text-white" />
             </div>
-            <span className="text-lg sm:text-xl tracking-tight bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+            <span className="text-lg sm:text-xl tracking-tight title-gradient">
               Subro
             </span>
           </Link>
@@ -173,7 +173,7 @@ export default function DashboardLayout() {
         <div className="absolute bottom-[-10%] left-[-5%] w-[30%] h-[30%] bg-indigo-500/5 blur-[100px] pointer-events-none rounded-full" />
 
         {/* Header */}
-        <header className="flex h-14 items-center gap-4 border-b border-border bg-background/60 backdrop-blur-md px-4 lg:height-[60px] lg:px-6 shrink-0 z-10 transition-colors duration-300">
+        <header className="flex h-14 items-center gap-4 border-b border-border bg-background/60 backdrop-blur-md px-4 lg:h-[60px] lg:px-6 shrink-0 z-10 transition-colors duration-300">
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
@@ -226,9 +226,7 @@ export default function DashboardLayout() {
                 <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
                   <UploadCloud className="h-4 w-4 text-white" />
                 </div>
-                <span className="text-lg bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-                  Subro
-                </span>
+                <span className="text-lg title-gradient">Subro</span>
               </Link>
               <Button
                 variant="ghost"
