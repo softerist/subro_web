@@ -4,6 +4,7 @@
 *.swp
 *~
 .#*
+.smart-coding-cache/
 
 # --- Python ---
 __pycache__/
