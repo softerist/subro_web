@@ -44,6 +44,7 @@ nosetests.xml
 .hypothesis/
 .pytest_cache/
 .cache/
+.ruff_cache/
 
 # --- Environment Files ---
 .env
