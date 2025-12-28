@@ -99,7 +99,7 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
   if (isLoading && !localTiles?.length) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -107,7 +107,7 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
   /*
     if (!localTiles?.length && !isEditable) {
         return (
-            <div className="text-center text-slate-400 py-10">
+            <div className="text-center text-muted-foreground py-10">
                 No tiles available.
             </div>
         );
@@ -141,7 +141,7 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
                 className="flex items-center justify-center h-full border-dashed cursor-pointer hover:border-primary/50 transition-colors min-h-[100px]"
                 onClick={handleCreate}
               >
-                <CardContent className="flex flex-col items-center justify-center p-6 text-slate-400">
+                <CardContent className="flex flex-col items-center justify-center p-6 text-muted-foreground">
                   <Plus className="h-8 w-8 mb-2" />
                   <span className="text-sm font-medium">Add Tile</span>
                 </CardContent>
@@ -152,7 +152,7 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
           {!localTiles?.length ? (
-            <div className="col-span-full text-center text-slate-400 py-8">
+            <div className="col-span-full text-center text-muted-foreground py-8">
               No tiles available.
             </div>
           ) : (

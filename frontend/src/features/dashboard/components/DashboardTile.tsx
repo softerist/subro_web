@@ -59,18 +59,18 @@ export function DashboardTile({
           >
             {tile.title}
             {!tile.is_active && isEditable && (
-              <span className="ml-1 text-[10px] text-slate-500 font-normal">
+              <span className="ml-1 text-[10px] text-muted-foreground font-normal">
                 (Hidden)
               </span>
             )}
           </CardTitle>
 
           {isEditable ? (
-            <div className="flex items-center space-x-1 shrink-0 bg-slate-800/80 rounded-md p-0.5 border border-slate-700/50">
+            <div className="flex items-center space-x-1 shrink-0 bg-card/80 rounded-md p-0.5 border border-border">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 hover:bg-slate-700 transition-colors"
+                className="h-7 w-7 hover:bg-secondary transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
                   onEdit?.(tile);
@@ -93,12 +93,12 @@ export function DashboardTile({
               </Button>
             </div>
           ) : (
-            <IconComponent className="h-4 w-4 text-slate-400 shrink-0" />
+            <IconComponent className="h-4 w-4 text-muted-foreground shrink-0" />
           )}
         </CardHeader>
         <CardContent className="p-3 pt-0">
           <div
-            className="text-xs text-slate-400 truncate opacity-70"
+            className="text-xs text-muted-foreground truncate opacity-70"
             title={tile.url}
           >
             {tile.url}

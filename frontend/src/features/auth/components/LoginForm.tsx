@@ -60,7 +60,7 @@ export function LoginForm({
       <form onSubmit={handleSubmit} action="/login" method="post">
         <div className={cn("grid gap-4")}>
           <div className="grid gap-2">
-            <Label htmlFor="email" className="text-slate-300">
+            <Label htmlFor="email" className="text-foreground">
               Email
             </Label>
             <Input
@@ -78,7 +78,7 @@ export function LoginForm({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="password" className="text-slate-300">
+            <Label htmlFor="password" className="text-foreground">
               Password
             </Label>
             <Input

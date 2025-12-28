@@ -113,7 +113,7 @@ export function ConfirmDialog({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => !isLoading && onOpenChange(false)}
-            className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm cursor-pointer"
+            className="fixed inset-0 bg-background/40 backdrop-blur-sm cursor-pointer"
           />
 
           {/* Modal Container - Compact Design */}
@@ -136,7 +136,7 @@ export function ConfirmDialog({
               transition: { duration: 0.15, ease: "easeIn" },
             }}
             style={dialogStyle}
-            className={`${hasPosition ? "" : "relative"} w-full max-w-[260px] overflow-hidden rounded-xl border border-white/10 bg-slate-900/95 p-3 shadow-2xl backdrop-blur-2xl sm:p-3 z-[10000]`}
+            className={`${hasPosition ? "" : "relative"} w-full max-w-[260px] overflow-hidden rounded-xl border border-border bg-popover/95 p-3 shadow-2xl backdrop-blur-2xl sm:p-3 z-[10000]`}
           >
             {/* Glossy Overlay */}
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/5 to-transparent" />
@@ -155,10 +155,10 @@ export function ConfirmDialog({
                 </div>
 
                 <div className="flex-1 pt-0.5">
-                  <h3 className="text-sm font-bold text-white tracking-tight mb-0.5">
+                  <h3 className="text-sm font-bold text-foreground tracking-tight mb-0.5">
                     {title}
                   </h3>
-                  <div className="text-slate-400 text-[11px] leading-relaxed">
+                  <div className="text-muted-foreground text-[11px] leading-relaxed">
                     {description}
                   </div>
                 </div>
@@ -169,7 +169,7 @@ export function ConfirmDialog({
                   variant="ghost"
                   onClick={() => onOpenChange(false)}
                   disabled={isLoading}
-                  className="h-8 px-3 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+                  className="h-8 px-3 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-all"
                 >
                   {cancelLabel}
                 </Button>

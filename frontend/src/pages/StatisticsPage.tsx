@@ -53,7 +53,7 @@ export default function StatisticsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64 page-enter">
-        <div className="text-slate-400">Loading statistics...</div>
+        <div className="text-muted-foreground">Loading statistics...</div>
       </div>
     );
   }
@@ -61,7 +61,7 @@ export default function StatisticsPage() {
   if (error) {
     return (
       <div className="flex items-center justify-center h-64 page-enter">
-        <div className="text-red-400">{error}</div>
+        <div className="text-destructive">{error}</div>
       </div>
     );
   }
@@ -74,7 +74,7 @@ export default function StatisticsPage() {
         <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
           Translation Statistics
         </h1>
-        <p className="text-slate-400">
+        <p className="text-muted-foreground">
           Overview of DeepL and Google Cloud translation usage
         </p>
       </div>
@@ -82,17 +82,17 @@ export default function StatisticsPage() {
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         {/* All Time */}
-        <Card className="bg-slate-800/50 border-slate-700 soft-hover">
+        <Card className="bg-card/50 border-border soft-hover">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               All Time
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-2xl font-bold text-card-foreground">
               {formatNumber(stats?.all_time.total_characters || 0)}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               characters across{" "}
               {formatNumber(stats?.all_time.total_translations || 0)}{" "}
               translations
@@ -109,17 +109,17 @@ export default function StatisticsPage() {
         </Card>
 
         {/* Last 30 Days */}
-        <Card className="bg-slate-800/50 border-slate-700 soft-hover">
+        <Card className="bg-card/50 border-border soft-hover">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               Last 30 Days
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-2xl font-bold text-card-foreground">
               {formatNumber(stats?.last_30_days.total_characters || 0)}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               characters across{" "}
               {formatNumber(stats?.last_30_days.total_translations || 0)}{" "}
               translations
@@ -137,17 +137,17 @@ export default function StatisticsPage() {
         </Card>
 
         {/* Last 7 Days */}
-        <Card className="bg-slate-800/50 border-slate-700 soft-hover">
+        <Card className="bg-card/50 border-border soft-hover">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               Last 7 Days
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-2xl font-bold text-card-foreground">
               {formatNumber(stats?.last_7_days.total_characters || 0)}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               characters across{" "}
               {formatNumber(stats?.last_7_days.total_translations || 0)}{" "}
               translations
@@ -166,36 +166,42 @@ export default function StatisticsPage() {
       </div>
 
       {/* Recent Translations Table */}
-      <Card className="bg-slate-800/50 border-slate-700 soft-hover">
+      <Card className="bg-card/50 border-border soft-hover">
         <CardHeader>
-          <CardTitle className="text-lg sm:text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+          <CardTitle className="text-lg sm:text-xl font-bold text-card-foreground">
             Recent Translations
           </CardTitle>
-          <CardDescription className="text-slate-400">
+          <CardDescription className="text-muted-foreground">
             Last 10 translation jobs
           </CardDescription>
         </CardHeader>
         <CardContent>
           {history.length === 0 ? (
-            <p className="text-slate-500 text-center py-8">
+            <p className="text-muted-foreground text-center py-8">
               No translation history yet
             </p>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow className="border-slate-700">
-                  <TableHead className="text-slate-400">File</TableHead>
-                  <TableHead className="text-slate-400">Service</TableHead>
-                  <TableHead className="text-slate-400">Characters</TableHead>
-                  <TableHead className="text-slate-400">Status</TableHead>
-                  <TableHead className="text-slate-400">Date</TableHead>
+                <TableRow className="border-border">
+                  <TableHead className="text-muted-foreground">File</TableHead>
+                  <TableHead className="text-muted-foreground">
+                    Service
+                  </TableHead>
+                  <TableHead className="text-muted-foreground">
+                    Characters
+                  </TableHead>
+                  <TableHead className="text-muted-foreground">
+                    Status
+                  </TableHead>
+                  <TableHead className="text-muted-foreground">Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {history.map((entry) => (
                   <TableRow
                     key={entry.id}
-                    className="border-slate-700 cursor-pointer hover:bg-slate-800/40 transition-colors"
+                    className="border-border cursor-pointer hover:bg-accent/50 transition-colors"
                     onClick={() =>
                       setExpandedEntryId(
                         expandedEntryId === entry.id ? null : entry.id,
@@ -205,7 +211,7 @@ export default function StatisticsPage() {
                     <TableCell className="p-2">
                       <PathCell
                         path={entry.file_name}
-                        className="text-white font-mono text-sm"
+                        className="text-foreground font-mono text-sm"
                         isExpanded={expandedEntryId === entry.id}
                         onToggle={() =>
                           setExpandedEntryId(
@@ -221,13 +227,13 @@ export default function StatisticsPage() {
                             ? "bg-violet-500/20 text-violet-400"
                             : entry.service_used.includes("google")
                               ? "bg-blue-500/20 text-blue-400"
-                              : "bg-slate-700 text-slate-400"
+                              : "bg-muted/70 text-muted-foreground"
                         }`}
                       >
                         {entry.service_used}
                       </span>
                     </TableCell>
-                    <TableCell className="text-slate-300">
+                    <TableCell className="text-foreground">
                       {formatNumber(entry.characters_billed)}
                     </TableCell>
                     <TableCell>
@@ -241,7 +247,7 @@ export default function StatisticsPage() {
                         {entry.status}
                       </span>
                     </TableCell>
-                    <TableCell className="text-slate-400 text-sm">
+                    <TableCell className="text-muted-foreground text-sm">
                       {new Date(entry.timestamp).toLocaleDateString()}
                     </TableCell>
                   </TableRow>

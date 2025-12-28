@@ -75,7 +75,7 @@ export function PathsTable() {
 
   return (
     <>
-      <Card className="soft-hover overflow-hidden border-slate-700/50">
+      <Card className="soft-hover overflow-hidden border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -137,7 +137,7 @@ export function PathsTable() {
             <>
               Are you sure you want to remove this path?
               <br />
-              <span className="font-mono text-white">
+              <span className="font-mono text-foreground">
                 {confirmState.path.path}
               </span>
             </>

@@ -61,6 +61,25 @@ async def regenerate_api_key(
     return current_user
 
 
+@router.delete(
+    "/me/api-key",
+    response_model=UserRead,
+    summary="Revoke API Key",
+    description="Revokes the current user's API key, disabling webhook access.",
+)
+async def revoke_api_key(
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
+) -> User:
+    # Clear the API key
+    current_user.api_key = None
+    db.add(current_user)
+    await db.commit()
+    await db.refresh(current_user)
+
+    return current_user
+
+
 # Example of a custom user-related endpoint (if needed in the future):
 # from app.db.models.user import User # Would be needed for type hinting current_user
 # from app.core.users import current_active_user # Would be needed for dependency

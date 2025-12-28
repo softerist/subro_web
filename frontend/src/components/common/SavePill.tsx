@@ -73,7 +73,7 @@ export function SavePill({
               className={`relative flex items-center gap-3 px-4 py-2.5 rounded-xl border shadow-lg backdrop-blur-xl transition-all duration-300 ${
                 isSuccess
                   ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
-                  : "bg-slate-900/90 border-white/10 text-white"
+                  : "bg-card/95 border-border text-foreground"
               }`}
             >
               {/* Glossy shine */}
@@ -84,7 +84,7 @@ export function SavePill({
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-slate-950"
+                    className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-primary-foreground"
                   >
                     <CheckCircle className="h-3 w-3" />
                   </motion.div>
@@ -102,19 +102,19 @@ export function SavePill({
               </div>
 
               {!isSuccess && hasChanges && !isLoading && (
-                <div className="flex items-center gap-1.5 pl-3 border-l border-white/10">
+                <div className="flex items-center gap-1.5 pl-3 border-l border-border">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={onDiscard}
-                    className="h-6 px-2 rounded-md text-[10px] text-slate-400 hover:text-white hover:bg-white/5"
+                    className="h-6 px-2 rounded-md text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   >
                     Discard
                   </Button>
                   <Button
                     size="sm"
                     onClick={onSave}
-                    className="h-6 px-3 rounded-md text-[10px] font-bold bg-white text-slate-950 hover:bg-slate-200 transition-all shadow-md"
+                    className="h-6 px-3 rounded-md text-[10px] font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md"
                   >
                     Save
                   </Button>
@@ -122,7 +122,7 @@ export function SavePill({
               )}
 
               {!isSuccess && isLoading && (
-                <span className="pl-3 border-l border-white/10 text-[10px] text-slate-500 animate-pulse">
+                <span className="pl-3 border-l border-border text-[10px] text-muted-foreground animate-pulse">
                   Saving...
                 </span>
               )}

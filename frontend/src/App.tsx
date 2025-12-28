@@ -20,10 +20,10 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 
 // Loading spinner component
 const LoadingSpinner = () => (
-  <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+  <div className="min-h-screen bg-background flex items-center justify-center">
     <div className="text-center space-y-4">
-      <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
-      <p className="text-slate-400 text-sm">Loading...</p>
+      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+      <p className="text-muted-foreground text-sm">Loading...</p>
     </div>
   </div>
 );

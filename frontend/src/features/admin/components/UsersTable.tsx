@@ -78,7 +78,7 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
 
   return (
     <>
-      <Card className="soft-hover overflow-hidden border-slate-700/50">
+      <Card className="soft-hover overflow-hidden border-border">
         <Table>
           <TableHeader>
             <TableRow>

@@ -38,7 +38,7 @@ export default function DashboardPage() {
             <div className="flex items-center space-x-2 shrink-0 ml-2">
               <Label
                 htmlFor="edit-mode"
-                className="text-sm font-medium text-slate-400"
+                className="text-sm font-medium text-muted-foreground"
               >
                 Edit Layout
               </Label>
@@ -65,7 +65,7 @@ export default function DashboardPage() {
               <CardTitle className="text-lg sm:text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
                 New Job
               </CardTitle>
-              <CardDescription className="text-slate-400">
+              <CardDescription className="text-muted-foreground">
                 Start a new subtitle download task.
               </CardDescription>
             </CardHeader>

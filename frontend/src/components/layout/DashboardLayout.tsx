@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ModeToggle } from "@/components/mode-toggle";
 import { useAuthStore } from "@/store/authStore";
 import { authApi } from "@/features/auth/api/auth";
 import { useRef, useState } from "react";
@@ -85,10 +86,10 @@ export default function DashboardLayout() {
   ];
 
   return (
-    <div className="flex h-screen w-full flex-col md:flex-row overflow-hidden bg-[#0a0a0c]">
-      {/* Sidebar */}
-      <aside className="hidden w-full shrink-0 border-b md:flex md:w-64 md:flex-col md:border-b-0 md:border-r border-slate-800/50 bg-slate-900/40 backdrop-blur-xl z-20">
-        <div className="flex h-14 items-center border-b border-slate-800/50 px-4 lg:h-[60px] lg:px-6">
+    <div className="flex h-screen w-full flex-col md:flex-row overflow-hidden bg-background text-foreground transition-colors duration-300">
+      {/* Sidebar - macOS Finder Style */}
+      <aside className="hidden w-full shrink-0 border-b md:flex md:w-64 md:flex-col md:border-b-0 md:border-r border-border bg-muted/40 backdrop-blur-xl z-20">
+        <div className="flex h-14 items-center border-b border-border/50 px-4 lg:h-[60px] lg:px-6">
           <Link to="/" className="flex items-center gap-2 font-bold group">
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:shadow-blue-500/40 transition-all duration-300">
               <UploadCloud className="h-5 w-5 text-white" />
@@ -109,21 +110,21 @@ export default function DashboardLayout() {
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-300 ease-apple group relative",
                     isActive
-                      ? "bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20 shadow-[0_0_15px_-3px_rgba(59,130,246,0.3)]"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40",
+                      ? "bg-primary/10 text-primary font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
                   )}
                 >
                   <item.icon
                     className={cn(
                       "h-4 w-4 transition-transform duration-300 group-hover:scale-110",
                       isActive
-                        ? "text-blue-400"
-                        : "text-slate-500 group-hover:text-slate-300",
+                        ? "text-primary"
+                        : "text-muted-foreground group-hover:text-foreground",
                     )}
                   />
                   {item.name}
                   {isActive && (
-                    <div className="absolute left-0 w-1 h-4 bg-blue-500 rounded-r-full shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+                    <div className="absolute left-0 w-1 h-4 bg-primary rounded-r-full shadow-sm" />
                   )}
                 </Link>
               );
@@ -132,30 +133,34 @@ export default function DashboardLayout() {
         </div>
 
         {/* Sidebar Footer / User Info */}
-        <div className="p-3 border-t border-slate-800/50 space-y-1">
-          <div className="flex items-center gap-3 px-2 py-2.5 rounded-xl bg-slate-800/30 border border-slate-700/30">
-            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center border border-slate-600/30">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">
+        <div className="p-3 border-t border-border/50 space-y-3">
+          <div className="px-2">
+            <ModeToggle />
+          </div>
+
+          <div className="flex items-center gap-3 px-2 py-2.5 rounded-xl bg-background/50 border border-border/50 shadow-sm">
+            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20">
+              <span className="text-[10px] font-bold text-primary uppercase">
                 {user?.email?.substring(0, 2)}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-200 truncate">
+              <p className="text-xs font-semibold text-foreground truncate">
                 {user?.email}
               </p>
-              <p className="text-[10px] text-slate-500 capitalize">
+              <p className="text-[10px] text-muted-foreground capitalize">
                 {user?.role || "User"}
               </p>
             </div>
             <button
               onClick={handleLogout}
-              className="text-slate-500 hover:text-red-400 transition-colors"
+              className="text-muted-foreground hover:text-destructive transition-colors"
               title="Logout"
             >
               <LogOut className="h-4 w-4" />
             </button>
           </div>
-          <div className="text-[9px] text-slate-600 font-mono tracking-wider w-fit mx-auto opacity-50 hover:opacity-100 transition-opacity">
+          <div className="text-[9px] text-muted-foreground font-mono tracking-wider w-fit mx-auto opacity-50 hover:opacity-100 transition-opacity">
             {VERSION_DISPLAY}
           </div>
         </div>
@@ -168,12 +173,12 @@ export default function DashboardLayout() {
         <div className="absolute bottom-[-10%] left-[-5%] w-[30%] h-[30%] bg-indigo-500/5 blur-[100px] pointer-events-none rounded-full" />
 
         {/* Header */}
-        <header className="flex h-14 items-center gap-4 border-b border-slate-800/50 bg-slate-900/20 backdrop-blur-md px-4 lg:height-[60px] lg:px-6 shrink-0 z-10">
+        <header className="flex h-14 items-center gap-4 border-b border-border bg-background/60 backdrop-blur-md px-4 lg:height-[60px] lg:px-6 shrink-0 z-10 transition-colors duration-300">
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden text-slate-400 hover:text-white"
+              className="md:hidden text-muted-foreground hover:text-foreground"
               onClick={openMobileMenu}
               title="Open menu"
             >
@@ -206,13 +211,13 @@ export default function DashboardLayout() {
             }}
           />
           <div
-            className="absolute left-0 top-0 h-full w-72 bg-slate-900/20 backdrop-blur-xl border-r border-slate-800 shadow-2xl transition-transform duration-300 ease-apple touch-pan-y"
+            className="absolute left-0 top-0 h-full w-72 bg-popover/95 backdrop-blur-xl border-r border-border shadow-2xl transition-transform duration-300 ease-apple touch-pan-y"
             style={{ transform: `translateX(${menuTranslate}px)` }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-            <div className="flex h-14 items-center justify-between border-b border-slate-800 px-4">
+            <div className="flex h-14 items-center justify-between border-b border-border px-4">
               <Link
                 to="/"
                 className="flex items-center gap-2 font-bold"
@@ -230,7 +235,7 @@ export default function DashboardLayout() {
                 size="icon"
                 onClick={closeMobileMenu}
                 title="Close menu"
-                className="text-slate-400 hover:text-white"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <X className="h-5 w-5" />
                 <span className="sr-only">Close menu</span>
@@ -247,14 +252,14 @@ export default function DashboardLayout() {
                     className={cn(
                       "flex items-center gap-4 rounded-lg px-4 py-3.5 transition-all duration-300",
                       isActive
-                        ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40",
+                        ? "bg-primary/10 text-primary border border-primary/20"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
                     )}
                   >
                     <item.icon
                       className={cn(
                         "h-5 w-5",
-                        isActive ? "text-blue-400" : "text-slate-500",
+                        isActive ? "text-primary" : "text-muted-foreground",
                       )}
                     />
                     <span className="text-lg">{item.name}</span>
@@ -264,18 +269,18 @@ export default function DashboardLayout() {
             </nav>
 
             {/* Mobile Sidebar Footer */}
-            <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-slate-800 bg-slate-900/80 backdrop-blur-md space-y-1.5">
-              <div className="flex items-center gap-3 px-3 py-3.5 rounded-xl bg-slate-800/40 border border-slate-700/40">
-                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center border border-slate-600/30">
-                  <span className="text-xs font-bold text-slate-400 uppercase">
+            <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-border bg-background/80 backdrop-blur-md space-y-1.5">
+              <div className="flex items-center gap-3 px-3 py-3.5 rounded-xl bg-card border border-border">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-secondary/50 to-secondary flex items-center justify-center border border-border/50">
+                  <span className="text-xs font-bold text-muted-foreground uppercase">
                     {user?.email?.substring(0, 2)}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-200 truncate">
+                  <p className="text-sm font-semibold text-foreground truncate">
                     {user?.email}
                   </p>
-                  <p className="text-[11px] text-slate-500 capitalize">
+                  <p className="text-[11px] text-muted-foreground capitalize">
                     {user?.role || "User"}
                   </p>
                 </div>
@@ -284,13 +289,13 @@ export default function DashboardLayout() {
                     closeMobileMenu();
                     handleLogout();
                   }}
-                  className="p-2 text-slate-500 hover:text-red-400 transition-colors"
+                  className="p-2 text-muted-foreground hover:text-destructive transition-colors"
                 >
                   <LogOut className="h-5 w-5" />
                 </button>
               </div>
               <div className="flex flex-col items-center opacity-40">
-                <div className="text-[10px] text-slate-500 font-mono tracking-wider">
+                <div className="text-[10px] text-muted-foreground font-mono tracking-wider">
                   {VERSION_DISPLAY}
                 </div>
               </div>

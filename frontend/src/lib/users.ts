@@ -6,4 +6,8 @@ export const usersApi = {
     const response = await api.post<UserResponse>("/v1/users/me/api-key");
     return response.data;
   },
+  revokeApiKey: async () => {
+    const response = await api.delete<UserResponse>("/v1/users/me/api-key");
+    return response.data;
+  },
 };
