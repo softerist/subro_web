@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { BarChart3 } from "lucide-react";
 import {
   getTranslationStats,
   TranslationStatsResponse,
   getTranslationHistory,
   TranslationLogEntry,
 } from "@/lib/settingsApi";
+import { PageHeader } from "@/components/common/PageHeader";
 import {
   Card,
   CardContent,
@@ -69,15 +71,13 @@ export default function StatisticsPage() {
   const formatNumber = (n: number) => n.toLocaleString();
 
   return (
-    <div className="space-y-6 page-enter page-stagger">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight title-gradient">
-          Translation Statistics
-        </h1>
-        <p className="text-muted-foreground">
-          Overview of DeepL and Google Cloud translation usage
-        </p>
-      </div>
+    <div className="space-y-6 px-4 pt-3 pb-3 page-enter page-stagger">
+      <PageHeader
+        title="Translation Statistics"
+        description="Overview of DeepL and Google Cloud translation usage"
+        icon={BarChart3}
+        iconClassName="from-sky-500 to-blue-600 shadow-blue-500/20"
+      />
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -183,18 +183,22 @@ export default function StatisticsPage() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow className="border-border">
-                  <TableHead className="text-muted-foreground">File</TableHead>
-                  <TableHead className="text-muted-foreground">
+                <TableRow className="hover:bg-transparent border-b border-border/40">
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                    File
+                  </TableHead>
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden sm:table-cell">
                     Service
                   </TableHead>
-                  <TableHead className="text-muted-foreground">
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
                     Characters
                   </TableHead>
-                  <TableHead className="text-muted-foreground">
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
                     Status
                   </TableHead>
-                  <TableHead className="text-muted-foreground">Date</TableHead>
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden md:table-cell">
+                    Date
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -208,7 +212,7 @@ export default function StatisticsPage() {
                       )
                     }
                   >
-                    <TableCell className="p-2">
+                    <TableCell className="py-2">
                       <PathCell
                         path={entry.file_name}
                         className="text-foreground font-mono text-sm"
@@ -220,7 +224,7 @@ export default function StatisticsPage() {
                         }
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-2 hidden sm:table-cell">
                       <span
                         className={`px-2 py-0.5 text-xs rounded-full ${
                           entry.service_used.includes("deepl")
@@ -233,10 +237,10 @@ export default function StatisticsPage() {
                         {entry.service_used}
                       </span>
                     </TableCell>
-                    <TableCell className="text-foreground">
+                    <TableCell className="py-2 text-foreground text-sm">
                       {formatNumber(entry.characters_billed)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-2">
                       <span
                         className={`px-2 py-0.5 text-xs rounded-full ${
                           entry.status === "success"
@@ -247,7 +251,7 @@ export default function StatisticsPage() {
                         {entry.status}
                       </span>
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
+                    <TableCell className="py-2 text-muted-foreground text-sm hidden md:table-cell">
                       {new Date(entry.timestamp).toLocaleDateString()}
                     </TableCell>
                   </TableRow>

@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { Users } from "lucide-react";
+import { PageHeader } from "@/components/common/PageHeader";
 import { CreateUserDialog } from "../components/CreateUserDialog";
 import { UsersTable } from "../components/UsersTable";
 import { adminApi } from "../api/admin";
@@ -10,18 +12,14 @@ export function UsersPage() {
   });
 
   return (
-    <div className="space-y-6 page-enter page-stagger">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight title-gradient">
-            User Management
-          </h2>
-          <p className="text-muted-foreground">
-            Manage users, roles, and permissions.
-          </p>
-        </div>
-        <CreateUserDialog />
-      </div>
+    <div className="space-y-6 px-4 pt-3 pb-3 page-enter page-stagger">
+      <PageHeader
+        title="User Management"
+        description="Manage users, roles, and permissions."
+        icon={Users}
+        iconClassName="from-purple-500 to-pink-500 shadow-purple-500/20"
+        action={<CreateUserDialog />}
+      />
 
       <UsersTable users={users || []} isLoading={isLoading} />
     </div>

@@ -1,20 +1,18 @@
+import { Folder } from "lucide-react";
+import { PageHeader } from "@/components/common/PageHeader";
 import { AddPathDialog } from "../components/AddPathDialog";
 import { PathsTable } from "../components/PathsTable";
 
 export function PathsPage() {
   return (
-    <div className="space-y-6 page-enter page-stagger">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight title-gradient">
-            Media Paths
-          </h2>
-          <p className="text-muted-foreground">
-            Manage allowed directories for subtitle operations.
-          </p>
-        </div>
-        <AddPathDialog />
-      </div>
+    <div className="space-y-6 px-4 pt-3 pb-3 page-enter page-stagger">
+      <PageHeader
+        title="Media Paths"
+        description="Manage allowed directories for subtitle operations."
+        icon={Folder}
+        iconClassName="from-emerald-500 to-teal-500 shadow-emerald-500/20"
+        action={<AddPathDialog />}
+      />
 
       <PathsTable />
     </div>

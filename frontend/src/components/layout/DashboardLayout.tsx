@@ -87,14 +87,14 @@ export default function DashboardLayout() {
 
   return (
     <div className="flex h-screen w-full flex-col md:flex-row overflow-hidden bg-background text-foreground transition-colors duration-300">
-      {/* Sidebar - macOS Finder Style */}
-      <aside className="hidden w-full shrink-0 border-b md:flex md:w-64 md:flex-col md:border-b-0 md:border-r border-border bg-muted/40 backdrop-blur-xl z-20">
-        <div className="flex h-14 items-center border-b border-border/50 px-4 lg:h-[60px] lg:px-6">
-          <Link to="/" className="flex items-center gap-2 font-bold group">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:shadow-blue-500/40 transition-all duration-300">
+      {/* Sidebar - Quotio Style */}
+      <aside className="hidden w-full shrink-0 border-b md:flex md:w-60 md:flex-col md:border-b-0 md:border-r border-border/60 bg-card/80 z-20">
+        <div className="flex h-14 items-center border-b border-border/40 px-4">
+          <Link to="/" className="flex items-center gap-2.5 font-bold group">
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-cyan-500 flex items-center justify-center shadow-lg shadow-primary/25 group-hover:shadow-primary/40 transition-all duration-300">
               <UploadCloud className="h-5 w-5 text-white" />
             </div>
-            <span className="text-lg sm:text-xl tracking-tight title-gradient">
+            <span className="text-lg tracking-tight font-semibold title-gradient">
               Subro
             </span>
           </Link>
@@ -153,9 +153,11 @@ export default function DashboardLayout() {
               </p>
             </div>
             <button
+              type="button"
               onClick={handleLogout}
               className="text-muted-foreground hover:text-destructive transition-colors"
               title="Logout"
+              aria-label="Logout"
             >
               <LogOut className="h-4 w-4" />
             </button>
@@ -173,7 +175,7 @@ export default function DashboardLayout() {
         <div className="absolute bottom-[-10%] left-[-5%] w-[30%] h-[30%] bg-indigo-500/5 blur-[100px] pointer-events-none rounded-full" />
 
         {/* Header */}
-        <header className="flex h-14 items-center gap-4 border-b border-border bg-background/60 backdrop-blur-md px-4 lg:h-[60px] lg:px-6 shrink-0 z-10 transition-colors duration-300">
+        <header className="flex h-14 items-center gap-4 border-b border-border bg-background/60 backdrop-blur-md px-4 shrink-0 z-10 transition-colors duration-300">
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
@@ -190,7 +192,7 @@ export default function DashboardLayout() {
         </header>
 
         {/* Page Content */}
-        <main className="flex flex-1 flex-col overflow-auto relative p-6">
+        <main className="flex flex-1 flex-col overflow-auto relative">
           <Outlet />
         </main>
       </div>
@@ -283,11 +285,13 @@ export default function DashboardLayout() {
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     closeMobileMenu();
                     handleLogout();
                   }}
                   className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                  aria-label="Logout"
                 >
                   <LogOut className="h-5 w-5" />
                 </button>

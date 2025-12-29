@@ -11,6 +11,7 @@ import {
   Terminal,
   Plug,
   HardDrive,
+  Settings,
 } from "lucide-react";
 import { usersApi } from "@/lib/users";
 import { useAuthStore } from "@/store/authStore";
@@ -34,6 +35,7 @@ import {
 } from "@/lib/settingsApi";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { SavePill } from "@/components/common/SavePill";
+import { PageHeader } from "@/components/common/PageHeader";
 
 type SettingsTab = "integrations" | "qbittorrent" | "paths";
 
@@ -334,17 +336,13 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6 page-enter page-stagger">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight title-gradient">
-            Settings
-          </h1>
-          <p className="text-muted-foreground">
-            Manage your application configuration
-          </p>
-        </div>
-      </div>
+    <div className="space-y-6 px-4 pt-3 pb-3 page-enter page-stagger">
+      <PageHeader
+        title="Settings"
+        description="Manage your application configuration"
+        icon={Settings}
+        iconClassName="from-amber-500 to-orange-500 shadow-amber-500/20"
+      />
 
       {error && (
         <Alert variant="destructive">
@@ -435,7 +433,10 @@ export default function SettingsPage() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
-                        <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                        <Label
+                          htmlFor="tmdb-api-key"
+                          className="text-xs uppercase tracking-wider text-muted-foreground"
+                        >
                           TMDB API Key
                         </Label>
                         {settings?.tmdb_api_key &&
@@ -473,6 +474,8 @@ export default function SettingsPage() {
                       )}
                     </div>
                     <Input
+                      id="tmdb-api-key"
+                      name="tmdb_api_key"
                       placeholder={settings?.tmdb_api_key || "Enter API key..."}
                       value={formData.tmdb_api_key || ""}
                       onChange={(e) =>
@@ -487,7 +490,10 @@ export default function SettingsPage() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
-                        <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                        <Label
+                          htmlFor="omdb-api-key"
+                          className="text-xs uppercase tracking-wider text-muted-foreground"
+                        >
                           OMDB API Key
                         </Label>
                         {/* Free tier quota hint - always show when key is configured */}
@@ -526,6 +532,8 @@ export default function SettingsPage() {
                       )}
                     </div>
                     <Input
+                      id="omdb-api-key"
+                      name="omdb_api_key"
                       placeholder={settings?.omdb_api_key || "Enter API key..."}
                       value={formData.omdb_api_key || ""}
                       onChange={(e) =>
@@ -576,7 +584,10 @@ export default function SettingsPage() {
                   {/* API Key */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                      <Label
+                        htmlFor="opensubtitles-api-key"
+                        className="text-xs uppercase tracking-wider text-muted-foreground"
+                      >
                         API Key
                       </Label>
                       {settings?.opensubtitles_api_key &&
@@ -603,6 +614,8 @@ export default function SettingsPage() {
                       )}
                     </div>
                     <Input
+                      id="opensubtitles-api-key"
+                      name="opensubtitles_api_key"
                       placeholder={
                         settings?.opensubtitles_api_key || "Enter API key..."
                       }
@@ -657,10 +670,15 @@ export default function SettingsPage() {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                        <Label
+                          htmlFor="opensubtitles-username"
+                          className="text-[10px] uppercase tracking-widest text-muted-foreground"
+                        >
                           Username
                         </Label>
                         <Input
+                          id="opensubtitles-username"
+                          name="opensubtitles_username"
                           placeholder={
                             settings?.opensubtitles_username ||
                             "Enter username..."
@@ -679,10 +697,15 @@ export default function SettingsPage() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                        <Label
+                          htmlFor="opensubtitles-password"
+                          className="text-[10px] uppercase tracking-widest text-muted-foreground"
+                        >
                           Password
                         </Label>
                         <Input
+                          id="opensubtitles-password"
+                          name="opensubtitles_password"
                           type="password"
                           autoComplete="new-password"
                           placeholder={
@@ -782,7 +805,10 @@ export default function SettingsPage() {
                             className="space-y-3 p-4 bg-card/50 rounded-xl border border-border transition-all duration-300 hover:border-primary/30 hover:bg-card/70"
                           >
                             <div className="flex items-center justify-between mb-2">
-                              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                              <Label
+                                htmlFor={`deepl-api-key-${index}`}
+                                className="text-xs uppercase tracking-wider text-muted-foreground"
+                              >
                                 Key {index + 1}
                               </Label>
                               {status === "valid" ? (
@@ -807,6 +833,8 @@ export default function SettingsPage() {
                             <div className="relative group">
                               {isEditing ? (
                                 <Input
+                                  id={`deepl-api-key-${index}`}
+                                  name={`deepl_api_keys[${index}]`}
                                   type="text"
                                   placeholder="Enter DeepL API key..."
                                   autoFocus
@@ -854,15 +882,17 @@ export default function SettingsPage() {
                                   className="w-full pr-10 bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary font-mono text-sm h-10 transition-all duration-300"
                                 />
                               ) : (
-                                <div
-                                  className="w-full pr-10 px-3 py-2 bg-background border border-input rounded-md font-mono text-sm text-foreground overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer hover:border-primary/40 hover:bg-accent/60 transition-colors"
+                                <button
+                                  type="button"
+                                  className="w-full pr-10 px-3 py-2 bg-background border border-input rounded-md font-mono text-sm text-foreground overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer hover:border-primary/40 hover:bg-accent/60 transition-colors text-left"
                                   onClick={() => setEditingKeyIndex(index)}
                                   title="Click to edit"
+                                  aria-label={`Edit DeepL API key ${index + 1}`}
                                 >
                                   {isMasked
                                     ? key
                                     : `${"•".repeat(Math.max(0, key.length - 8))}${key.slice(-8)}`}
-                                </div>
+                                </button>
                               )}
 
                               {/* Remove Button - Inside Field */}
@@ -1093,7 +1123,10 @@ export default function SettingsPage() {
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                            <Label
+                              htmlFor="google-cloud-config"
+                              className="text-xs uppercase tracking-wider text-muted-foreground"
+                            >
                               JSON Config
                             </Label>
                             <span
@@ -1113,6 +1146,8 @@ export default function SettingsPage() {
                             </span>
                           </div>
                           <textarea
+                            id="google-cloud-config"
+                            name="google_cloud_credentials"
                             className="w-full h-32 bg-background border border-input rounded-md p-3 text-foreground placeholder:text-muted-foreground font-mono text-xs resize-none transition-colors hover:border-ring/40 hover:bg-accent/30 focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                             placeholder='{"type": "service_account", "project_id": "...", ...}'
                             onChange={(e) => {
@@ -1129,6 +1164,8 @@ export default function SettingsPage() {
                           </span>
                           <label className="cursor-pointer group">
                             <input
+                              id="google-cloud-config-file"
+                              name="google_cloud_credentials_file"
                               type="file"
                               accept=".json"
                               className="hidden"
@@ -1232,12 +1269,17 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   {/* API Key Value */}
                   <div className="space-y-2">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                    <Label
+                      htmlFor="qbittorrent-api-key"
+                      className="text-xs uppercase tracking-wider text-muted-foreground"
+                    >
                       Your API Key
                     </Label>
                     <div className="flex gap-2">
                       <div className="relative flex-1">
                         <Input
+                          id="qbittorrent-api-key"
+                          name="api_key"
                           readOnly
                           value={
                             user?.api_key ||
@@ -1255,6 +1297,9 @@ export default function SettingsPage() {
                           className="absolute right-0 top-0 h-full text-muted-foreground hover:text-foreground"
                           onClick={() => setShowApiKey(!showApiKey)}
                           disabled={!user?.api_key}
+                          aria-label={
+                            showApiKey ? "Hide API key" : "Show API key"
+                          }
                         >
                           {showApiKey ? (
                             <EyeOff className="h-4 w-4" />
@@ -1275,6 +1320,7 @@ export default function SettingsPage() {
                           }
                         }}
                         disabled={!user?.api_key}
+                        aria-label="Copy API key"
                       >
                         <Copy className="h-4 w-4" />
                       </Button>
@@ -1323,10 +1369,15 @@ export default function SettingsPage() {
 
               <div className="pl-10 space-y-6 max-w-xl">
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                  <Label
+                    htmlFor="qbittorrent-host"
+                    className="text-xs uppercase tracking-wider text-muted-foreground"
+                  >
                     Host
                   </Label>
                   <Input
+                    id="qbittorrent-host"
+                    name="qbittorrent_host"
                     placeholder={settings?.qbittorrent_host || "Not configured"}
                     value={formData.qbittorrent_host || ""}
                     onChange={(e) =>
@@ -1337,10 +1388,15 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                  <Label
+                    htmlFor="qbittorrent-port"
+                    className="text-xs uppercase tracking-wider text-muted-foreground"
+                  >
                     Port
                   </Label>
                   <Input
+                    id="qbittorrent-port"
+                    name="qbittorrent_port"
                     type="number"
                     placeholder={
                       settings?.qbittorrent_port?.toString() || "8080"
@@ -1357,10 +1413,15 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                  <Label
+                    htmlFor="qbittorrent-username"
+                    className="text-xs uppercase tracking-wider text-muted-foreground"
+                  >
                     Username
                   </Label>
                   <Input
+                    id="qbittorrent-username"
+                    name="qbittorrent_username"
                     placeholder={
                       settings?.qbittorrent_username || "Not configured"
                     }
@@ -1374,10 +1435,15 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                  <Label
+                    htmlFor="qbittorrent-password"
+                    className="text-xs uppercase tracking-wider text-muted-foreground"
+                  >
                     Password
                   </Label>
                   <Input
+                    id="qbittorrent-password"
+                    name="qbittorrent_password"
                     type="password"
                     placeholder={
                       settings?.qbittorrent_password

@@ -40,22 +40,23 @@ export function LogViewer({ jobId, className }: LogViewerProps) {
   return (
     <div
       className={cn(
-        "flex flex-col border rounded-md overflow-hidden font-mono text-sm shadow-sm",
-        "bg-slate-50 text-slate-900 border-border",
+        "flex flex-col rounded-lg overflow-hidden font-mono text-[11px] sm:text-sm",
+        "bg-slate-50 text-slate-900 border border-border/60",
         "dark:bg-black dark:text-white dark:border-gray-800",
         className,
       )}
     >
       {/* Header / Status Bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-slate-100 border-b border-border dark:bg-gray-900 dark:border-gray-800">
-        <span className="font-semibold text-slate-700 dark:text-gray-300">
-          Logs: {jobId.slice(0, 8)}...
+      <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-border/40 dark:from-gray-900 dark:to-gray-900 dark:border-gray-800">
+        <span className="text-xs font-semibold text-slate-600 dark:text-gray-400 uppercase tracking-wide">
+          Logs •{" "}
+          <span className="font-mono text-primary">{jobId.slice(0, 8)}</span>
         </span>
         <div className="flex items-center gap-2">
           {status === "CONNECTED" || status === "RUNNING" ? (
             <Badge
               variant="outline"
-              className="text-green-600 border-green-300 bg-green-100 dark:text-green-400 dark:border-green-900 dark:bg-green-900/20"
+              className="text-xs text-emerald-600 border-emerald-200 bg-emerald-50 shadow-sm dark:text-green-400 dark:border-green-900 dark:bg-green-900/20"
             >
               <Loader2 className="mr-1 h-3 w-3 animate-spin" />
               Live
@@ -63,7 +64,7 @@ export function LogViewer({ jobId, className }: LogViewerProps) {
           ) : (
             <Badge
               variant="outline"
-              className="text-slate-500 border-slate-300 bg-slate-100 dark:text-gray-400 dark:border-gray-700 dark:bg-gray-800"
+              className="text-xs text-slate-500 border-slate-200 bg-slate-50 shadow-sm dark:text-gray-400 dark:border-gray-700 dark:bg-gray-800"
             >
               {status}
             </Badge>

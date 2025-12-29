@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type KeyboardEvent, type MouseEvent } from "react";
 import { cn } from "@/lib/utils";
 
 interface PathCellProps {
@@ -25,12 +25,24 @@ export function PathCell({
   const isControlled = controlledExpanded !== undefined;
   const isExpanded = isControlled ? controlledExpanded : internalExpanded;
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const toggleExpanded = () => {
     if (isControlled && onToggle) {
       onToggle();
     } else {
-      setInternalExpanded(!internalExpanded);
+      setInternalExpanded((prev) => !prev);
+    }
+  };
+
+  const handleClick = (e: MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    toggleExpanded();
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleExpanded();
     }
   };
 
@@ -44,6 +56,10 @@ export function PathCell({
         className,
       )}
       onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
+      aria-expanded={isExpanded}
       title={isExpanded ? "Click to collapse" : path}
     >
       {path}

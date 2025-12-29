@@ -81,11 +81,19 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
       <Card className="soft-hover overflow-hidden border-border">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+            <TableRow className="hover:bg-transparent border-b border-border/40">
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                Email
+              </TableHead>
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden sm:table-cell">
+                Role
+              </TableHead>
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden md:table-cell">
+                Status
+              </TableHead>
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground text-right">
+                Actions
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -98,8 +106,10 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
             ) : (
               users.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.email}</TableCell>
-                  <TableCell>
+                  <TableCell className="py-2 text-sm font-medium">
+                    {user.email}
+                  </TableCell>
+                  <TableCell className="py-2 hidden sm:table-cell">
                     <Badge
                       variant={user.is_superuser ? "outline" : "secondary"}
                       className={
@@ -113,7 +123,7 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
                         : user.role || "standard"}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="py-2 hidden md:table-cell">
                     <Badge
                       variant={user.is_active ? "default" : "outline"}
                       className={
@@ -125,7 +135,7 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
                       {user.is_active ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right space-x-2">
+                  <TableCell className="py-2 text-right space-x-2">
                     <Button
                       variant="ghost"
                       size="icon"
@@ -137,6 +147,10 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
                       }
                       disabled={toggleActiveMutation.isPending}
                       title={user.is_active ? "Deactivate" : "Activate"}
+                      aria-label={
+                        user.is_active ? "Deactivate user" : "Activate user"
+                      }
+                      aria-pressed={user.is_active}
                     >
                       {user.is_active ? (
                         <UserX className="h-4 w-4 text-orange-500" />
@@ -150,6 +164,7 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
                       onClick={() => handleDeleteRequest(user)}
                       disabled={deleteMutation.isPending}
                       title="Delete User"
+                      aria-label="Delete user"
                     >
                       {deleteMutation.isPending &&
                       confirmState.user?.id === user.id ? (

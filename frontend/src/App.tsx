@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -9,6 +9,7 @@ import {
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import { getSetupStatus } from "@/lib/settingsApi";
+import { authApi } from "@/features/auth/api/auth";
 import LoginPage from "@/pages/LoginPage";
 import SetupPage from "@/pages/SetupPage";
 import DashboardPage from "@/pages/DashboardPage";
@@ -27,6 +28,76 @@ const LoadingSpinner = () => (
     </div>
   </div>
 );
+
+// Auth Bootstrap - refresh session on initial load if possible
+const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
+  const [isReady, setIsReady] = useState(false);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const login = useAuthStore((state) => state.login);
+  const logout = useAuthStore((state) => state.logout);
+  const setAccessToken = useAuthStore((state) => state.setAccessToken);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const bootstrap = async () => {
+      if (accessToken) {
+        if (isMounted) {
+          setIsReady(true);
+        }
+        return;
+      }
+
+      try {
+        const refreshData = await authApi.refresh();
+        const newAccessToken = refreshData?.access_token;
+
+        if (newAccessToken) {
+          setAccessToken(newAccessToken);
+          try {
+            const user = await authApi.getMe();
+            if (isMounted && user) {
+              login(newAccessToken, {
+                id: user.id,
+                email: user.email,
+                role: user.role ?? "user",
+                api_key: user.api_key ?? null,
+                is_superuser: user.is_superuser ?? false,
+              });
+            }
+          } catch (err) {
+            if (isMounted) {
+              logout();
+            }
+          }
+        } else if (isMounted && isAuthenticated) {
+          logout();
+        }
+      } catch (err) {
+        if (isMounted && isAuthenticated) {
+          logout();
+        }
+      }
+
+      if (isMounted) {
+        setIsReady(true);
+      }
+    };
+
+    bootstrap();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [accessToken, isAuthenticated, login, logout, setAccessToken]);
+
+  if (!isReady) {
+    return <LoadingSpinner />;
+  }
+
+  return <>{children}</>;
+};
 
 // Setup Check Wrapper - checks if setup is completed
 const SetupCheckWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -108,49 +179,51 @@ const PublicRoute = ({ children }: { children: JSX.Element }) => {
 
 function AppRoutes() {
   return (
-    <SetupCheckWrapper>
-      <Routes>
-        {/* Setup route - public, only accessible when setup not completed */}
-        <Route path="/setup" element={<SetupPage />} />
+    <AuthBootstrap>
+      <SetupCheckWrapper>
+        <Routes>
+          {/* Setup route - public, only accessible when setup not completed */}
+          <Route path="/setup" element={<SetupPage />} />
 
-        {/* Login route - public */}
-        <Route
-          path="/login"
-          element={
-            <PublicRoute>
-              <LoginPage />
-            </PublicRoute>
-          }
-        />
-
-        {/* Protected routes with DashboardLayout */}
-        <Route
-          element={
-            <ProtectedRoute>
-              <DashboardLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/paths" element={<PathsPage />} />
-          <Route path="/statistics" element={<StatisticsPage />} />
-          <Route path="/admin/users" element={<UsersPage />} />
-
-          {/* Admin-only settings page */}
+          {/* Login route - public */}
           <Route
-            path="/settings"
+            path="/login"
             element={
-              <AdminRoute>
-                <SettingsPage />
-              </AdminRoute>
+              <PublicRoute>
+                <LoginPage />
+              </PublicRoute>
             }
           />
-        </Route>
 
-        {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </SetupCheckWrapper>
+          {/* Protected routes with DashboardLayout */}
+          <Route
+            element={
+              <ProtectedRoute>
+                <DashboardLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/paths" element={<PathsPage />} />
+            <Route path="/statistics" element={<StatisticsPage />} />
+            <Route path="/admin/users" element={<UsersPage />} />
+
+            {/* Admin-only settings page */}
+            <Route
+              path="/settings"
+              element={
+                <AdminRoute>
+                  <SettingsPage />
+                </AdminRoute>
+              }
+            />
+          </Route>
+
+          {/* Default redirect */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </SetupCheckWrapper>
+    </AuthBootstrap>
   );
 }
 

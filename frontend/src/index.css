@@ -4,49 +4,58 @@
 
 @layer base {
   :root {
-    /* macOS Light Mode - Clean, crisp, cool */
-    --background: 0 0% 100%; /* Pure White */
+    /* Quotio-Style Light Mode - Premium macOS aesthetic */
+    --background: 240 5% 97%; /* Subtle warm gray #F5F5F7 */
     --foreground: 240 10% 3.9%; /* Nearly Black */
 
-    /* Glass Surfaces */
-    --card: 0 0% 100%;
+    /* Premium Card Surfaces */
+    --card: 0 0% 100%; /* Pure White for maximum contrast */
     --card-foreground: 240 10% 3.9%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
 
-    /* Apple Blue */
+    /* Apple Blue - Quotio Primary */
     --primary: 211 100% 50%; /* #007AFF */
     --primary-foreground: 0 0% 100%;
-    --brand-start: 217 91% 60%; /* Blue 600 to match primary buttons */
-    --brand-end: 192 91% 36%; /* Cyan 600 to match primary buttons */
+    --brand-start: 211 100% 50%; /* Apple Blue */
+    --brand-end: 199 89% 48%; /* Cyan for gradient */
 
-    /* Soft Grays for secondary actions */
-    --secondary: 240 4.8% 95.9%;
+    /* Refined Grays for secondary actions */
+    --secondary: 240 5% 96%;
     --secondary-foreground: 240 5.9% 10%;
 
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    --muted: 240 5% 94%;
+    --muted-foreground: 240 4% 46%;
 
-    --accent: 211 100% 96%; /* Very subtle blue tint */
-    --accent-foreground: 240 5.9% 10%;
+    --accent: 211 100% 97%; /* Very subtle blue tint */
+    --accent-foreground: 211 100% 40%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
     --ring: 211 100% 50%;
 
-    --radius: 0.75rem; /* Smoother corners */
+    --radius: 0.875rem; /* Slightly larger corners for modern feel */
 
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --chart-1: 211 100% 50%; /* Apple Blue */
+    --chart-2: 142 71% 45%; /* Green */
+    --chart-3: 262 83% 58%; /* Purple */
+    --chart-4: 38 92% 50%; /* Orange */
+    --chart-5: 340 82% 52%; /* Pink */
 
     --ease-apple: cubic-bezier(0.25, 0.1, 0.25, 1);
+    --ease-apple-soft: cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Quotio-specific shadow values */
+    --shadow-card:
+      0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
+    --shadow-card-hover:
+      0 4px 20px rgba(0, 0, 0, 0.08), 0 8px 32px rgba(0, 122, 255, 0.08);
+    --shadow-stat:
+      0 2px 8px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
   }
 
   .dark {
@@ -340,6 +349,154 @@ textarea,
 
   .glow-pulse-red {
     animation: glow-pulse-red 2s var(--ease-apple-soft) infinite;
+  }
+
+  /* ===== Quotio-Style Cards ===== */
+  .quotio-card {
+    background: hsl(var(--card));
+    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-card);
+    transition:
+      transform 400ms var(--ease-apple),
+      box-shadow 400ms var(--ease-apple),
+      border-color 300ms var(--ease-apple);
+  }
+
+  .quotio-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card-hover);
+    border-color: hsl(var(--primary) / 0.2);
+  }
+
+  /* ===== Stat Card ===== */
+  .stat-card {
+    background: hsl(var(--card));
+    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-stat);
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition:
+      transform 400ms var(--ease-apple),
+      box-shadow 400ms var(--ease-apple);
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  .stat-card-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .stat-card-icon.blue {
+    background: linear-gradient(135deg, hsl(211 100% 50%), hsl(199 89% 48%));
+  }
+  .stat-card-icon.green {
+    background: linear-gradient(135deg, hsl(142 71% 45%), hsl(158 64% 52%));
+  }
+  .stat-card-icon.purple {
+    background: linear-gradient(135deg, hsl(262 83% 58%), hsl(280 87% 65%));
+  }
+  .stat-card-icon.orange {
+    background: linear-gradient(135deg, hsl(38 92% 50%), hsl(25 95% 53%));
+  }
+  .stat-card-icon.pink {
+    background: linear-gradient(135deg, hsl(340 82% 52%), hsl(350 95% 60%));
+  }
+
+  .stat-card-value {
+    font-size: 1.125rem;
+    font-weight: 700;
+    line-height: 1;
+    color: hsl(var(--foreground));
+    letter-spacing: -0.01em;
+  }
+
+  .stat-card-label {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: hsl(var(--muted-foreground));
+    margin-top: 0.125rem;
+  }
+
+  /* ===== Status Indicator ===== */
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .status-dot.success {
+    background: hsl(142 71% 45%);
+    box-shadow: 0 0 8px hsl(142 71% 45% / 0.5);
+  }
+  .status-dot.warning {
+    background: hsl(38 92% 50%);
+    box-shadow: 0 0 8px hsl(38 92% 50% / 0.5);
+  }
+  .status-dot.error {
+    background: hsl(0 84% 60%);
+    box-shadow: 0 0 8px hsl(0 84% 60% / 0.5);
+  }
+  .status-dot.info {
+    background: hsl(211 100% 50%);
+    box-shadow: 0 0 8px hsl(211 100% 50% / 0.5);
+  }
+
+  /* ===== Quick Link Tile (Quotio Style) ===== */
+  .quick-tile {
+    background: hsl(var(--card));
+    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border));
+    padding: 0.625rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: center;
+    transition:
+      transform 300ms var(--ease-apple),
+      box-shadow 300ms var(--ease-apple),
+      border-color 300ms var(--ease-apple);
+    cursor: pointer;
+  }
+
+  .quick-tile:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: var(--shadow-card-hover);
+    border-color: hsl(var(--primary) / 0.3);
+  }
+
+  .quick-tile-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--primary)),
+      hsl(var(--brand-end))
+    );
+  }
+
+  .quick-tile-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: hsl(var(--foreground));
   }
 }
 

@@ -324,10 +324,15 @@ export default function SetupPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
                   <div className="space-y-2">
-                    <Label className="text-muted-foreground">
+                    <Label
+                      htmlFor="tmdb-api-key"
+                      className="text-muted-foreground"
+                    >
                       TMDB API Key
                     </Label>
                     <Input
+                      id="tmdb-api-key"
+                      name="tmdb_api_key"
                       value={settings.tmdb_api_key || ""}
                       onChange={(e) =>
                         updateSetting("tmdb_api_key", e.target.value)
@@ -337,10 +342,15 @@ export default function SetupPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-muted-foreground">
+                    <Label
+                      htmlFor="omdb-api-key"
+                      className="text-muted-foreground"
+                    >
                       OMDB API Key
                     </Label>
                     <Input
+                      id="omdb-api-key"
+                      name="omdb_api_key"
                       value={settings.omdb_api_key || ""}
                       onChange={(e) =>
                         updateSetting("omdb_api_key", e.target.value)
@@ -350,10 +360,15 @@ export default function SetupPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-muted-foreground">
+                    <Label
+                      htmlFor="opensubtitles-api-key"
+                      className="text-muted-foreground"
+                    >
                       OpenSubtitles API Key
                     </Label>
                     <Input
+                      id="opensubtitles-api-key"
+                      name="opensubtitles_api_key"
                       value={settings.opensubtitles_api_key || ""}
                       onChange={(e) =>
                         updateSetting("opensubtitles_api_key", e.target.value)
@@ -364,10 +379,15 @@ export default function SetupPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label className="text-muted-foreground">
+                      <Label
+                        htmlFor="opensubtitles-username"
+                        className="text-muted-foreground"
+                      >
                         OpenSubtitles Username
                       </Label>
                       <Input
+                        id="opensubtitles-username"
+                        name="opensubtitles_username"
                         value={settings.opensubtitles_username || ""}
                         onChange={(e) =>
                           updateSetting(
@@ -380,10 +400,15 @@ export default function SetupPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-muted-foreground">
+                      <Label
+                        htmlFor="opensubtitles-password"
+                        className="text-muted-foreground"
+                      >
                         OpenSubtitles Password
                       </Label>
                       <Input
+                        id="opensubtitles-password"
+                        name="opensubtitles_password"
                         type="password"
                         value={settings.opensubtitles_password || ""}
                         onChange={(e) =>
@@ -402,10 +427,15 @@ export default function SetupPage() {
                       DeepL Translation (optional)
                     </p>
                     <div className="space-y-2">
-                      <Label className="text-muted-foreground">
+                      <Label
+                        htmlFor="deepl-api-keys"
+                        className="text-muted-foreground"
+                      >
                         DeepL API Keys
                       </Label>
                       <textarea
+                        id="deepl-api-keys"
+                        name="deepl_api_keys"
                         value={(settings.deepl_api_keys || []).join("\n")}
                         onChange={(e) =>
                           updateSetting(
@@ -449,6 +479,8 @@ export default function SetupPage() {
                             </span>
                           </div>
                           <input
+                            id="google-cloud-credentials"
+                            name="google_cloud_credentials"
                             type="file"
                             accept=".json"
                             className="hidden"
@@ -477,6 +509,7 @@ export default function SetupPage() {
                             }
                             className="p-2 text-muted-foreground hover:text-destructive transition-colors"
                             title="Remove credentials"
+                            aria-label="Remove credentials"
                           >
                             <svg
                               className="w-5 h-5"
@@ -505,8 +538,15 @@ export default function SetupPage() {
                     </p>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="text-muted-foreground">Host</Label>
+                        <Label
+                          htmlFor="qbittorrent-host"
+                          className="text-muted-foreground"
+                        >
+                          Host
+                        </Label>
                         <Input
+                          id="qbittorrent-host"
+                          name="qbittorrent_host"
                           value={settings.qbittorrent_host || ""}
                           onChange={(e) =>
                             updateSetting("qbittorrent_host", e.target.value)
@@ -516,8 +556,15 @@ export default function SetupPage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-muted-foreground">Port</Label>
+                        <Label
+                          htmlFor="qbittorrent-port"
+                          className="text-muted-foreground"
+                        >
+                          Port
+                        </Label>
                         <Input
+                          id="qbittorrent-port"
+                          name="qbittorrent_port"
                           type="number"
                           value={settings.qbittorrent_port || ""}
                           onChange={(e) =>
