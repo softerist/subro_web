@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Standalone verification of WebSocket log streaming functionality.
 This bypasses pytest to verify the WebSocket endpoint works correctly.
