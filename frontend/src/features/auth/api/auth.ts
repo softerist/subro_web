@@ -12,10 +12,17 @@ export interface UserResponse {
   id: string;
   email: string;
   role?: string;
-  api_key?: string | null;
+  api_key_preview?: string | null;
   is_active?: boolean;
   is_superuser?: boolean;
   is_verified?: boolean;
+  force_password_change?: boolean;
+}
+
+export interface SessionStatus {
+  is_authenticated: boolean;
+  access_token?: string;
+  token_type?: string;
 }
 
 export const authApi = {
@@ -48,6 +55,12 @@ export const authApi = {
   refresh: async () => {
     // Explicit refresh call if needed manually, though interceptor handles usually
     const response = await api.post("/v1/auth/refresh");
+    return response.data;
+  },
+
+  checkSession: async () => {
+    // Safe refresh: returns is_authenticated instead of throwing 401
+    const response = await api.post<SessionStatus>("/v1/auth/session");
     return response.data;
   },
 

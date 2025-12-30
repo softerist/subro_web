@@ -15,6 +15,17 @@ class Token(BaseModel):
     # refresh_token: str | None = None
 
 
+class SessionStatus(BaseModel):
+    """
+    Response for safe session check.
+    Returns 200 OK even if not authenticated.
+    """
+
+    is_authenticated: bool
+    access_token: str | None = None
+    token_type: str | None = None
+
+
 class TokenData(BaseModel):
     """
     Represents the data encoded within a JWT token (e.g., user identifier).

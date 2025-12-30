@@ -62,6 +62,7 @@ from app.api.routers.auth import auth_router as custom_auth_router
 from app.api.routers.dashboard import router as dashboard_router
 from app.api.routers.files import router as files_router
 from app.api.routers.jobs import router as jobs_router
+from app.api.routers.mfa import router as mfa_router
 from app.api.routers.settings import router as settings_router
 
 # *** NEW IMPORTS FOR SETUP AND SETTINGS ROUTERS ***
@@ -236,8 +237,16 @@ if settings.BACKEND_CORS_ORIGINS:
             CORSMiddleware,
             allow_origins=origins,
             allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=[
+                "Content-Type",
+                "Authorization",
+                "X-API-Key",
+                "X-Setup-Token",
+                "Accept",
+                "Origin",
+                "X-Requested-With",
+            ],
         )
         logger.info(f"CORS enabled for origins: {origins}")
     else:
@@ -313,6 +322,8 @@ api_v1_router.include_router(storage_paths_router, prefix="/storage-paths", tags
 api_v1_router.include_router(setup_router)  # prefix is already "/setup" in router
 # Settings requires admin auth - used for updating configuration after setup
 api_v1_router.include_router(settings_router)  # prefix is already "/settings" in router
+# MFA - Multi-Factor Authentication endpoints
+api_v1_router.include_router(mfa_router)  # prefix is already "/auth/mfa" in router
 # Translation statistics - requires admin auth
 api_v1_router.include_router(
     translation_stats_router
@@ -356,18 +367,20 @@ async def api_v1_root_endpoint():
     }
 
 
-@api_v1_router.get("/test-db-users", tags=["Debug"])
-async def test_db_users(db: AsyncSession = Depends(get_async_session)):
-    try:
-        stmt = select(UserModel).limit(1)
-        result = await db.execute(stmt)
-        user = result.scalar_one_or_none()
-        if user:
-            return {"status": "User table accessible", "first_user_email": user.email}
-        return {"status": "User table accessible, but no users found."}
-    except Exception as e:
-        logger.error(f"Error in /test-db-users: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"DB Test Error: {e!s}") from e
+if settings.ENVIRONMENT != "production":
+
+    @api_v1_router.get("/test-db-users", tags=["Debug"])
+    async def test_db_users(db: AsyncSession = Depends(get_async_session)):
+        try:
+            stmt = select(UserModel).limit(1)
+            result = await db.execute(stmt)
+            user = result.scalar_one_or_none()
+            if user:
+                return {"status": "User table accessible", "first_user_email": user.email}
+            return {"status": "User table accessible, but no users found."}
+        except Exception as e:
+            logger.error(f"Error in /test-db-users: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"DB Test Error: {e!s}") from e
 
 
 @api_v1_router.get(

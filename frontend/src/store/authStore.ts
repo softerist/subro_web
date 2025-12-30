@@ -5,8 +5,9 @@ interface User {
   id: string;
   email: string;
   role: string | null;
-  api_key?: string | null;
+  api_key_preview?: string | null;
   is_superuser: boolean;
+  force_password_change?: boolean;
 }
 
 interface AuthState {

@@ -36,9 +36,8 @@ class UserFactory(factory.Factory):
     is_superuser: bool = False  # Default to standard user
     is_verified: bool = False  # Default to not verified
     role: str = "standard"  # Default role
+    force_password_change: bool = False  # Default to False
     # Optional: Add other fields if needed, e.g., first_name, last_name
-    # first_name: str = factory.Faker("first_name")
-    # last_name: str = factory.Faker("last_name")
 
     @classmethod
     def _create(

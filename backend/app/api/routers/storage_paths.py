@@ -41,12 +41,12 @@ async def list_storage_paths(
 async def create_storage_path(
     path_in: StoragePathCreate,
     db: AsyncSession = Depends(get_async_session),
-    # Assuming only superusers can configure server paths for security
-    current_user=Depends(current_active_superuser),  # noqa: ARG001
+    current_user=Depends(current_active_user),
 ):
     """
-    Add a new storage path. Only accessible by superusers.
-    Validates that the path exists on the server.
+    Add a new storage path.
+    - Superusers: Can add any valid server path.
+    - Admins/Standard: Can ONLY add subdirectories of existing paths.
     """
     # 1. Check if path exists physically
     p = Path(path_in.path)
@@ -84,6 +84,35 @@ async def create_storage_path(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Storage path already exists.",
         )
+
+    # 3. Enforce "Subdirectory Only" policy for Non-Superusers
+    if not current_user.is_superuser:
+        # Fetch all existing allowed paths
+        all_paths = await crud.storage_path.get_multi(db, limit=1000)
+        # Normalize requested path
+        requested_path = Path(path_in.path).resolve()
+
+        is_allowed = False
+        for allowed in all_paths:
+            allowed_path = Path(allowed.path).resolve()
+            # Check if requested path is relative to (inside) an existing allowed path
+            # AND is not the same path (duplicates already handled, but logic safety)
+            try:
+                if requested_path.is_relative_to(allowed_path) and requested_path != allowed_path:
+                    is_allowed = True
+                    break
+            except ValueError:
+                continue
+
+        if not is_allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Permission Denied: As a standard user/admin, you can only add "
+                    "subdirectories of existing root paths (e.g., add '/mnt/movies/action' "
+                    "if '/mnt/movies' exists)."
+                ),
+            )
 
     return await crud.storage_path.create(db, obj_in=path_in)
 

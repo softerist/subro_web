@@ -107,11 +107,14 @@ compose-down-keep-volumes: ## Stop and remove Docker Compose stack, but KEEP vol
 ensure-dev-cleanup: ## Remove conflicting containers/ports before dev/prod starts
 	@echo "Ensuring no conflicting dev containers or ports are in use..."
 	@docker rm -f $(PROJECT_NAME)_db 2>/dev/null || true
-	@conflicting_redis_containers=$$(docker ps -q --filter "publish=6379"); \
-	if [ -n "$$conflicting_redis_containers" ]; then \
-		echo "Stopping containers using port 6379: $$conflicting_redis_containers"; \
-		docker stop $$conflicting_redis_containers; \
-	fi
+	@# Cleanup Redis (6379), Postgres (5432), and Test Postgres (5433)
+	@for port in 6379 5432 5433; do \
+		conflicting=$$(docker ps -q --filter "publish=$$port"); \
+		if [ -n "$$conflicting" ]; then \
+			echo "Stopping containers using port $$port: $$conflicting"; \
+			docker stop $$conflicting; \
+		fi; \
+	done
 
 # ==============================================================================
 # Logging
@@ -207,6 +210,14 @@ prod: ensure-dev-cleanup ## Deploy to production using blue-green deployment scr
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
 	@echo "API Docs available at https://localhost:8443/api/v1/docs"
 
+prod-skip-reencrypt: ensure-dev-cleanup ## Deploy to production skipping re-encryption (faster)
+	@echo "Deploying to production (skipping re-encryption)..."
+	REENCRYPT_ON_DEPLOY=0 ./infra/scripts/blue_green_deploy.sh
+	@echo "Production stack deployed (Fast)."
+	@echo "Gateway (Caddy HTTP)  available at http://localhost:8080"
+	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
+	@echo "API Docs available at https://localhost:8443/api/v1/docs"
+
 prod-hardened: ensure-dev-cleanup ## Deploy with security hardening (read-only fs, capability dropping)
 	@echo "Deploying hardened production stack..."
 	docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.prod.yml \
@@ -219,8 +230,8 @@ reset-prod: rebuild-prod ## Alias for rebuild-prod
 
 rebuild-prod: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
 	@echo "WARNING: This will DELETE ALL DATA in the production database."
-	@echo "Stopping containers..."
-	@docker rm -f infra-caddy-1 infra-db-1 infra-redis-1 infra-backup-1 infra-scheduler-1 green-api-1 green-worker-1 green-frontend-1 blue-api-1 blue-worker-1 blue-frontend-1 || true
+	@echo "Cleaning up existing containers (if any)..."
+	@docker rm -f infra-caddy-1 infra-db-1 infra-redis-1 infra-backup-1 infra-scheduler-1 green-api-1 green-worker-1 green-frontend-1 blue-api-1 blue-worker-1 blue-frontend-1 2>/dev/null || true
 	@echo "Removing network to clear locks..."
 	@docker network rm infra_internal_net || true
 	@echo "Wiping database volume..."

@@ -12,6 +12,7 @@ import {
   Plug,
   HardDrive,
   Settings,
+  ShieldCheck,
 } from "lucide-react";
 import { usersApi } from "@/lib/users";
 import { useAuthStore } from "@/store/authStore";
@@ -36,8 +37,10 @@ import {
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { SavePill } from "@/components/common/SavePill";
 import { PageHeader } from "@/components/common/PageHeader";
+import { MfaSettings } from "@/features/auth/components/MfaSettings";
+import { PasswordSettings } from "@/features/auth/components/PasswordSettings";
 
-type SettingsTab = "integrations" | "qbittorrent" | "paths";
+type SettingsTab = "integrations" | "qbittorrent" | "security";
 
 export default function SettingsPage() {
   const [currentTab, setCurrentTab] = useState<SettingsTab>("integrations");
@@ -57,6 +60,7 @@ export default function SettingsPage() {
   // Confirmation Dialog State
   const [showApiKey, setShowApiKey] = useState(false);
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
+  const [generatedApiKey, setGeneratedApiKey] = useState<string | null>(null);
 
   const { user, setUser } = useAuthStore();
   const [confirmState, setConfirmState] = useState<{
@@ -79,6 +83,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: "integrations", label: "API Integrations", icon: Plug },
     { id: "qbittorrent", label: "qBittorrent", icon: HardDrive },
+    { id: "security", label: "Security", icon: ShieldCheck },
   ] as const;
 
   const hasChanges = Object.keys(formData).length > 0;
@@ -86,9 +91,11 @@ export default function SettingsPage() {
   const handleRegenerateApiKey = async () => {
     try {
       setIsGeneratingKey(true);
-      const updatedUser = await usersApi.regenerateApiKey();
-      setUser({ ...user!, api_key: updatedUser.api_key });
-      setSuccess("API Key regenerated successfully.");
+      const createdKey = await usersApi.regenerateApiKey();
+      setGeneratedApiKey(createdKey.api_key);
+      setShowApiKey(true);
+      setUser({ ...user!, api_key_preview: createdKey.preview });
+      setSuccess("API key generated. This value is shown only once.");
       setTimeout(() => setSuccess(null), 3000);
     } catch (error) {
       setError("Failed to regenerate API key.");
@@ -101,8 +108,10 @@ export default function SettingsPage() {
   const handleRevokeApiKey = async () => {
     try {
       setIsGeneratingKey(true);
-      const updatedUser = await usersApi.revokeApiKey();
-      setUser({ ...user!, api_key: updatedUser.api_key });
+      await usersApi.revokeApiKey();
+      setGeneratedApiKey(null);
+      setShowApiKey(false);
+      setUser({ ...user!, api_key_preview: null });
       setSuccess("API Key revoked successfully.");
       setTimeout(() => setSuccess(null), 3000);
     } catch (error) {
@@ -435,7 +444,7 @@ export default function SettingsPage() {
                       <div className="flex items-center gap-2">
                         <Label
                           htmlFor="tmdb-api-key"
-                          className="text-xs uppercase tracking-wider text-muted-foreground"
+                          className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer"
                         >
                           TMDB API Key
                         </Label>
@@ -492,7 +501,7 @@ export default function SettingsPage() {
                       <div className="flex items-center gap-2">
                         <Label
                           htmlFor="omdb-api-key"
-                          className="text-xs uppercase tracking-wider text-muted-foreground"
+                          className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer"
                         >
                           OMDB API Key
                         </Label>
@@ -586,7 +595,7 @@ export default function SettingsPage() {
                     <div className="flex items-center justify-between">
                       <Label
                         htmlFor="opensubtitles-api-key"
-                        className="text-xs uppercase tracking-wider text-muted-foreground"
+                        className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer"
                       >
                         API Key
                       </Label>
@@ -631,9 +640,9 @@ export default function SettingsPage() {
                   {/* OpenSubtitles Credentials */}
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                      <h4 className="text-xs uppercase tracking-wider text-muted-foreground">
                         Credentials
-                      </Label>
+                      </h4>
                       {(settings?.opensubtitles_username &&
                         settings.opensubtitles_username.trim() !== "") ||
                       (settings?.opensubtitles_password &&
@@ -806,8 +815,8 @@ export default function SettingsPage() {
                           >
                             <div className="flex items-center justify-between mb-2">
                               <Label
-                                htmlFor={`deepl-api-key-${index}`}
-                                className="text-xs uppercase tracking-wider text-muted-foreground"
+                                htmlFor={`deepl-api-key-input-${index}`}
+                                className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer"
                               >
                                 Key {index + 1}
                               </Label>
@@ -833,7 +842,7 @@ export default function SettingsPage() {
                             <div className="relative group">
                               {isEditing ? (
                                 <Input
-                                  id={`deepl-api-key-${index}`}
+                                  id={`deepl-api-key-input-${index}`}
                                   name={`deepl_api_keys[${index}]`}
                                   type="text"
                                   placeholder="Enter DeepL API key..."
@@ -882,17 +891,25 @@ export default function SettingsPage() {
                                   className="w-full pr-10 bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary font-mono text-sm h-10 transition-all duration-300"
                                 />
                               ) : (
-                                <button
-                                  type="button"
+                                <div
+                                  id={`deepl-api-key-input-${index}`}
                                   className="w-full pr-10 px-3 py-2 bg-background border border-input rounded-md font-mono text-sm text-foreground overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer hover:border-primary/40 hover:bg-accent/60 transition-colors text-left"
                                   onClick={() => setEditingKeyIndex(index)}
                                   title="Click to edit"
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      setEditingKeyIndex(index);
+                                    }
+                                  }}
                                   aria-label={`Edit DeepL API key ${index + 1}`}
                                 >
                                   {isMasked
                                     ? key
                                     : `${"•".repeat(Math.max(0, key.length - 8))}${key.slice(-8)}`}
-                                </button>
+                                </div>
                               )}
 
                               {/* Remove Button - Inside Field */}
@@ -1003,9 +1020,9 @@ export default function SettingsPage() {
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                            <h4 className="text-xs uppercase tracking-wider text-muted-foreground">
                               Project ID
-                            </Label>
+                            </h4>
                             <span
                               className={`px-2 py-0.5 text-xs rounded-full ${
                                 settings?.google_cloud_valid === true
@@ -1249,9 +1266,9 @@ export default function SettingsPage() {
                       <RefreshCw
                         className={`h-3.5 w-3.5 mr-2 ${isGeneratingKey ? "animate-spin" : ""}`}
                       />
-                      {user?.api_key ? "Regenerate" : "Generate"}
+                      {user?.api_key_preview ? "Regenerate" : "Generate"}
                     </Button>
-                    {user?.api_key && (
+                    {(user?.api_key_preview || generatedApiKey) && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -1282,13 +1299,14 @@ export default function SettingsPage() {
                           name="api_key"
                           readOnly
                           value={
-                            user?.api_key ||
+                            generatedApiKey ||
+                            user?.api_key_preview ||
                             "No API key generated — click Generate to create one"
                           }
                           type={
-                            user?.api_key && !showApiKey ? "password" : "text"
+                            generatedApiKey && !showApiKey ? "password" : "text"
                           }
-                          className={`font-mono bg-background border-input pr-10 ${user?.api_key ? "text-foreground" : "text-muted-foreground italic"}`}
+                          className={`font-mono bg-background border-input pr-10 ${generatedApiKey || user?.api_key_preview ? "text-foreground" : "text-muted-foreground italic"}`}
                         />
                         <Button
                           type="button"
@@ -1296,7 +1314,7 @@ export default function SettingsPage() {
                           size="icon"
                           className="absolute right-0 top-0 h-full text-muted-foreground hover:text-foreground"
                           onClick={() => setShowApiKey(!showApiKey)}
-                          disabled={!user?.api_key}
+                          disabled={!generatedApiKey}
                           aria-label={
                             showApiKey ? "Hide API key" : "Show API key"
                           }
@@ -1313,22 +1331,27 @@ export default function SettingsPage() {
                         size="icon"
                         className="bg-secondary/70 hover:bg-secondary text-secondary-foreground"
                         onClick={() => {
-                          if (user?.api_key) {
-                            navigator.clipboard.writeText(user.api_key);
+                          if (generatedApiKey) {
+                            navigator.clipboard.writeText(generatedApiKey);
                             setSuccess("API Key copied to clipboard.");
                             setTimeout(() => setSuccess(null), 2000);
                           }
                         }}
-                        disabled={!user?.api_key}
+                        disabled={!generatedApiKey}
                         aria-label="Copy API key"
                       >
                         <Copy className="h-4 w-4" />
                       </Button>
                     </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      {generatedApiKey
+                        ? "Save this key now. It won't be shown again."
+                        : "Only a preview is shown. Regenerate to view a new key."}
+                    </p>
                   </div>
 
                   {/* qBittorrent Command Helper */}
-                  {user?.api_key && (
+                  {generatedApiKey && (
                     <div className="space-y-2">
                       <Label className="text-xs tracking-wider text-muted-foreground flex items-center justify-between">
                         <span>
@@ -1341,7 +1364,7 @@ export default function SettingsPage() {
                       <div
                         className="rounded-md border border-emerald-200 dark:border-sky-900/50 bg-emerald-50 dark:bg-sky-950/30 p-3 font-mono text-xs text-emerald-900 dark:text-sky-200 break-all cursor-pointer transition-colors hover:bg-emerald-100 dark:hover:bg-sky-950/50 hover:border-emerald-300 dark:hover:border-sky-800"
                         onClick={() => {
-                          const cmd = `curl -X POST ${window.location.origin}/api/v1/jobs/ -H "X-API-Key: ${user.api_key}" -H "Content-Type: application/json" -d "{\\"folder_path\\": \\"%R/%N\\", \\"log_level\\": \\"INFO\\"}"`;
+                          const cmd = `curl -X POST ${window.location.origin}/api/v1/jobs/ -H "X-API-Key: ${generatedApiKey}" -H "Content-Type: application/json" -d "{\\"folder_path\\": \\"%R/%N\\", \\"log_level\\": \\"INFO\\"}"`;
                           navigator.clipboard.writeText(cmd);
                           setSuccess("Command copied to clipboard.");
                           setTimeout(() => setSuccess(null), 2000);
@@ -1349,7 +1372,8 @@ export default function SettingsPage() {
                       >
                         curl -X POST {window.location.origin}/api/v1/jobs/ \
                         <br />
-                        &nbsp;&nbsp;-H &quot;X-API-Key: {user.api_key}&quot; \
+                        &nbsp;&nbsp;-H &quot;X-API-Key: {generatedApiKey}&quot;
+                        \
                         <br />
                         &nbsp;&nbsp;-H &quot;Content-Type:
                         application/json&quot; \<br />
@@ -1464,6 +1488,14 @@ export default function SettingsPage() {
           </>
         )}
       </Card>
+
+      {/* Security Tab Content */}
+      {currentTab === "security" && (
+        <div className="space-y-6" ref={cardRef}>
+          <PasswordSettings />
+          <MfaSettings />
+        </div>
+      )}
 
       <SavePill
         isVisible={hasChanges}

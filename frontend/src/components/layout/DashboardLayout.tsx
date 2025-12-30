@@ -1,4 +1,10 @@
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useNavigate,
+  Navigate,
+} from "react-router-dom";
 import {
   LayoutDashboard,
   LogOut,
@@ -17,6 +23,7 @@ import { useAuthStore } from "@/store/authStore";
 import { authApi } from "@/features/auth/api/auth";
 import { useRef, useState } from "react";
 import packageJson from "../../../package.json";
+import { MfaWarningBanner } from "@/components/common/MfaWarningBanner";
 
 const APP_VERSION = packageJson.version;
 const ENV_SUFFIX = import.meta.env.MODE === "development" ? "DEV" : "PROD";
@@ -72,6 +79,11 @@ export default function DashboardLayout() {
     }
     touchStartXRef.current = null;
   };
+
+  // Enforce password change if flagged
+  if (user?.force_password_change) {
+    return <Navigate to="/change-password" replace />;
+  }
 
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -193,6 +205,7 @@ export default function DashboardLayout() {
 
         {/* Page Content */}
         <main className="flex flex-1 flex-col overflow-auto relative">
+          <MfaWarningBanner />
           <Outlet />
         </main>
       </div>

@@ -1,15 +1,25 @@
 # backend/app/api/routers/users.py
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import the configured fastapi_users instance and schemas
-from app.core.api_key_auth import generate_api_key
+from app.core.api_key_auth import (
+    generate_api_key,
+    get_api_key_last4,
+    get_api_key_prefix,
+    hash_api_key,
+)
+from app.core.config import settings
 from app.core.security import current_active_user
 from app.core.users import fastapi_users_instance  # FastAPIUsers[User, uuid.UUID]
+from app.db.models.api_key import ApiKey
 from app.db.models.user import User
 from app.db.session import get_async_session
+from app.schemas.api_key import ApiKeyCreateResponse, ApiKeyRevokeResponse
 from app.schemas.user import UserRead, UserUpdate  # Pydantic schemas for User
 
 # from app.db.models.user import User # Not strictly needed here for router definition
@@ -42,42 +52,78 @@ router.include_router(
 
 @router.post(
     "/me/api-key",
-    response_model=UserRead,
+    response_model=ApiKeyCreateResponse,
     summary="Generate or Regenerate API Key",
-    description="Generates a new API key for the current user. Invalidates any previous key.",
+    description="Generates a new API key for the current user and revokes prior keys.",
 )
 async def regenerate_api_key(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(current_active_user)],
-) -> User:
+) -> ApiKeyCreateResponse:
+    if not settings.API_KEY_PEPPER:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="API key generation is not configured.",
+        )
     new_key = generate_api_key()
+    now = datetime.now(UTC)
 
-    # Update user with new key
-    current_user.api_key = new_key
+    # Revoke any existing keys for this user
+    await db.execute(
+        update(ApiKey)
+        .where(ApiKey.user_id == current_user.id, ApiKey.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )
+    current_user.api_key = None
+
+    api_key_record = ApiKey(
+        user_id=current_user.id,
+        name="Default",
+        scopes=None,
+        prefix=get_api_key_prefix(new_key),
+        last4=get_api_key_last4(new_key),
+        hashed_key=hash_api_key(new_key),
+        created_at=now,
+    )
+
+    db.add(api_key_record)
     db.add(current_user)
     await db.commit()
-    await db.refresh(current_user)
+    await db.refresh(api_key_record)
 
-    return current_user
+    return ApiKeyCreateResponse(
+        id=api_key_record.id,
+        api_key=new_key,
+        preview=api_key_record.preview,
+        created_at=api_key_record.created_at,
+    )
 
 
 @router.delete(
     "/me/api-key",
-    response_model=UserRead,
+    response_model=ApiKeyRevokeResponse,
     summary="Revoke API Key",
-    description="Revokes the current user's API key, disabling webhook access.",
+    description="Revokes all active API keys for the current user.",
 )
 async def revoke_api_key(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(current_active_user)],
-) -> User:
-    # Clear the API key
+) -> ApiKeyRevokeResponse:
+    now = datetime.now(UTC)
+    result = await db.execute(
+        update(ApiKey)
+        .where(ApiKey.user_id == current_user.id, ApiKey.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )
     current_user.api_key = None
     db.add(current_user)
     await db.commit()
-    await db.refresh(current_user)
-
-    return current_user
+    if result.rowcount == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active API keys to revoke.",
+        )
+    return ApiKeyRevokeResponse(revoked=True)
 
 
 # Example of a custom user-related endpoint (if needed in the future):

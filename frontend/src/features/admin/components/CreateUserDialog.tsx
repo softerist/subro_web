@@ -128,6 +128,7 @@ export function CreateUserDialog() {
                   <Select
                     onValueChange={field.onChange}
                     defaultValue={field.value}
+                    name={field.name}
                   >
                     <FormControl>
                       <SelectTrigger>

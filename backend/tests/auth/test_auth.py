@@ -12,6 +12,8 @@ from app.db.models.user import User
 
 from ..factories import UserFactory
 
+API_PREFIX = settings.API_V1_STR
+
 
 @pytest.mark.asyncio
 async def test_register_user(test_client: AsyncClient, db_session: AsyncSession):
@@ -19,8 +21,8 @@ async def test_register_user(test_client: AsyncClient, db_session: AsyncSession)
     if not settings.OPEN_SIGNUP:
         pytest.skip("Skipping registration test because OPEN_SIGNUP is False")
 
-    register_data = {"email": "registertest@example.com", "password": "password123"}
-    response = await test_client.post("/api/auth/register", json=register_data)
+    register_data = {"email": "registertest@example.com", "password": "Password123"}
+    response = await test_client.post(f"{API_PREFIX}/auth/register", json=register_data)
 
     assert response.status_code == status.HTTP_201_CREATED
     # ... rest of assertions ...
@@ -43,11 +45,11 @@ async def test_register_user_already_exists(test_client: AsyncClient, db_session
     existing_email = "existing@example.com"
     # Use the factory's create_user method, passing the session
     # No await needed for the factory method itself
-    UserFactory.create_user(session=db_session, email=existing_email, password="password123")
+    UserFactory.create_user(session=db_session, email=existing_email, password="Password123")
     await db_session.flush()  # Ensure user is flushed to session
 
-    register_data = {"email": existing_email, "password": "anotherpassword"}
-    response = await test_client.post("/api/auth/register", json=register_data)
+    register_data = {"email": existing_email, "password": "AnotherPass123"}
+    response = await test_client.post(f"{API_PREFIX}/auth/register", json=register_data)
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.json()["detail"] == "REGISTER_USER_ALREADY_EXISTS"
@@ -56,13 +58,13 @@ async def test_register_user_already_exists(test_client: AsyncClient, db_session
 @pytest.mark.asyncio
 async def test_login_success(test_client: AsyncClient, db_session: AsyncSession):
     user_email = "logintest@example.com"
-    user_password = "password123"
+    user_password = "Password123"
     # Use factory's create_user, passing session and password
     UserFactory.create_user(session=db_session, email=user_email, password=user_password)
     await db_session.flush()  # Ensure user is flushed
 
     login_data = {"username": user_email, "password": user_password}
-    response = await test_client.post("/api/auth/login", data=login_data)
+    response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
 
     assert response.status_code == status.HTTP_200_OK
     assert "access_token" in response.json()
@@ -76,11 +78,11 @@ async def test_login_success(test_client: AsyncClient, db_session: AsyncSession)
 async def test_login_failure_wrong_password(test_client: AsyncClient, db_session: AsyncSession):
     user_email = "wrongpass@example.com"
     # Use factory's create_user, passing session and correct password
-    UserFactory.create_user(session=db_session, email=user_email, password="correctpassword")
+    UserFactory.create_user(session=db_session, email=user_email, password="CorrectPass123")
     await db_session.flush()  # Ensure user is flushed
 
-    login_data = {"username": user_email, "password": "wrongpassword"}
-    response = await test_client.post("/api/auth/login", data=login_data)
+    login_data = {"username": user_email, "password": "WrongPass123"}
+    response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.json()["detail"] == "LOGIN_BAD_CREDENTIALS"
@@ -91,8 +93,8 @@ async def test_login_failure_wrong_password(test_client: AsyncClient, db_session
 async def test_login_failure_user_not_found(test_client: AsyncClient):
     """Test login failure for a non-existent user."""
     # No user creation needed here
-    login_data = {"username": "nosuchuser@example.com", "password": "password123"}
-    response = await test_client.post("/api/auth/login", data=login_data)
+    login_data = {"username": "nosuchuser@example.com", "password": "Password123"}
+    response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     # Keep the assertion for LOGIN_BAD_CREDENTIALS as refined in auth.py
@@ -104,7 +106,7 @@ async def test_login_failure_user_not_found(test_client: AsyncClient):
 async def test_login_failure_inactive_user(test_client: AsyncClient, db_session: AsyncSession):
     """Test login failure for an inactive user."""
     user_email = "inactive@example.com"
-    user_password = "password123"
+    user_password = "Password123"
     # Use factory's create_user, passing session, password, and is_active=False
     UserFactory.create_user(
         session=db_session, email=user_email, password=user_password, is_active=False
@@ -112,7 +114,7 @@ async def test_login_failure_inactive_user(test_client: AsyncClient, db_session:
     await db_session.flush()  # Ensure user is flushed
 
     login_data = {"username": user_email, "password": user_password}
-    response = await test_client.post("/api/auth/login", data=login_data)
+    response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.json()["detail"] == "LOGIN_USER_INACTIVE"
@@ -122,18 +124,18 @@ async def test_login_failure_inactive_user(test_client: AsyncClient, db_session:
 @pytest.mark.asyncio
 async def test_get_current_user(test_client: AsyncClient, db_session: AsyncSession):
     user_email = "me_user@example.com"
-    user_password = "password123"
+    user_password = "Password123"
     # Use factory's create_user, passing session and password
     user = UserFactory.create_user(session=db_session, email=user_email, password=user_password)
     await db_session.flush()  # Ensure user is flushed
 
     login_data = {"username": user_email, "password": user_password}
-    login_response = await test_client.post("/api/auth/login", data=login_data)
+    login_response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
     assert login_response.status_code == status.HTTP_200_OK
     access_token = login_response.json()["access_token"]
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    me_response = await test_client.get("/api/users/me", headers=headers)
+    me_response = await test_client.get(f"{API_PREFIX}/users/me", headers=headers)
 
     assert me_response.status_code == status.HTTP_200_OK
     user_data = me_response.json()
@@ -146,7 +148,7 @@ async def test_get_current_user(test_client: AsyncClient, db_session: AsyncSessi
 @pytest.mark.asyncio
 async def test_get_current_user_unauthenticated(test_client: AsyncClient):
     # Remains the same
-    response = await test_client.get("/api/users/me")
+    response = await test_client.get(f"{API_PREFIX}/users/me")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     assert response.json()["detail"] == "Unauthorized"
 
@@ -154,13 +156,13 @@ async def test_get_current_user_unauthenticated(test_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_refresh_token(test_client: AsyncClient, db_session: AsyncSession):
     user_email = "refresh_user@example.com"
-    user_password = "password123"
+    user_password = "Password123"
     # Use factory's create_user, passing session and password
     _user = UserFactory.create_user(session=db_session, email=user_email, password=user_password)
     await db_session.flush()  # Ensure user is flushed
 
     login_data = {"username": user_email, "password": user_password}
-    login_response = await test_client.post("/api/auth/login", data=login_data)
+    login_response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
     assert login_response.status_code == status.HTTP_200_OK
     _original_access_token = login_response.json()["access_token"]
     refresh_cookie_value = login_response.cookies.get("subRefreshToken")
@@ -170,7 +172,7 @@ async def test_refresh_token(test_client: AsyncClient, db_session: AsyncSession)
     test_client.cookies.set("subRefreshToken", refresh_cookie_value)
 
     # Make the request without the cookies parameter
-    refresh_response = await test_client.post("/api/auth/refresh")
+    refresh_response = await test_client.post(f"{API_PREFIX}/auth/refresh")
 
     # Assert refresh was successful
     assert refresh_response.status_code == status.HTTP_200_OK
@@ -186,7 +188,7 @@ async def test_refresh_token(test_client: AsyncClient, db_session: AsyncSession)
 
     # Assert the new access token works
     headers = {"Authorization": f"Bearer {new_token_data['access_token']}"}
-    me_response = await test_client.get("/api/users/me", headers=headers)
+    me_response = await test_client.get(f"{API_PREFIX}/users/me", headers=headers)
     assert me_response.status_code == status.HTTP_200_OK
     assert me_response.json()["email"] == user_email
 
@@ -194,9 +196,9 @@ async def test_refresh_token(test_client: AsyncClient, db_session: AsyncSession)
 @pytest.mark.asyncio
 async def test_refresh_token_no_cookie(test_client: AsyncClient):
     # Remains the same
-    response = await test_client.post("/api/auth/refresh")
+    response = await test_client.post(f"{API_PREFIX}/auth/refresh")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert response.json()["detail"] == "Missing refresh token cookie"
+    assert response.json()["detail"] == "REFRESH_TOKEN_MISSING"
 
 
 @pytest.mark.asyncio
@@ -205,21 +207,21 @@ async def test_refresh_token_invalid_cookie(test_client: AsyncClient):
     test_client.cookies.set("subRefreshToken", "invalid-token-value")
 
     # Make the request without the cookies parameter
-    response = await test_client.post("/api/auth/refresh")
+    response = await test_client.post(f"{API_PREFIX}/auth/refresh")
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert response.json()["detail"] == "Invalid or expired refresh token"
+    assert response.json()["detail"] == "REFRESH_TOKEN_INVALID"
 
 
 @pytest.mark.asyncio
 async def test_logout(test_client: AsyncClient, db_session: AsyncSession):
     user_email = "logout_user@example.com"
-    user_password = "password123"
+    user_password = "Password123"
     UserFactory.create_user(session=db_session, email=user_email, password=user_password)
     await db_session.flush()
 
     login_data = {"username": user_email, "password": user_password}
-    login_response = await test_client.post("/api/auth/login", data=login_data)
+    login_response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
     assert login_response.status_code == status.HTTP_200_OK
     refresh_cookie_value = login_response.cookies.get(cookie_transport.cookie_name)
     assert refresh_cookie_value
@@ -228,11 +230,11 @@ async def test_logout(test_client: AsyncClient, db_session: AsyncSession):
     test_client.cookies.set(cookie_transport.cookie_name, refresh_cookie_value)
 
     # Call logout without cookies parameter
-    logout_response = await test_client.post("/api/auth/logout")
+    logout_response = await test_client.post(f"{API_PREFIX}/auth/logout")
 
     # Assert logout was successful and cookie deletion header was sent
     assert logout_response.status_code == status.HTTP_200_OK
-    assert logout_response.json() == {"status": "logged out"}
+    assert logout_response.json() == {"message": "LOGOUT_SUCCESSFUL"}
     set_cookie_header = logout_response.headers.get("set-cookie")
     assert set_cookie_header is not None
     # Check if the header tries to clear the cookie
@@ -245,8 +247,8 @@ async def test_logout(test_client: AsyncClient, db_session: AsyncSession):
     test_client.cookies.clear()
 
     # Now make the refresh request. The client should send no cookies.
-    refresh_response_no_cookie = await test_client.post("/api/auth/refresh")
+    refresh_response_no_cookie = await test_client.post(f"{API_PREFIX}/auth/refresh")
 
     # Assert that the request without a cookie fails as expected
     assert refresh_response_no_cookie.status_code == status.HTTP_401_UNAUTHORIZED
-    assert refresh_response_no_cookie.json()["detail"] == "Missing refresh token cookie"
+    assert refresh_response_no_cookie.json()["detail"] == "REFRESH_TOKEN_MISSING"

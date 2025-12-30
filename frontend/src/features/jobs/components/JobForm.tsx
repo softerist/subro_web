@@ -46,6 +46,27 @@ const LOG_LEVELS = [
 
 export function JobForm() {
   const accessToken = useAuthStore((state) => state.accessToken);
+  const jobErrorMessages: Record<string, string> = {
+    PATH_NOT_FOUND: "Folder not found on server. Check the path and try again.",
+    PATH_INVALID: "Folder path is invalid or cannot be resolved.",
+    PATH_NOT_ALLOWED:
+      "Folder is not in allowed media folders. Contact an admin to allow it.",
+    PATH_AUTO_ADD_FAILED:
+      "Server couldn't add this folder to allowed paths. Contact an admin.",
+  };
+
+  const resolveJobErrorMessage = (
+    detail: string | { code?: string; message?: string } | undefined,
+    fallback: string,
+  ) => {
+    if (typeof detail === "string") {
+      return detail;
+    }
+    if (detail?.code && jobErrorMessages[detail.code]) {
+      return jobErrorMessages[detail.code];
+    }
+    return detail?.message || fallback;
+  };
 
   // Fetch Allowed Folders from API (with error suppression since endpoint may not exist)
   const { data: allowedFolders, isLoading: isLoadingFolders } = useQuery({
@@ -75,10 +96,19 @@ export function JobForm() {
       form.reset();
       // queryClient.invalidateQueries({ queryKey: ["jobs"] });
     },
-    onError: (error: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(
-        `Failed to start job: ${error.response?.data?.detail || error.message}`,
-      );
+    onError: (
+      error: Error & {
+        response?: {
+          data?: { detail?: string | { message?: string; code?: string } };
+        };
+      },
+    ) => {
+      const detail = error.response?.data?.detail as
+        | string
+        | { message?: string; code?: string }
+        | undefined;
+      const message = resolveJobErrorMessage(detail, error.message);
+      toast.error(`Failed to start job: ${message}`);
     },
   });
 
@@ -95,7 +125,11 @@ export function JobForm() {
           render={({ field }) => (
             <FormItem className="space-y-0.5">
               <FormLabel>Target Folder</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value}
+                name={field.name}
+              >
                 <FormControl>
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Select a folder..." />
@@ -130,7 +164,11 @@ export function JobForm() {
             render={({ field }) => (
               <FormItem className="space-y-1">
                 <FormLabel>Language</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  name={field.name}
+                >
                   <FormControl>
                     <SelectTrigger className="h-9">
                       <SelectValue placeholder="Select language..." />
@@ -155,7 +193,11 @@ export function JobForm() {
             render={({ field }) => (
               <FormItem className="space-y-1">
                 <FormLabel>Log Level</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  name={field.name}
+                >
                   <FormControl>
                     <SelectTrigger className="h-9">
                       <SelectValue placeholder="Select log level..." />

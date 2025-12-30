@@ -152,9 +152,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unrar-free \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy installed runtime dependencies (venv) from DEVELOPMENT stage (fallback strategy)
+# Copy installed runtime dependencies (venv) from BUILDER stage (runtime-only deps)
 # Using /app/.venv as configured by POETRY_VIRTUALENVS_IN_PROJECT=true
-COPY --chown=appuser:appuser --from=development /app/.venv /app/.venv
+COPY --chown=appuser:appuser --from=builder /app/.venv /app/.venv
 
 # Copy configuration and migration files
 COPY --chown=appuser:appuser pyproject.toml alembic.ini ./

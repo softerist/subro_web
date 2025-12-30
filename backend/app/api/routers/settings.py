@@ -10,7 +10,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import current_active_superuser
+from app.core.users import get_current_active_admin_user
 from app.crud.crud_app_settings import crud_app_settings
 from app.db.models.user import User
 from app.db.session import get_async_session
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/settings", tags=["Settings"])
 )
 async def get_settings(
     db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(current_active_superuser),
+    current_user: User = Depends(get_current_active_admin_user),
 ) -> SettingsRead:
     """
     Get current application settings.
@@ -53,7 +53,7 @@ async def get_settings(
 async def update_settings(
     settings_update: SettingsUpdate,
     db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(current_active_superuser),
+    current_user: User = Depends(get_current_active_admin_user),
 ) -> SettingsRead:
     """
     Update application settings.
@@ -125,7 +125,7 @@ async def update_settings(
 async def get_raw_setting(
     field_name: str,
     db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(current_active_superuser),
+    current_user: User = Depends(get_current_active_admin_user),
 ) -> dict:
     """
     Get the raw (decrypted) value for a specific setting.

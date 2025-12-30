@@ -4,8 +4,9 @@ import base64
 import hashlib
 import logging
 import uuid
+from functools import lru_cache
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from fastapi import Depends, Request
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin, exceptions
 from fastapi_users.authentication import (
@@ -31,10 +32,24 @@ logger = logging.getLogger(__name__)
 
 
 # --- Fernet Encryption for Sensitive Settings ---
-def _get_fernet_key() -> bytes:
-    """Derive a 32-byte Fernet key from SECRET_KEY using SHA256."""
-    key_bytes = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+def _derive_fernet_key(secret: str) -> bytes:
+    """Derive a 32-byte Fernet key from a secret using SHA256."""
+    key_bytes = hashlib.sha256(secret.encode()).digest()
     return base64.urlsafe_b64encode(key_bytes)
+
+
+def _get_data_encryption_secrets() -> list[str]:
+    secrets = [value for value in settings.DATA_ENCRYPTION_KEYS if value]
+    if not secrets:
+        logger.warning("DATA_ENCRYPTION_KEYS not set; falling back to SECRET_KEY.")
+        secrets = [settings.SECRET_KEY]
+    return secrets
+
+
+@lru_cache(maxsize=1)
+def _get_fernet() -> MultiFernet:
+    fernets = [Fernet(_derive_fernet_key(secret)) for secret in _get_data_encryption_secrets()]
+    return MultiFernet(fernets)
 
 
 def encrypt_value(value: str) -> str:
@@ -42,7 +57,7 @@ def encrypt_value(value: str) -> str:
     if not value:
         return ""
     try:
-        f = Fernet(_get_fernet_key())
+        f = _get_fernet()
         return f.encrypt(value.encode()).decode()
     except Exception as e:
         logger.error(f"Encryption failed: {e}")
@@ -54,7 +69,7 @@ def decrypt_value(token: str) -> str:
     if not token:
         return ""
     try:
-        f = Fernet(_get_fernet_key())
+        f = _get_fernet()
         return f.decrypt(token.encode()).decode()
     except InvalidToken:
         logger.error("Decryption failed: Invalid token (SECRET_KEY may have changed)")
@@ -71,6 +86,15 @@ def mask_sensitive_value(value: str | None, visible_chars: int = 4) -> str:
     if len(value) <= visible_chars:
         return "*" * len(value)
     return "*" * (len(value) - visible_chars) + value[-visible_chars:]
+
+
+def _token_for_log(token: str) -> str:
+    if settings.DEBUG or settings.ENVIRONMENT == "development":
+        return token
+    if not token:
+        return ""
+    suffix = token[-4:] if len(token) >= 4 else token
+    return f"*****{suffix}"
 
 
 # --- Password Hashing ---
@@ -93,8 +117,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 # --- User Manager ---
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
-    reset_password_token_secret = str(settings.SECRET_KEY)
-    verification_token_secret = str(settings.SECRET_KEY)
+    reset_password_token_secret = str(settings.RESET_PASSWORD_TOKEN_SECRET or settings.SECRET_KEY)
+    verification_token_secret = str(settings.VERIFICATION_TOKEN_SECRET or settings.SECRET_KEY)
 
     # In class UserManager
     async def on_after_register(self, user: User, _request: Request | None = None) -> None:
@@ -104,12 +128,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         self, user: User, token: str, _request: Request | None = None
     ) -> None:
         # Updated to use logger for consistency
-        logger.info(f"User {user.id} has requested a password reset. Token: {token}")
+        logger.info(
+            f"User {user.id} has requested a password reset. Token: {_token_for_log(token)}"
+        )
 
     async def on_after_request_verify(
         self, user: User, token: str, _request: Request | None = None
     ) -> None:
-        logger.info(f"Verification requested for user {user.id}. Token: {token}")
+        logger.info(f"Verification requested for user {user.id}. Token: {_token_for_log(token)}")
 
     async def create(
         self,

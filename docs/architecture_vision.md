@@ -6,15 +6,15 @@ This application adopts a modern, containerized web architecture centered around
 
 **User Interaction Flow:**
 
-1.  A user accesses the **React Single-Page Application (SPA)** served statically by an **Nginx** container.
-2.  All traffic (frontend assets and API requests) is routed through a **Caddy** reverse proxy, which handles automatic HTTPS (TLS termination), applies security headers (HSTS, CSP, etc.), and directs requests appropriately.
-3.  For API interactions (e.g., login, job submission, fetching history), Caddy proxies requests to the **FastAPI** backend container (`/api/*`).
-4.  The FastAPI application handles authentication (JWT), authorization (role-based), data validation (Pydantic), and interacts with the **PostgreSQL** database for persistent storage (users, jobs, dashboard config).
-5.  When a subtitle job is submitted, FastAPI enqueues a task message onto a **Redis** queue via the **Celery** library.
-6.  A separate **Celery Worker** container monitors the Redis queue, picks up the job task, updates the job status in PostgreSQL, and executes the designated Python subtitle downloader script as a subprocess.
-7.  The Celery worker captures `stdout`/`stderr` from the script and publishes log lines to a unique **Redis Pub/Sub** channel for that job.
-8.  The FastAPI backend provides a **WebSocket** endpoint (`/ws/jobs/{job_id}`). When a user views a job's detail page, the React frontend establishes a WebSocket connection. The FastAPI backend subscribes to the relevant Redis Pub/Sub channel and forwards the log messages over the WebSocket to the frontend in near real-time.
-9.  The entire stack (Caddy, Nginx, FastAPI, Celery Worker, PostgreSQL, Redis) is orchestrated using **Docker Compose**, ensuring consistent environments for development and production.
+1. A user accesses the **React Single-Page Application (SPA)** served statically by an **Nginx** container.
+2. All traffic (frontend assets and API requests) is routed through a **Caddy** reverse proxy, which handles automatic HTTPS (TLS termination), applies security headers (HSTS, CSP, etc.), and directs requests appropriately.
+3. For API interactions (e.g., login, job submission, fetching history), Caddy proxies requests to the **FastAPI** backend container (`/api/*`).
+4. The FastAPI application handles authentication (JWT), authorization (role-based), data validation (Pydantic), and interacts with the **PostgreSQL** database for persistent storage (users, jobs, dashboard config).
+5. When a subtitle job is submitted, FastAPI enqueues a task message onto a **Redis** queue via the **Celery** library.
+6. A separate **Celery Worker** container monitors the Redis queue, picks up the job task, updates the job status in PostgreSQL, and executes the designated Python subtitle downloader script as a subprocess.
+7. The Celery worker captures `stdout`/`stderr` from the script and publishes log lines to a unique **Redis Pub/Sub** channel for that job.
+8. The FastAPI backend provides a **WebSocket** endpoint (`/ws/jobs/{job_id}`). When a user views a job's detail page, the React frontend establishes a WebSocket connection. The FastAPI backend subscribes to the relevant Redis Pub/Sub channel and forwards the log messages over the WebSocket to the frontend in near real-time.
+9. The entire stack (Caddy, Nginx, FastAPI, Celery Worker, PostgreSQL, Redis) is orchestrated using **Docker Compose**, ensuring consistent environments for development and production.
 
 **Key Architectural Benefits:**
 
@@ -74,15 +74,15 @@ This application adopts a modern, containerized web architecture centered around
 
 **User Interaction Flow:**
 
-1.  A user accesses the **React Single-Page Application (SPA)** served statically by an **Nginx** container.
-2.  All traffic (frontend assets and API requests) is routed through a **Caddy** reverse proxy, which handles automatic HTTPS (TLS termination), applies security headers (HSTS, CSP, etc.), and directs requests appropriately.
-3.  For API interactions (e.g., login, job submission, fetching history), Caddy proxies requests to the **FastAPI** backend container (`/api/*`).
-4.  The FastAPI application handles authentication (JWT), authorization (role-based), data validation (Pydantic), and interacts with the **PostgreSQL** database for persistent storage (users, jobs, dashboard config).
-5.  When a subtitle job is submitted, FastAPI enqueues a task message onto a **Redis** queue via the **Celery** library.
-6.  A separate **Celery Worker** container monitors the Redis queue, picks up the job task, updates the job status in PostgreSQL, and executes the designated Python subtitle downloader script as a subprocess.
-7.  The Celery worker captures `stdout`/`stderr` from the script and publishes log lines to a unique **Redis Pub/Sub** channel for that job.
-8.  The FastAPI backend provides a **WebSocket** endpoint (`/ws/jobs/{job_id}`). When a user views a job's detail page, the React frontend establishes a WebSocket connection. The FastAPI backend subscribes to the relevant Redis Pub/Sub channel and forwards the log messages over the WebSocket to the frontend in near real-time.
-9.  The entire stack (Caddy, Nginx, FastAPI, Celery Worker, PostgreSQL, Redis) is orchestrated using **Docker Compose**, ensuring consistent environments for development and production.
+1. A user accesses the **React Single-Page Application (SPA)** served statically by an **Nginx** container.
+2. All traffic (frontend assets and API requests) is routed through a **Caddy** reverse proxy, which handles automatic HTTPS (TLS termination), applies security headers (HSTS, CSP, etc.), and directs requests appropriately.
+3. For API interactions (e.g., login, job submission, fetching history), Caddy proxies requests to the **FastAPI** backend container (`/api/*`).
+4. The FastAPI application handles authentication (JWT), authorization (role-based), data validation (Pydantic), and interacts with the **PostgreSQL** database for persistent storage (users, jobs, dashboard config).
+5. When a subtitle job is submitted, FastAPI enqueues a task message onto a **Redis** queue via the **Celery** library.
+6. A separate **Celery Worker** container monitors the Redis queue, picks up the job task, updates the job status in PostgreSQL, and executes the designated Python subtitle downloader script as a subprocess.
+7. The Celery worker captures `stdout`/`stderr` from the script and publishes log lines to a unique **Redis Pub/Sub** channel for that job.
+8. The FastAPI backend provides a **WebSocket** endpoint (`/ws/jobs/{job_id}`). When a user views a job's detail page, the React frontend establishes a WebSocket connection. The FastAPI backend subscribes to the relevant Redis Pub/Sub channel and forwards the log messages over the WebSocket to the frontend in near real-time.
+9. The entire stack (Caddy, Nginx, FastAPI, Celery Worker, PostgreSQL, Redis) is orchestrated using **Docker Compose**, ensuring consistent environments for development and production.
 
 **Key Architectural Benefits:**
 

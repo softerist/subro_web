@@ -8,8 +8,10 @@ to avoid pytest-asyncio event loop conflicts.
 import asyncio
 import json
 import os
+import time
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 import pytest
@@ -28,6 +30,38 @@ WS_BASE_URL = "ws://localhost:8000"
 
 class TestWebSocketLogStreaming:
     """Test suite for WebSocket log streaming functionality."""
+
+    def _is_path_allowed(self, folder_path: Path, allowed_paths: list[str]) -> bool:
+        try:
+            resolved_target = folder_path.resolve(strict=True)
+        except FileNotFoundError:
+            return False
+
+        for allowed_base in allowed_paths:
+            try:
+                resolved_allowed = Path(allowed_base).resolve(strict=True)
+            except (FileNotFoundError, RuntimeError, OSError):
+                continue
+
+            if resolved_target == resolved_allowed or resolved_allowed in resolved_target.parents:
+                return True
+        return False
+
+    async def _login_with_retry(self, client, email, password, max_attempts=2):
+        for attempt in range(1, max_attempts + 1):
+            login_response = await client.post(
+                "/api/v1/auth/login",
+                data={"username": email, "password": password},
+            )
+            if login_response.status_code == 200:
+                return login_response
+            if login_response.status_code == 429 and attempt < max_attempts:
+                retry_after = login_response.headers.get("Retry-After")
+                delay = float(retry_after) if retry_after else 60.0
+                print(f"   ⚠️  Rate limited for {email}. Retrying in {delay:.0f}s...")
+                await asyncio.sleep(delay)
+                continue
+            return login_response
 
     def _setup_test_folder(self, test_id):
         """Helper to find a valid test folder location."""
@@ -74,10 +108,7 @@ class TestWebSocketLogStreaming:
 
         # Step 2: Login
         print("2. Logging in to get JWT token")
-        login_response = await client.post(
-            "/api/v1/auth/login",
-            data={"username": email, "password": password},
-        )
+        login_response = await self._login_with_retry(client, email, password)
 
         if login_response.status_code != 200:
             pytest.fail(f"Failed to login: {login_response.text}")
@@ -86,10 +117,52 @@ class TestWebSocketLogStreaming:
         print(f"   ✅ Login successful, got token: {token[:30]}...")
         return token
 
+    async def _ensure_path_allowed(self, client, folder_path: Path, user_token: str | None) -> None:
+        """Ensure the test folder is in allowed storage paths (admin-only)."""
+        if user_token:
+            allowed_response = await client.get(
+                "/api/v1/jobs/allowed-folders",
+                headers={"Authorization": f"Bearer {user_token}"},
+            )
+            if allowed_response.status_code == 200 and self._is_path_allowed(
+                folder_path, allowed_response.json()
+            ):
+                return
+
+        admin_email = settings.FIRST_SUPERUSER_EMAIL
+        admin_password = settings.FIRST_SUPERUSER_PASSWORD
+        if not admin_email or not admin_password:
+            pytest.skip("Admin credentials not configured for storage path setup.")
+
+        login_response = await self._login_with_retry(client, admin_email, admin_password)
+        if login_response.status_code != 200:
+            setup_response = await client.post(
+                "/api/v1/setup/complete",
+                json={"admin_email": admin_email, "admin_password": admin_password},
+            )
+            if setup_response.status_code not in (200, 201, 403, 409):
+                pytest.fail(f"Failed to run setup for admin user: {setup_response.text}")
+
+            login_response = await self._login_with_retry(client, admin_email, admin_password)
+            if login_response.status_code != 200:
+                pytest.fail(f"Failed to login as admin: {login_response.text}")
+
+        admin_token = login_response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        payload = {"path": str(folder_path), "label": "Test Path"}
+        response = await client.post("/api/v1/storage-paths/", json=payload, headers=headers)
+        if response.status_code in (200, 201):
+            return
+        if response.status_code == 400 and "already exists" in response.text:
+            return
+        pytest.fail(f"Failed to allow test path: {response.text}")
+
     async def _create_test_job(self, client, token, folder_path):
         """Helper to create a job via API."""
         print("3. Creating test job")
         headers = {"Authorization": f"Bearer {token}"}
+
+        await self._ensure_path_allowed(client, folder_path, token)
 
         # Verify folder accessibility via health check
         # Fix RUF001: Replaced ambiguous 'i' with '[INFO]'
@@ -130,7 +203,12 @@ class TestWebSocketLogStreaming:
         """Publishes test log messages to Redis channel."""
         await asyncio.sleep(1.5)  # Give WebSocket time to connect
 
-        redis = Redis.from_url(str(settings.REDIS_PUBSUB_URL))
+        redis_url = str(settings.REDIS_PUBSUB_URL)
+        if Path("/.dockerenv").exists():
+            parsed = urlparse(redis_url)
+            if parsed.hostname in {"localhost", "127.0.0.1"}:
+                redis_url = redis_url.replace(parsed.hostname, "redis", 1)
+        redis = Redis.from_url(redis_url)
         channel = f"job:{job_id}:logs"
 
         messages = [
@@ -241,19 +319,24 @@ class TestWebSocketLogStreaming:
                 assert data["payload"]["status"] == "RUNNING"
                 print("   ✅ Received RUNNING status")
 
-                # Receive logs
-                data = json.loads(await websocket.recv())
-                assert data["type"] == "log"
-                assert "Processing video" in data["payload"]["message"]
+                # Receive logs and final status (ignore other message types like "info")
+                log_messages = []
+                succeeded = False
+                deadline = time.monotonic() + 10
+                while time.monotonic() < deadline and (len(log_messages) < 2 or not succeeded):
+                    data = json.loads(await asyncio.wait_for(websocket.recv(), timeout=5))
+                    msg_type = data.get("type")
+                    if msg_type == "log":
+                        log_messages.append(data.get("payload", {}).get("message", ""))
+                    elif (
+                        msg_type == "status"
+                        and data.get("payload", {}).get("status") == "SUCCEEDED"
+                    ):
+                        succeeded = True
 
-                data = json.loads(await websocket.recv())
-                assert data["type"] == "log"
-                assert "Downloading subtitles" in data["payload"]["message"]
-
-                # Receive SUCCEEDED status
-                data = json.loads(await websocket.recv())
-                assert data["type"] == "status"
-                assert data["payload"]["status"] == "SUCCEEDED"
+                assert any("Processing video" in message for message in log_messages)
+                assert any("Downloading subtitles" in message for message in log_messages)
+                assert succeeded
                 print("   ✅ Received SUCCEEDED status")
 
             await publisher_task

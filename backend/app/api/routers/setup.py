@@ -8,9 +8,10 @@ by checking if setup has already been completed.
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import get_user_manager
 from app.core.users import UserManager
 from app.crud.crud_app_settings import crud_app_settings
@@ -26,6 +27,22 @@ from app.services.api_validation import validate_all_settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/setup", tags=["Setup"])
+
+
+def _require_setup_token(setup_token: str | None) -> None:
+    if settings.ENVIRONMENT != "production":
+        return
+    # If SETUP_TOKEN is not configured, allow setup to proceed without token
+    # This is intentional for simpler deployments that don't need token protection
+    if not settings.SETUP_TOKEN:
+        logger.warning("SETUP_TOKEN is not configured. Setup endpoints are unprotected.")
+        return
+    # If SETUP_TOKEN is configured, require it to match
+    if not setup_token or setup_token != settings.SETUP_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid setup token.",
+        )
 
 
 @router.get(
@@ -57,6 +74,7 @@ async def complete_setup(
     setup_data: SetupComplete,
     db: AsyncSession = Depends(get_async_session),
     user_manager: UserManager = Depends(get_user_manager),
+    setup_token: str | None = Header(default=None, alias="X-Setup-Token"),
 ) -> SetupStatus:
     """
     Complete the initial setup wizard.
@@ -70,6 +88,8 @@ async def complete_setup(
     Security: This endpoint is PUBLIC but can only be called ONCE
     (when setup_completed is False).
     """
+    _require_setup_token(setup_token)
+
     # Security check: Only allow if setup not completed
     is_completed = await crud_app_settings.get_setup_completed(db)
     if is_completed:
@@ -148,6 +168,7 @@ async def skip_setup(
     skip_data: SetupSkip | None = None,
     db: AsyncSession = Depends(get_async_session),
     user_manager: UserManager = Depends(get_user_manager),
+    setup_token: str | None = Header(default=None, alias="X-Setup-Token"),
 ) -> SetupStatus:
     """
     Skip the setup wizard and use environment variable defaults.
@@ -157,6 +178,8 @@ async def skip_setup(
 
     Security: This endpoint is PUBLIC but can only be called ONCE.
     """
+    _require_setup_token(setup_token)
+
     # Security check
     is_completed = await crud_app_settings.get_setup_completed(db)
     if is_completed:

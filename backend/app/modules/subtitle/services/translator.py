@@ -2255,7 +2255,7 @@ def get_translation_manager():  # noqa: C901
 
             # --- 1. Load Defaults from Environment (via settings) ---
             if CONFIG_LOADER_AVAILABLE and settings:
-                DEEPL_KEYS = [k for k in getattr(settings, "DEEPL_API_KEYS", []) if k]
+                DEEPL_KEYS = [k for k in (getattr(settings, "DEEPL_API_KEYS", None) or []) if k]
                 GOOGLE_PROJECT_ID_CONFIG = getattr(settings, "GOOGLE_PROJECT_ID", None)
                 GOOGLE_CREDENTIALS_PATH = getattr(settings, "GOOGLE_CREDENTIALS_PATH", None)
                 DEEPL_QUOTA_PER_KEY = getattr(settings, "DEEPL_CHARACTER_QUOTA", 500000)

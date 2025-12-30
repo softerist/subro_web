@@ -72,10 +72,12 @@ export const getSetupStatus = async (): Promise<SetupStatus> => {
 // Public endpoint - complete setup (only works if setup_completed is false)
 export const completeSetup = async (
   data: SetupComplete,
+  setupToken?: string,
 ): Promise<SetupStatus> => {
   const response = await axios.post<SetupStatus>(
     "/api/v1/setup/complete",
     data,
+    setupToken ? { headers: { "X-Setup-Token": setupToken } } : undefined,
   );
   return response.data;
 };
@@ -84,11 +86,16 @@ export const completeSetup = async (
 export const skipSetup = async (
   adminEmail?: string,
   adminPassword?: string,
+  setupToken?: string,
 ): Promise<SetupStatus> => {
-  const response = await axios.post<SetupStatus>("/api/v1/setup/skip", {
-    admin_email: adminEmail || null,
-    admin_password: adminPassword || null,
-  });
+  const response = await axios.post<SetupStatus>(
+    "/api/v1/setup/skip",
+    {
+      admin_email: adminEmail || null,
+      admin_password: adminPassword || null,
+    },
+    setupToken ? { headers: { "X-Setup-Token": setupToken } } : undefined,
+  );
   return response.data;
 };
 

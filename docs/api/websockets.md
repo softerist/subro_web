@@ -20,11 +20,11 @@ Since WebSockets do not support custom headers during the initial handshake in s
 
 **Connection Flow:**
 
-1.  **Handshake:** Client initiates connection with the token.
-2.  **Validation:** Server validates the token and checks if the user has permission (Owner or Admin) to view the job.
-3.  **Accept/Reject:**
-    - If valid, server accepts the connection and sends a `system` message.
-    - If invalid/unauthorized, server closes connection with code `1008` (Policy Violation).
+1. **Handshake:** Client initiates connection with the token.
+2. **Validation:** Server validates the token and checks if the user has permission (Owner or Admin) to view the job.
+3. **Accept/Reject:**
+   - If valid, server accepts the connection and sends a `system` message.
+   - If invalid/unauthorized, server closes connection with code `1008` (Policy Violation).
 
 ### Server-to-Client Message Structure
 
@@ -156,6 +156,6 @@ Sent if a protocol-level error occurs before the connection closes.
 
 ### Client Implementation Guidelines
 
-1.  **Reconnection:** Clients should implement automatic reconnection with exponential backoff if the connection drops unexpectedly.
-2.  **State Sync:** When connecting, clients should first fetch the job details via HTTP GET `/api/v1/jobs/{id}` to get the current state, then connect WebSocket for updates.
-3.  **Terminal States:** Once a `SUCCEEDED`, `FAILED`, or `CANCELLED` status message is received, the client should expect the connection to close shortly after (or can close it manually).
+1. **Reconnection:** Clients should implement automatic reconnection with exponential backoff if the connection drops unexpectedly.
+2. **State Sync:** When connecting, clients should first fetch the job details via HTTP GET `/api/v1/jobs/{id}` to get the current state, then connect WebSocket for updates.
+3. **Terminal States:** Once a `SUCCEEDED`, `FAILED`, or `CANCELLED` status message is received, the client should expect the connection to close shortly after (or can close it manually).

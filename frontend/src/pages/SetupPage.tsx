@@ -35,6 +35,7 @@ export default function SetupPage() {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const setupToken = import.meta.env.VITE_SETUP_TOKEN || "";
 
   // Settings form state
   const [settings, setSettings] = useState<SettingsUpdate>({
@@ -49,6 +50,21 @@ export default function SetupPage() {
     qbittorrent_username: "",
     qbittorrent_password: "",
   });
+
+  const getSetupErrorMessage = (err: unknown, fallback: string) => {
+    const detail = (
+      err as {
+        response?: { data?: { detail?: string | { message?: string } } };
+      }
+    )?.response?.data?.detail;
+    if (typeof detail === "string") {
+      return detail;
+    }
+    if (detail && typeof detail === "object" && "message" in detail) {
+      return detail.message || fallback;
+    }
+    return err instanceof Error ? err.message : fallback;
+  };
 
   const handleNext = () => {
     if (currentStep === "welcome") setCurrentStep("admin");
@@ -107,13 +123,11 @@ export default function SetupPage() {
             : undefined,
       };
 
-      await completeSetup(data);
+      await completeSetup(data, setupToken || undefined);
       setSetupCompleted(true);
       navigate("/login");
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Setup failed. Please try again.";
-      setError(message);
+      setError(getSetupErrorMessage(err, "Setup failed. Please try again."));
     } finally {
       setIsLoading(false);
     }
@@ -126,16 +140,14 @@ export default function SetupPage() {
     try {
       // Skip but still create admin if provided
       if (adminEmail && adminPassword) {
-        await skipSetup(adminEmail, adminPassword);
+        await skipSetup(adminEmail, adminPassword, setupToken || undefined);
       } else {
-        await skipSetup();
+        await skipSetup(undefined, undefined, setupToken || undefined);
       }
       setSetupCompleted(true);
       navigate("/login");
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Skip failed. Please try again.";
-      setError(message);
+      setError(getSetupErrorMessage(err, "Skip failed. Please try again."));
     } finally {
       setIsLoading(false);
     }
@@ -291,6 +303,7 @@ export default function SetupPage() {
                       className="bg-background border-input text-foreground"
                     />
                   </div>
+
                   <div className="flex justify-between pt-4">
                     <Button
                       type="button"
@@ -453,9 +466,9 @@ export default function SetupPage() {
                       Google Cloud Translation (optional)
                     </p>
                     <div className="space-y-2">
-                      <Label className="text-muted-foreground">
+                      <h4 className="text-sm text-muted-foreground">
                         Service Account JSON Credentials
-                      </Label>
+                      </h4>
                       <div className="flex items-center gap-2">
                         <label className="flex-1 cursor-pointer">
                           <div className="flex items-center justify-center px-4 py-3 bg-secondary border border-border border-dashed rounded-md text-muted-foreground hover:border-primary hover:text-primary transition-colors">
@@ -472,18 +485,22 @@ export default function SetupPage() {
                                 d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
                               />
                             </svg>
-                            <span className="text-sm">
+                            <span
+                              id="google-cloud-upload-label"
+                              className="text-sm"
+                            >
                               {settings.google_cloud_credentials
                                 ? "✓ Credentials loaded"
                                 : "Upload JSON file"}
                             </span>
                           </div>
                           <input
-                            id="google-cloud-credentials"
-                            name="google_cloud_credentials"
+                            id="google-cloud-credentials-upload"
+                            name="google_cloud_credentials_upload"
                             type="file"
                             accept=".json"
                             className="hidden"
+                            aria-labelledby="google-cloud-upload-label"
                             onChange={(e) => {
                               const file = e.target.files?.[0];
                               if (file) {

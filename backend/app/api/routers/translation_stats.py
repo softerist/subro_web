@@ -7,11 +7,11 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import current_active_superuser
+from app.core.security import current_active_user
 from app.db.models.translation_log import TranslationLog
 from app.db.models.user import User
 from app.db.session import get_async_session
@@ -39,8 +39,7 @@ class TranslationLogRead(BaseModel):
     status: str
     output_file_path: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AggregateStats(BaseModel):
@@ -81,14 +80,14 @@ class TranslationHistoryResponse(BaseModel):
 )
 async def get_translation_stats(
     db: AsyncSession = Depends(get_async_session),
-    _current_user: User = Depends(current_active_superuser),
+    _current_user: User = Depends(current_active_user),
 ) -> TranslationStatsResponse:
     """
     Get aggregate translation statistics.
 
     Returns totals for all time, last 30 days, and last 7 days.
 
-    **Requires admin privileges.**
+    **Accessible by all authenticated users.**
     """
 
     async def get_stats_for_period(start_date: datetime | None = None) -> AggregateStats:
@@ -139,7 +138,7 @@ async def get_translation_history(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_async_session),
-    _current_user: User = Depends(current_active_superuser),
+    _current_user: User = Depends(current_active_user),
 ) -> TranslationHistoryResponse:
     """
     Get paginated translation history.

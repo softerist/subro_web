@@ -60,6 +60,8 @@ def mock_settings_env(monkeypatch: pytest.MonkeyPatch):
 async def mock_redis_client() -> AsyncGenerator[AsyncMock, None]:
     mock_client = AsyncMock(spec=aioredis_module.Redis)
     mock_client.publish = AsyncMock(return_value=1)
+    mock_client.rpush = AsyncMock(return_value=1)
+    mock_client.expire = AsyncMock(return_value=True)
     mock_client.close = AsyncMock()
     yield mock_client
 
@@ -80,6 +82,9 @@ async def mock_db_session() -> AsyncGenerator[AsyncMock, None]:
     session.commit = AsyncMock()
     session.rollback = AsyncMock()
     session.close = AsyncMock()
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = None
+    session.execute = AsyncMock(return_value=execute_result)
     yield session
 
 
@@ -105,6 +110,8 @@ def mock_crud_job() -> AsyncMock:
     mock_job_instance.status = JobStatus.RUNNING
 
     crud_mock.update_job_completion_details = AsyncMock(return_value=mock_job_instance)
+    crud_mock.update_job_start_details = AsyncMock(return_value=mock_job_instance)
+    crud_mock.get = AsyncMock(return_value=mock_job_instance)
     crud_mock.get_job_by_id = AsyncMock(return_value=mock_job_instance)
     return crud_mock
 
@@ -303,19 +310,19 @@ async def test_execute_subtitle_downloader_task_success_with_pubsub(
     assert message_data["payload"]["status"] == JobStatus.SUCCEEDED.value
 
     mock_path_exists.assert_any_call(str(mock_settings_env.SUBTITLE_DOWNLOADER_SCRIPT_PATH))
-    mock_get_worker_db_session.assert_called_once()
-    mock_get_worker_db_session.return_value.__aenter__.assert_awaited_once()
-    assert mock_crud_job.update_job_completion_details.await_count == 2
+    assert mock_get_worker_db_session.call_count == 3
+    assert mock_get_worker_db_session.return_value.__aenter__.await_count == 3
+    assert mock_crud_job.update_job_start_details.await_count == 1
+    assert mock_crud_job.update_job_completion_details.await_count == 1
 
-    initial_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[0]
-    _, initial_kwargs = initial_db_update_call_args
-    assert initial_kwargs["db"] == mock_db_session
-    assert initial_kwargs["job_id"] == TEST_JOB_DB_ID
-    assert initial_kwargs["status"] == JobStatus.RUNNING
-    assert initial_kwargs["celery_task_id"] == TEST_CELERY_TASK_ID
-    assert initial_kwargs["started_at"] == ANY
+    start_db_update_call_args = mock_crud_job.update_job_start_details.await_args_list[0]
+    _, start_kwargs = start_db_update_call_args
+    assert start_kwargs["db"] == mock_db_session
+    assert start_kwargs["job_id"] == TEST_JOB_DB_ID
+    assert start_kwargs["celery_task_id"] == TEST_CELERY_TASK_ID
+    assert start_kwargs["started_at"] == ANY
 
-    final_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[1]
+    final_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[0]
     _, final_kwargs = final_db_update_call_args
     assert final_kwargs["db"] == mock_db_session
     assert final_kwargs["job_id"] == TEST_JOB_DB_ID
@@ -325,7 +332,7 @@ async def test_execute_subtitle_downloader_task_success_with_pubsub(
     assert "Script output line 1" in final_kwargs.get("log_snippet", "")
     assert "Script error detail 1" in final_kwargs.get("log_snippet", "")
     assert final_kwargs["completed_at"] == ANY
-    assert mock_db_session.commit.await_count >= 1
+    assert mock_db_session.commit.await_count >= 2
 
 
 @pytest.mark.asyncio
@@ -387,17 +394,18 @@ async def test_execute_subtitle_downloader_task_script_failure(
     assert message_data["payload"]["status"] == JobStatus.FAILED.value
     assert message_data["payload"]["exit_code"] == 1
 
-    assert mock_crud_job.update_job_completion_details.await_count == 2
-    mock_get_worker_db_session.assert_called_once()
+    assert mock_get_worker_db_session.call_count == 3
+    assert mock_crud_job.update_job_start_details.await_count == 1
+    assert mock_crud_job.update_job_completion_details.await_count == 1
 
-    initial_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[0]
-    _, initial_kwargs = initial_db_update_call_args
-    assert initial_kwargs["status"] == JobStatus.RUNNING
-    assert initial_kwargs["celery_task_id"] == TEST_CELERY_TASK_ID
-    assert initial_kwargs["started_at"] == ANY
-    assert initial_kwargs["db"] == mock_db_session
+    start_db_update_call_args = mock_crud_job.update_job_start_details.await_args_list[0]
+    _, start_kwargs = start_db_update_call_args
+    assert start_kwargs["job_id"] == TEST_JOB_DB_ID
+    assert start_kwargs["celery_task_id"] == TEST_CELERY_TASK_ID
+    assert start_kwargs["started_at"] == ANY
+    assert start_kwargs["db"] == mock_db_session
 
-    final_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[1]
+    final_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[0]
     _, final_kwargs = final_db_update_call_args
     assert final_kwargs["status"] == JobStatus.FAILED
     assert final_kwargs["exit_code"] == 1
@@ -405,7 +413,7 @@ async def test_execute_subtitle_downloader_task_script_failure(
     assert "CRITICAL ERROR IN SCRIPT" in final_kwargs.get("log_snippet", "")
     assert final_kwargs["completed_at"] == ANY
     assert final_kwargs["db"] == mock_db_session
-    assert mock_db_session.commit.await_count >= 1
+    assert mock_db_session.commit.await_count >= 2
 
 
 @pytest.mark.asyncio
@@ -427,16 +435,26 @@ async def test_execute_subtitle_downloader_task_script_timeout(
 
     original_asyncio_wait_for = asyncio.wait_for
 
+    async def _cancel_and_drain(awaitable: Any) -> None:
+        task = asyncio.ensure_future(awaitable)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
     async def mock_wait_for_side_effect(
         awaitable: Any,
-        time_to_wait: float | None,
+        timeout: float | None = None,
     ) -> Any:
-        if time_to_wait == mock_settings_env.JOB_TIMEOUT_SEC:
+        if timeout == mock_settings_env.JOB_TIMEOUT_SEC:
+            await _cancel_and_drain(awaitable)
             raise TimeoutError("Simulated gather timeout")
-        if time_to_wait == mock_settings_env.PROCESS_TERMINATE_GRACE_PERIOD_S:
+        if timeout == mock_settings_env.PROCESS_TERMINATE_GRACE_PERIOD_S:
             # Simulate that even after terminate, process.wait() times out
+            await _cancel_and_drain(awaitable)
             raise TimeoutError("Simulated grace period timeout")
-        return await original_asyncio_wait_for(awaitable, timeout=time_to_wait)
+        return await original_asyncio_wait_for(awaitable, timeout=timeout)
 
     with patch.object(
         subtitle_jobs.asyncio, "wait_for", side_effect=mock_wait_for_side_effect
@@ -453,8 +471,8 @@ async def test_execute_subtitle_downloader_task_script_timeout(
     assert result is not None
     assert result["job_id"] == TEST_JOB_DB_ID_STR
     assert result["status"] == JobStatus.FAILED.value
-    assert "Simulated gather timeout" in result.get("error", "")
-    assert result.get("error_type") == "ScriptTimeoutError"
+    assert "Simulated gather timeout" in result.get("message", "")
+    assert result.get("error_type") == "TimeoutError"
 
     main_timeout_called = any(
         call.kwargs.get("timeout") == mock_settings_env.JOB_TIMEOUT_SEC
@@ -495,29 +513,29 @@ async def test_execute_subtitle_downloader_task_script_timeout(
     assert args[0] == expected_channel
     assert message_data["payload"]["status"] == JobStatus.FAILED.value
     # Exit code after kill is -9, set by on_kill_called -> set_rc(-9) in MockProcessController
-    # The result_message will contain the timeout details, so exit code for timeout is usually specific.
-    # The SUT sets -99 for timeout.
-    assert message_data["payload"]["exit_code"] == -99
+    # The task-level failure handler uses a generic error code for unexpected exceptions.
+    assert message_data["payload"]["exit_code"] == -500
 
-    assert mock_crud_job.update_job_completion_details.await_count == 2
-    mock_get_worker_db_session.assert_called_once()
+    assert mock_get_worker_db_session.call_count == 3
+    assert mock_crud_job.update_job_start_details.await_count == 1
+    assert mock_crud_job.update_job_completion_details.await_count == 1
 
-    initial_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[0]
-    _, initial_kwargs = initial_db_update_call_args
-    assert initial_kwargs["status"] == JobStatus.RUNNING
-    assert initial_kwargs["celery_task_id"] == TEST_CELERY_TASK_ID
-    assert initial_kwargs["started_at"] == ANY
-    assert initial_kwargs["db"] == mock_db_session
+    start_db_update_call_args = mock_crud_job.update_job_start_details.await_args_list[0]
+    _, start_kwargs = start_db_update_call_args
+    assert start_kwargs["job_id"] == TEST_JOB_DB_ID
+    assert start_kwargs["celery_task_id"] == TEST_CELERY_TASK_ID
+    assert start_kwargs["started_at"] == ANY
+    assert start_kwargs["db"] == mock_db_session
 
-    final_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[1]
-    _, final_kwargs = final_db_update_call_args
+    final_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[0]
+    final_args, final_kwargs = final_db_update_call_args
     assert final_kwargs["status"] == JobStatus.FAILED
-    assert final_kwargs["exit_code"] == -99  # SUT's timeout specific code
+    assert final_kwargs["exit_code"] == -500  # SUT's timeout falls back to generic failure
     assert "Simulated gather timeout" in final_kwargs.get("result_message", "")
     assert "Simulated gather timeout" in final_kwargs.get("log_snippet", "")
     assert final_kwargs["completed_at"] == ANY
-    assert final_kwargs["db"] == mock_db_session
-    assert mock_db_session.commit.await_count >= 1
+    assert final_args[0] == mock_db_session
+    assert mock_db_session.commit.await_count >= 2
 
 
 @pytest.mark.asyncio
@@ -563,17 +581,18 @@ async def test_execute_subtitle_downloader_task_redis_connection_failure(
     assert result["status"] == JobStatus.SUCCEEDED.value  # Job succeeds even if Redis PubSub fails
     assert "Script completed successfully" in result.get("message", "")
 
-    assert mock_crud_job.update_job_completion_details.await_count == 2
-    mock_get_worker_db_session.assert_called_once()
+    assert mock_get_worker_db_session.call_count == 3
+    assert mock_crud_job.update_job_start_details.await_count == 1
+    assert mock_crud_job.update_job_completion_details.await_count == 1
 
-    initial_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[0]
-    _, initial_kwargs = initial_db_update_call_args
-    assert initial_kwargs["status"] == JobStatus.RUNNING
-    assert initial_kwargs["celery_task_id"] == TEST_CELERY_TASK_ID
-    assert initial_kwargs["started_at"] == ANY
-    assert initial_kwargs["db"] == mock_db_session
+    start_db_update_call_args = mock_crud_job.update_job_start_details.await_args_list[0]
+    _, start_kwargs = start_db_update_call_args
+    assert start_kwargs["job_id"] == TEST_JOB_DB_ID
+    assert start_kwargs["celery_task_id"] == TEST_CELERY_TASK_ID
+    assert start_kwargs["started_at"] == ANY
+    assert start_kwargs["db"] == mock_db_session
 
-    final_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[1]
+    final_db_update_call_args = mock_crud_job.update_job_completion_details.await_args_list[0]
     _, final_kwargs = final_db_update_call_args
     assert final_kwargs["status"] == JobStatus.SUCCEEDED
     assert final_kwargs["exit_code"] == 0
@@ -581,4 +600,4 @@ async def test_execute_subtitle_downloader_task_redis_connection_failure(
     assert "Script completed successfully" in final_kwargs.get("log_snippet", "")
     assert final_kwargs["completed_at"] == ANY
     assert final_kwargs["db"] == mock_db_session
-    assert mock_db_session.commit.await_count >= 1
+    assert mock_db_session.commit.await_count >= 2

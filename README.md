@@ -10,8 +10,28 @@ A secure, role-based web application to trigger a local subtitle downloader scri
 
 ## Core Features
 
-- Secure user authentication (JWT) and role-based access control (Admin/Standard).
+- **Access Control:** Granular roles (Standard, Admin, Superuser) with safe delegation:
+  - **Password Management:** Admins can reset user passwords (forcing change on next login) and disable MFA for recovery.
+  - **Path Safety:** Non-superusers are restricted to subdirectories of approved root paths.
+  - **Statistics:** Translation usage metrics available to all authenticated users.
 - Web interface to submit jobs (specifying target folder, language) to a Python subtitle downloader script.
+
+## Production Deployment
+
+Deploy the application using the included **Blue-Green Deployment** strategy for zero-downtime updates.
+
+### Commands
+
+| Command                    | Description                                                                                                                 | Use Case                                                                |
+| :------------------------- | :-------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------- |
+| `make prod`                | **Default Deployment**. Deploys the new stack and **re-encrypts** sensitive database fields (data encryption key rotation). | Use for regular maintenance or when rotating keys.                      |
+| `make prod-skip-reencrypt` | **Fast Deployment**. Deploys the new stack **without** re-encrypting data.                                                  | Use for rapid iterations, hotfixes, or when key rotation is not needed. |
+
+### Access Control & Recovery
+
+- **Force Password Change:** Admins can flag users to require a password update on their next login.
+- **MFA Reset:** Admins can disable 2FA for users who have lost their device (via the "Reset Password" dialog).
+- **Strict Pathing:** To prevent file system exposure, standard admins can only add paths that are _children_ of existing root paths managed by Superusers.
 - Real-time log streaming from running jobs via WebSockets.
 - Persistent job history stored in PostgreSQL.
 - Asynchronous job processing via Celery and Redis.
@@ -43,68 +63,96 @@ The backend utilizes a **FastAPI** application for HTTP endpoints and a **Celery
 
 ## Quick Start (Development)
 
-1.  **Prerequisites:**
+1. **Prerequisites:**
 
-    - Docker & Docker Compose (v2+)
-    - Git
-    - Make (optional, for convenience)
-    - `mkcert` (for trusted local HTTPS, recommended)
-    - ASDF (optional, for managing Python/Node versions via `.tool-versions`)
-    - Direnv (optional, for auto-loading `.env`)
+   - Docker & Docker Compose (v2+)
+   - Git
+   - Make (optional, for convenience)
+   - `mkcert` (for trusted local HTTPS, recommended)
+   - ASDF (optional, for managing Python/Node versions via `.tool-versions`)
+   - Direnv (optional, for auto-loading `.env`)
 
-2.  **Clone the repository:**
+2. **Clone the repository:**
 
-    ```bash
-    git clone https://github.com/softerist/subro_web.git
-    cd subro_web
-    ```
+   ```bash
+   git clone https://github.com/softerist/subro_web.git
+   cd subro_web
+   ```
 
-3.  **Setup Environment:**
+3. **Setup Environment:**
 
-    - Copy the environment template: `cp .env.example .env`
-    - Review and update `.env` with necessary secrets (e.g., `JWT_SECRET_KEY`) and configurations. **Do not commit `.env`!**
-    - (Recommended) If using `mkcert` for local HTTPS:
-      ```bash
-      mkcert -install
-      mkcert localhost 127.0.0.1 ::1
-      # Ensure cert/key paths in Caddyfile/docker-compose match
-      ```
+   - Copy the environment template: `cp .env.example .env`
+   - Review and update `.env` with necessary secrets (e.g., `JWT_SECRET_KEY`) and configurations. **Do not commit `.env`!**
+   - (Recommended) If using `mkcert` for local HTTPS:
 
-4.  **Install Tool Versions (if using ASDF):**
+     ```bash
+     mkcert -install
+     mkcert localhost 127.0.0.1 ::1
+     # Ensure cert/key paths in Caddyfile/docker-compose match
+     ```
 
-    ```bash
-    asdf install
-    ```
+4. **Install Tool Versions (if using ASDF):**
 
-5.  **Build and Start Services:**
+   ```bash
+   asdf install
+   ```
 
-    - Using Make:
-      ```bash
-      make dev
-      ```
-    - Or directly with Docker Compose:
-      ```bash
-      docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml up --build -d
-      ```
+5. **Build and Start Services:**
 
-6.  **Access the application:**
+   - Using Make:
 
-    - Frontend: `https://localhost` (or your configured Caddy host)
-    - API Docs: `https://localhost/api/docs`
+     ```bash
+     make dev
+     ```
 
-7.  **Stop Services:**
-    - Using Make: `make compose-down`
-    - Or directly: `docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml down`
+   - Or directly with Docker Compose:
+
+     ```bash
+     docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml up --build -d
+     ```
+
+6. **Access the application:**
+
+   - Frontend: `https://localhost` (or your configured Caddy host)
+   - API Docs: `https://localhost/api/docs`
+
+7. **Stop Services:**
+   - Using Make: `make compose-down`
+   - Or directly: `docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml down`
+
+## Testing
+
+Run the test suites in Docker:
+
+```bash
+make test
+make test-ts
+```
 
 ## Documentation
 
 - [Roadmap](./docs/roadmap.md)
 - [WebSocket API](./docs/api/websockets.md)
 - [Architecture Vision](./docs/architecture_vision.md)
-- [Deployment Guide](./docs/deployment.md) ([Link to TBD])
-- [Testing Strategy](./docs/testing_strategy.md) ([Link to TBD])
-- [Security Model](./docs/security_model.md) ([Link to TBD])
-- [Architectural Decision Records (ADRs)](./docs/adr/) ([Link to TBD])
+- [Deployment Guide](./docs/deployment.md)
+- [Testing Strategy](./docs/testing_strategy.md)
+- [Security Model](./docs/security_model.md)
+- [Architectural Decision Records (ADRs)](./docs/adr/)
+
+## Production Sanity Check
+
+Use the production sanity check script to validate health and basic job creation.
+
+```bash
+# Uses infra/.env.prod by default (falls back to .env.prod)
+infra/scripts/prod_sanity_check.sh
+
+# Include a quick job creation test (requires an API key)
+SANITY_API_KEY=your_api_key infra/scripts/prod_sanity_check.sh
+
+# Optional overrides
+ENV_FILE=/path/to/.env.prod SANITY_FOLDER_PATH=/mnt/sata0/Media SANITY_INSECURE=1 infra/scripts/prod_sanity_check.sh
+```
 
 ## Contributing
 

@@ -1,12 +1,18 @@
+import hashlib
+import hmac
 import secrets
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.security import fastapi_users
+from app.db.models.api_key import ApiKey
 from app.db.models.user import User
 from app.db.session import get_async_session
 
@@ -17,10 +23,31 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 current_user_jwt = fastapi_users.current_user(active=True)
 
 
+API_KEY_PREFIX_LEN = 8
+
+
 def generate_api_key() -> str:
     """Generate a secure, random API key."""
     # 32 bytes of randomness results in a ~43 character URL-safe string
     return secrets.token_urlsafe(32)
+
+
+def get_api_key_prefix(raw_key: str) -> str:
+    return raw_key[:API_KEY_PREFIX_LEN]
+
+
+def get_api_key_last4(raw_key: str) -> str:
+    return raw_key[-4:] if len(raw_key) >= 4 else raw_key
+
+
+def hash_api_key(raw_key: str) -> str:
+    if not settings.API_KEY_PEPPER:
+        raise RuntimeError("API_KEY_PEPPER is not configured.")
+    return hmac.new(
+        settings.API_KEY_PEPPER.encode(),
+        raw_key.encode(),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 async def get_user_by_api_key(
@@ -34,18 +61,38 @@ async def get_user_by_api_key(
     if not api_key:
         return None
 
-    # Query user by API key
-    # Note: In a production system with high traffic, you might want to hash this key
-    # or cache the result. For this personal app, direct lookup is acceptable.
-    query = select(User).where(User.api_key == api_key)
+    if not settings.API_KEY_PEPPER:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="API key authentication is not configured.",
+        )
+
+    prefix = get_api_key_prefix(api_key)
+    now = datetime.now(UTC)
+
+    query = (
+        select(ApiKey)
+        .where(
+            ApiKey.prefix == prefix,
+            ApiKey.revoked_at.is_(None),
+            (ApiKey.expires_at.is_(None) | (ApiKey.expires_at > now)),
+        )
+        .options(selectinload(ApiKey.user))
+    )
     result = await db.execute(query)
-    user = result.scalar_one_or_none()
+    candidates = result.scalars().all()
+    if not candidates:
+        return None
 
-    if user:
-        return user
+    hashed = hash_api_key(api_key)
+    for candidate in candidates:
+        if hmac.compare_digest(candidate.hashed_key, hashed):
+            candidate.last_used_at = now
+            candidate.use_count = (candidate.use_count or 0) + 1
+            db.add(candidate)
+            await db.commit()
+            return candidate.user
 
-    # If key provided but invalid, we could return None to let it fall back
-    # or raise 401. Let's return None to allow the composite dependency to decide.
     return None
 
 
@@ -72,9 +119,7 @@ async def get_current_user_with_api_key_or_jwt(
 ) -> User:
     # 1. Check API Key
     if api_key:
-        query = select(User).where(User.api_key == api_key)
-        result = await db.execute(query)
-        user = result.scalar_one_or_none()
+        user = await get_user_by_api_key(api_key, db)
         if user:
             return user
         # If API Key provided but invalid -> 401

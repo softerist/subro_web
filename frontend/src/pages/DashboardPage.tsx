@@ -199,8 +199,17 @@ export default function DashboardPage() {
         }
 
         const currentItem = currentLayout[itemIndex];
-        const minH = currentItem.minH ?? 1;
-        const boundedH = Math.max(minH, nextH);
+
+        // Get the default height for this breakpoint - this is the minimum we allow
+        const defaultLayout =
+          DEFAULT_LAYOUTS[layoutKey as keyof typeof DEFAULT_LAYOUTS];
+        const defaultItem = defaultLayout?.find(
+          (item) => item.i === "recent-jobs",
+        );
+        const defaultH = defaultItem?.h ?? 12;
+
+        // Only allow growing beyond the default, never shrinking below it
+        const boundedH = Math.max(defaultH, nextH);
         if (currentItem.h === boundedH) {
           return prev;
         }
@@ -250,7 +259,39 @@ export default function DashboardPage() {
         measureBeforeMount
         draggableHandle=".drag-handle"
         onLayoutChange={handleLayoutChange}
-        onBreakpointChange={(breakpoint) => setActiveBreakpoint(breakpoint)}
+        onBreakpointChange={(breakpoint) => {
+          setActiveBreakpoint(breakpoint);
+          // Reset recent-jobs height to default when breakpoint changes
+          // This fixes the issue where the panel doesn't remember its initial dimensions
+          const defaultLayout =
+            DEFAULT_LAYOUTS[breakpoint as keyof typeof DEFAULT_LAYOUTS];
+          if (defaultLayout) {
+            const defaultRecentJobs = defaultLayout.find(
+              (item) => item.i === "recent-jobs",
+            );
+            if (defaultRecentJobs) {
+              setLayouts((prev) => {
+                const currentLayout = prev[breakpoint];
+                if (!currentLayout) return prev;
+
+                const itemIndex = currentLayout.findIndex(
+                  (item: GridItem) => item.i === "recent-jobs",
+                );
+                if (itemIndex === -1) return prev;
+
+                const nextLayout = [...currentLayout];
+                nextLayout[itemIndex] = {
+                  ...currentLayout[itemIndex],
+                  h: defaultRecentJobs.h,
+                };
+
+                const nextLayouts = { ...prev, [breakpoint]: nextLayout };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(nextLayouts));
+                return nextLayouts;
+              });
+            }
+          }
+        }}
         margin={[GRID_MARGIN_Y, GRID_MARGIN_Y]}
         compactType="vertical"
         useCSSTransforms={!isMobileLayout}

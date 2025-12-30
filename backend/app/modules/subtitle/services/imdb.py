@@ -1,7 +1,23 @@
+import importlib.util
 import logging
+import pkgutil
 import re
 from collections import OrderedDict, defaultdict
 from pathlib import Path
+
+
+def _patch_pkgutil_find_loader() -> None:
+    """Shim deprecated pkgutil.find_loader for imdbpy on newer Python versions."""
+    if not hasattr(pkgutil, "find_loader"):
+        return
+
+    def _find_loader(name: str):
+        return importlib.util.find_spec(name)
+
+    pkgutil.find_loader = _find_loader  # type: ignore[assignment]
+
+
+_patch_pkgutil_find_loader()
 
 import imdb
 from rapidfuzz import fuzz

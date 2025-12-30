@@ -1,7 +1,7 @@
 import asyncio
 import uuid
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,18 +21,10 @@ MOCK_SCRIPT_PATH = CURRENT_DIR.parent / "scripts" / "mock_downloader.py"
 def mock_deps(db_session):
     """Provides mocks for Redis and DB context manager."""
     mock_redis = MagicMock()
-    mock_redis.publish = MagicMock()
-
-    async def async_publish(*_args, **_kwargs):
-        return
-
-    mock_redis.publish.side_effect = async_publish
-    mock_redis.close = MagicMock()
-
-    async def async_close():
-        return
-
-    mock_redis.close.side_effect = async_close
+    mock_redis.publish = AsyncMock()
+    mock_redis.rpush = AsyncMock()
+    mock_redis.expire = AsyncMock()
+    mock_redis.close = AsyncMock()
 
     class MockDbSessionContext:
         def __init__(self):

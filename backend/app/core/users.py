@@ -1,5 +1,6 @@
 import logging
 import uuid
+from datetime import UTC
 
 from fastapi import (
     Depends,
@@ -36,6 +37,15 @@ logger = logging.getLogger(__name__)
 password_helper = PasswordHelper()
 
 
+def _token_for_log(token: str) -> str:
+    if settings.DEBUG or settings.ENVIRONMENT == "development":
+        return token
+    if not token:
+        return ""
+    suffix = token[-4:] if len(token) >= 4 else token
+    return f"*****{suffix}"
+
+
 # User Manager
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = settings.SECRET_KEY
@@ -51,14 +61,27 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         _request: Request | None = None,
     ):
         logger.info(
-            f"User {user.id} ({user.email}) has requested a password reset. Token: {token}..."
+            "User %s (%s) requested a password reset. Token: %s",
+            user.id,
+            user.email,
+            _token_for_log(token),
         )
-        # Implement actual email sending logic here.
+        # Send password reset email
+        import asyncio
+
+        from app.services.email_service import send_password_reset_email
+
+        asyncio.create_task(send_password_reset_email(user.email, token))
 
     async def on_after_request_verify(
         self, user: User, token: str, _request: Request | None = None
     ):
-        logger.info(f"Verification requested for user {user.id} ({user.email}). Token: {token}...")
+        logger.info(
+            "Verification requested for user %s (%s). Token: %s",
+            user.id,
+            user.email,
+            _token_for_log(token),
+        )
         # Implement actual email sending logic here.
 
     async def on_after_verify(self, user: User, _token: str, _request: Request | None = None):
@@ -79,6 +102,45 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         _response: Response | None = None,
     ) -> None:
         logger.info(f"User {user.id} ({user.email}) logged out successfully.")
+
+    async def validate_password(self, password: str, user: User | None = None) -> None:
+        """
+        Validate password strength.
+        Requirements:
+        - Minimum 8 characters
+        - At least 1 uppercase letter
+        - At least 1 lowercase letter
+        - At least 1 number
+        """
+        import re
+
+        from fastapi_users.exceptions import InvalidPasswordException
+
+        if len(password) < 8:
+            raise InvalidPasswordException(reason="Password must be at least 8 characters long.")
+        if not re.search(r"[A-Z]", password):
+            raise InvalidPasswordException(
+                reason="Password must contain at least one uppercase letter."
+            )
+        if not re.search(r"[a-z]", password):
+            raise InvalidPasswordException(
+                reason="Password must contain at least one lowercase letter."
+            )
+        if not re.search(r"\d", password):
+            raise InvalidPasswordException(reason="Password must contain at least one number.")
+        # Check if password contains email (common weak pattern)
+        if user and user.email and user.email.split("@")[0].lower() in password.lower():
+            raise InvalidPasswordException(reason="Password should not contain your email address.")
+
+    async def on_after_reset_password(self, user: User, _request: Request | None = None) -> None:
+        """Update password_changed_at to invalidate old sessions."""
+        from datetime import datetime
+
+        user.password_changed_at = datetime.now(UTC)
+        await self.user_db.update(user, {"password_changed_at": user.password_changed_at})
+        logger.info(
+            f"Password reset for user {user.id} ({user.email}). All previous sessions invalidated."
+        )
 
 
 async def get_user_manager(
@@ -149,17 +211,16 @@ current_active_superuser = fastapi_users_instance.current_user(active=True, supe
 async def get_current_active_admin_user(
     user: User = Depends(current_active_user),
 ) -> User:
-    if user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="The user does not have admin privileges.",
-        )
-    if not user.is_superuser:  # Consistency check
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="The user is not a superuser (consistency check failed).",
-        )
-    return user
+    # Allow if superuser OR if role is admin
+    if user.is_superuser:
+        return user
+    if user.role == "admin":
+        return user
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="The user does not have admin privileges.",
+    )
 
 
 async def get_current_active_standard_user(user: User = Depends(current_active_user)) -> User:

@@ -11,12 +11,15 @@ import { useSettingsStore } from "@/store/settingsStore";
 import { getSetupStatus } from "@/lib/settingsApi";
 import { authApi } from "@/features/auth/api/auth";
 import LoginPage from "@/pages/LoginPage";
+import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import SetupPage from "@/pages/SetupPage";
 import DashboardPage from "@/pages/DashboardPage";
 import SettingsPage from "@/pages/SettingsPage";
 import StatisticsPage from "@/pages/StatisticsPage";
 import { UsersPage } from "@/features/admin/pages/UsersPage";
 import { PathsPage } from "@/features/paths/routes/PathsPage";
+import { ForceChangePasswordPage } from "@/features/auth/pages/ForceChangePasswordPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
 // Loading spinner component
@@ -32,6 +35,7 @@ const LoadingSpinner = () => (
 // Auth Bootstrap - refresh session on initial load if possible
 const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
   const [isReady, setIsReady] = useState(false);
+  const setupCompleted = useSettingsStore((state) => state.setupCompleted);
   const accessToken = useAuthStore((state) => state.accessToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const login = useAuthStore((state) => state.login);
@@ -42,6 +46,7 @@ const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
     let isMounted = true;
 
     const bootstrap = async () => {
+      // If we have an access token already, we're ready
       if (accessToken) {
         if (isMounted) {
           setIsReady(true);
@@ -49,11 +54,20 @@ const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
         return;
       }
 
-      try {
-        const refreshData = await authApi.refresh();
-        const newAccessToken = refreshData?.access_token;
+      // If setup is not completed or we don't know yet, don't try to refresh auth
+      // This prevents 401 errors in the console on the setup page
+      if (setupCompleted === false) {
+        if (isMounted) {
+          setIsReady(true);
+        }
+        return;
+      }
 
-        if (newAccessToken) {
+      try {
+        const sessionStatus = await authApi.checkSession();
+
+        if (sessionStatus.is_authenticated && sessionStatus.access_token) {
+          const newAccessToken = sessionStatus.access_token;
           setAccessToken(newAccessToken);
           try {
             const user = await authApi.getMe();
@@ -62,7 +76,7 @@ const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
                 id: user.id,
                 email: user.email,
                 role: user.role ?? "user",
-                api_key: user.api_key ?? null,
+                api_key_preview: user.api_key_preview ?? null,
                 is_superuser: user.is_superuser ?? false,
               });
             }
@@ -72,6 +86,7 @@ const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
             }
           }
         } else if (isMounted && isAuthenticated) {
+          // If we thought we were authenticated but backend says no -> logout
           logout();
         }
       } catch (err) {
@@ -179,8 +194,8 @@ const PublicRoute = ({ children }: { children: JSX.Element }) => {
 
 function AppRoutes() {
   return (
-    <AuthBootstrap>
-      <SetupCheckWrapper>
+    <SetupCheckWrapper>
+      <AuthBootstrap>
         <Routes>
           {/* Setup route - public, only accessible when setup not completed */}
           <Route path="/setup" element={<SetupPage />} />
@@ -192,6 +207,36 @@ function AppRoutes() {
               <PublicRoute>
                 <LoginPage />
               </PublicRoute>
+            }
+          />
+
+          {/* Forgot Password route - public */}
+          <Route
+            path="/forgot-password"
+            element={
+              <PublicRoute>
+                <ForgotPasswordPage />
+              </PublicRoute>
+            }
+          />
+
+          {/* Reset Password route - public */}
+          <Route
+            path="/reset-password"
+            element={
+              <PublicRoute>
+                <ResetPasswordPage />
+              </PublicRoute>
+            }
+          />
+
+          {/* Force Password Change route - protected but outside DashboardLayout to avoid infinite loop */}
+          <Route
+            path="/change-password"
+            element={
+              <ProtectedRoute>
+                <ForceChangePasswordPage />
+              </ProtectedRoute>
             }
           />
 
@@ -222,8 +267,8 @@ function AppRoutes() {
           {/* Default redirect */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
-      </SetupCheckWrapper>
-    </AuthBootstrap>
+      </AuthBootstrap>
+    </SetupCheckWrapper>
   );
 }
 
