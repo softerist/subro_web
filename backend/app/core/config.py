@@ -57,6 +57,9 @@ class Settings(BaseSettings):
         validation_alias="APP_DESCRIPTION",
     )
     API_V1_STR: str = Field(default="/api/v1", validation_alias="API_V1_STR")
+    OPENAPI_URL: str | None = Field(default=None, validation_alias="OPENAPI_URL")
+    DOCS_URL: str | None = Field(default=None, validation_alias="DOCS_URL")
+    REDOC_URL: str | None = Field(default=None, validation_alias="REDOC_URL")
 
     # --- JWT & Authentication Settings ---
     SECRET_KEY: str = Field(validation_alias=AliasChoices("JWT_SECRET_KEY", "SECRET_KEY"))
@@ -354,7 +357,18 @@ class Settings(BaseSettings):
         return parsed_list
 
     @model_validator(mode="after")
-    def _process_complex_fields_and_debug_overrides(self) -> "Settings":
+    def _run_post_init_logic(self) -> "Settings":
+        """Orchestrates post-initialization logic to reduce complexity."""
+        self._parse_complex_fields()
+        self._apply_debug_overrides()
+        self._configure_docs()
+
+        if self.ROOT_PATH and self.ROOT_PATH != "/":
+            self.ROOT_PATH = self.ROOT_PATH.strip("/")
+        return self
+
+    def _parse_complex_fields(self) -> None:
+        """Parses JSON list strings from environment variables."""
         self._parsed_allowed_media_folders = self._parse_string_list_input_helper(
             self.allowed_media_folders_env_str, "ALLOWED_MEDIA_FOLDERS"
         )
@@ -368,31 +382,41 @@ class Settings(BaseSettings):
             self.DATA_ENCRYPTION_KEYS_ENV_STR, "DATA_ENCRYPTION_KEYS"
         )
 
-        if self.DEBUG:
-            if self.LOG_LEVEL != "DEBUG":
-                logger.info("DEBUG mode is ON. Overriding LOG_LEVEL to DEBUG.")
-                self.LOG_LEVEL = "DEBUG"
-            if not self.DB_ECHO:
-                logger.info("DEBUG mode is ON. Overriding DB_ECHO to True.")
-                self.DB_ECHO = True
-            if not self.DB_ECHO_WORKER and self.DB_ECHO:
-                logger.info("DEBUG mode is ON & DB_ECHO is True. Setting DB_ECHO_WORKER to True.")
-                self.DB_ECHO_WORKER = True
-            if self.COOKIE_SECURE:  # In debug mode, cookies might be insecure for http://localhost
-                logger.info("DEBUG mode is ON. Overriding COOKIE_SECURE to False.")
-                self.COOKIE_SECURE = False
-        elif self.ENVIRONMENT != "development" and not self.COOKIE_SECURE:  # For prod/staging
-            # If not in dev and cookies are not secure, make them secure if HTTPS is intended
-            if self.USE_HTTPS:
+    def _apply_debug_overrides(self) -> None:
+        """Applies configuration overrides when DEBUG mode is enabled."""
+        if not self.DEBUG:
+            # Handle non-development environment security defaults
+            if self.ENVIRONMENT != "development" and not self.COOKIE_SECURE and self.USE_HTTPS:
                 self.COOKIE_SECURE = True
-            else:
+            elif self.ENVIRONMENT != "development" and not self.COOKIE_SECURE:
                 logger.warning(
-                    "Non-development environment with USE_HTTPS=False, COOKIE_SECURE remains False. Consider security implications."
+                    "Non-development environment with USE_HTTPS=False, COOKIE_SECURE remains False."
                 )
+            return
 
-        if self.ROOT_PATH and self.ROOT_PATH != "/":  # Avoid stripping if it's just "/"
-            self.ROOT_PATH = self.ROOT_PATH.strip("/")
-        return self
+        if self.LOG_LEVEL != "DEBUG":
+            logger.info("DEBUG mode is ON. Overriding LOG_LEVEL to DEBUG.")
+            self.LOG_LEVEL = "DEBUG"
+        if not self.DB_ECHO:
+            logger.info("DEBUG mode is ON. Overriding DB_ECHO to True.")
+            self.DB_ECHO = True
+        if not self.DB_ECHO_WORKER and self.DB_ECHO:
+            logger.info("DEBUG mode is ON & DB_ECHO is True. Setting DB_ECHO_WORKER to True.")
+            self.DB_ECHO_WORKER = True
+        if self.COOKIE_SECURE:
+            logger.info("DEBUG mode is ON. Overriding COOKIE_SECURE to False.")
+            self.COOKIE_SECURE = False
+
+    def _configure_docs(self) -> None:
+        """Configures API documentation URLs based on environment."""
+        if self.ENVIRONMENT == "development":
+            if self.OPENAPI_URL is None:
+                self.OPENAPI_URL = f"{self.API_V1_STR}/openapi.json"
+            if self.DOCS_URL is None:
+                self.DOCS_URL = f"{self.API_V1_STR}/docs"
+            if self.REDOC_URL is None:
+                self.REDOC_URL = f"{self.API_V1_STR}/redoc"
+        # In other environments, docs are None (disabled) unless explicitly set.
 
     @property
     def ALLOWED_MEDIA_FOLDERS(self) -> list[str]:

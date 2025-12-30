@@ -202,9 +202,9 @@ app = FastAPI(
     description=settings.APP_DESCRIPTION,
     lifespan=lifespan,
     root_path=effective_root_path,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    docs_url=f"{settings.API_V1_STR}/docs",
-    redoc_url=f"{settings.API_V1_STR}/redoc",
+    openapi_url=settings.OPENAPI_URL,
+    docs_url=settings.DOCS_URL,
+    redoc_url=settings.REDOC_URL,
     servers=[{"url": openapi_server_url, "description": "Current environment server"}],
     openapi_components={
         "securitySchemes": {
