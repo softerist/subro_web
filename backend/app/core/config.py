@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     OPENAPI_URL: str | None = Field(default=None, validation_alias="OPENAPI_URL")
     DOCS_URL: str | None = Field(default=None, validation_alias="DOCS_URL")
     REDOC_URL: str | None = Field(default=None, validation_alias="REDOC_URL")
+    HEALTHZ_URL: str | None = Field(default=None, validation_alias="HEALTHZ_URL")
 
     # --- JWT & Authentication Settings ---
     SECRET_KEY: str = Field(validation_alias=AliasChoices("JWT_SECRET_KEY", "SECRET_KEY"))
@@ -416,7 +417,11 @@ class Settings(BaseSettings):
                 self.DOCS_URL = f"{self.API_V1_STR}/docs"
             if self.REDOC_URL is None:
                 self.REDOC_URL = f"{self.API_V1_STR}/redoc"
-        # In other environments, docs are None (disabled) unless explicitly set.
+            if self.HEALTHZ_URL is None:
+                self.HEALTHZ_URL = f"{self.API_V1_STR}/healthz"
+        else:
+            # In other environments, docs are None (disabled) unless explicitly set.
+            pass  # HEALTHZ_URL remains None if not explicitly set
 
     @property
     def ALLOWED_MEDIA_FOLDERS(self) -> list[str]:

@@ -383,37 +383,41 @@ if settings.ENVIRONMENT != "production":
             raise HTTPException(status_code=500, detail=f"DB Test Error: {e!s}") from e
 
 
-@api_v1_router.get(
-    "/healthz",
-    tags=["Health Checks"],
-    summary="Detailed API and Dependencies Health Check",
-    status_code=status.HTTP_200_OK,
-)
-async def health_check_api_v1_detailed(db: AsyncSession = Depends(get_async_session)):
-    db_status = "unavailable"
-    try:
-        await db.execute(text("SELECT 1"))
-        db_status = "connected"
-    except Exception as e:
-        logger.error(
-            f"Health check (detailed): Database connection failed. Error: {e}",
-            exc_info=settings.DEBUG,
+# --- Health Check Endpoints ---
+# Move health_check_api_v1_detailed to be registered conditionally on app
+if settings.HEALTHZ_URL:
+
+    @app.get(
+        settings.HEALTHZ_URL,
+        tags=["Health Checks"],
+        summary="Detailed API and Dependencies Health Check",
+        status_code=status.HTTP_200_OK,
+    )
+    async def health_check_api_v1_detailed(db: AsyncSession = Depends(get_async_session)):
+        db_status = "unavailable"
+        try:
+            await db.execute(text("SELECT 1"))
+            db_status = "connected"
+        except Exception as e:
+            logger.error(
+                f"Health check (detailed): Database connection failed. Error: {e}",
+                exc_info=settings.DEBUG,
+            )
+        dependencies_status = {"database": db_status}
+        overall_status = (
+            "ok"
+            if all(status == "connected" for status in dependencies_status.values())
+            else "degraded"
         )
-    dependencies_status = {"database": db_status}
-    overall_status = (
-        "ok"
-        if all(status == "connected" for status in dependencies_status.values())
-        else "degraded"
-    )
-    if overall_status == "ok":
-        return {"status": overall_status, "dependencies": dependencies_status}
-    logger.error(
-        f"API health check (detailed) failed. Status: {overall_status}, Dependencies: {dependencies_status}"
-    )
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail={"status": overall_status, "dependencies": dependencies_status},
-    )
+        if overall_status == "ok":
+            return {"status": overall_status, "dependencies": dependencies_status}
+        logger.error(
+            f"API health check (detailed) failed. Status: {overall_status}, Dependencies: {dependencies_status}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": overall_status, "dependencies": dependencies_status},
+        )
 
 
 app.include_router(api_v1_router, prefix=settings.API_V1_STR)

@@ -94,8 +94,8 @@ async def complete_setup(
     is_completed = await crud_app_settings.get_setup_completed(db)
     if is_completed:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Setup has already been completed. Use /settings endpoints to modify configuration.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not Found",
         )
 
     # Create admin user
@@ -184,8 +184,8 @@ async def skip_setup(
     is_completed = await crud_app_settings.get_setup_completed(db)
     if is_completed:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Setup has already been completed.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not Found",
         )
 
     # Create admin user from provided credentials or fall back to env vars
