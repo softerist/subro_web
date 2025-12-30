@@ -160,6 +160,7 @@ async def main() -> None:
         except Exception as e:
             await session.rollback()
             logger.error(f"An error occurred during database initialization: {e}", exc_info=True)
+            sys.exit(1)
 
     logger.info("Service initialization for initial_data script finished.")
 
