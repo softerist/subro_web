@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Verification script to test that Redis and PostgreSQL are accessible from localhost.
 This verifies the infrastructure fixes for the integration tests.
