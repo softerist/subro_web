@@ -73,7 +73,7 @@ PYTHON_MIGRATION_FILES_EXIST := $(shell find backend/alembic/versions -maxdepth 
 # THIS IS THE SECTION WHERE THE OLD 'dev' WAS. IT'S NOW GONE.
 # The .PHONY for dev is handled by the later definition.
 # We still keep the other .PHONY targets from the old block if they are unique.
-.PHONY: rebuild-dev compose-up compose-down compose-down-keep-volumes ensure-dev-cleanup
+.PHONY: rebuild-dev compose-up compose-down compose-down-keep-volumes ensure-dev-cleanup ensure-test-db
 
 stop-prod: ## Stop production stacks to free up ports
 	@echo "Stopping production stacks (if running)..."
@@ -84,13 +84,19 @@ stop-prod: ## Stop production stacks to free up ports
 # rebuild-dev now correctly depends on the later 'dev' implicitly through compose-up if needed,
 # or you might adjust its dependencies if 'ensure-migrations' logic should also apply here.
 # For now, let's assume its current dependencies are fine.
-rebuild-dev: ensure-dev-cleanup compose-down db-migrate compose-up ## Clean rebuild: stop, wipe volumes, migrate, then start fresh
+rebuild-dev: ensure-dev-cleanup compose-down db-migrate compose-up ensure-test-db ## Clean rebuild: stop, wipe volumes, migrate, then start fresh
 	@echo "Development stack fully rebuilt and started."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8444"
 	@echo "API available at http://localhost:$(API_PORT_HOST)"
 	@echo "API Docs available at http://localhost:$(API_PORT_HOST)/api/v1/docs"
 	@echo "Frontend available at http://localhost:$(FRONTEND_PORT_HOST)"
+
+ensure-test-db: ## Ensure test database exists on db_test container
+	@echo "Ensuring test database exists..."
+	@docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) exec -T db_test psql -U admin -d subappdb -c "SELECT 1 FROM pg_database WHERE datname='subappdb_pytest'" | grep -q 1 || \
+		docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) exec -T db_test psql -U admin -d subappdb -c "CREATE DATABASE subappdb_pytest;" 2>/dev/null || true
+	@echo "Test database ready."
 
 compose-up: ## Start the Docker Compose stack in detached mode (builds if necessary)
 	@echo "Starting Docker Compose stack..."

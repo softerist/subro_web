@@ -38,7 +38,7 @@ async def list_storage_paths(
 
 
 @router.post("/", response_model=StoragePathRead, status_code=status.HTTP_201_CREATED)
-async def create_storage_path(
+async def create_storage_path(  # noqa: C901
     path_in: StoragePathCreate,
     db: AsyncSession = Depends(get_async_session),
     current_user=Depends(current_active_user),

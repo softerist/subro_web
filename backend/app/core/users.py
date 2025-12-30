@@ -33,6 +33,9 @@ from app.db.session import get_user_db as get_user_db_adapter_from_session
 # --- Logger Setup ---
 logger = logging.getLogger(__name__)
 
+# Strong references to background tasks to prevent GC
+_background_tasks = set()
+
 # --- Password Helper ---
 password_helper = PasswordHelper()
 
@@ -71,7 +74,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         from app.services.email_service import send_password_reset_email
 
-        asyncio.create_task(send_password_reset_email(user.email, token))
+        task = asyncio.create_task(send_password_reset_email(user.email, token))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
     async def on_after_request_verify(
         self, user: User, token: str, _request: Request | None = None

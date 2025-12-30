@@ -91,7 +91,7 @@ def generate_device_token() -> str:
 
 
 async def setup_mfa(
-    db: AsyncSession,
+    _db: AsyncSession,
     user: User,
 ) -> dict:
     """

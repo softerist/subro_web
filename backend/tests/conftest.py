@@ -1,4 +1,5 @@
 # backend/tests/conftest.py
+import logging  # Added to configure logging
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -12,12 +13,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 # Ensure test env values override container defaults before settings import.
 load_dotenv(Path(__file__).resolve().parents[1] / ".env.test", override=True)
 
-from app.core.config import settings
-from app.core.rate_limit import limiter
-from app.db.models.user import Base
+# Keep log output clean
+logging.getLogger("faker").setLevel(logging.WARNING)
+
+from app.core.config import settings  # noqa: E402
+from app.core.rate_limit import limiter  # noqa: E402
+from app.db.models.user import Base  # noqa: E402
 
 # MODIFIED LINE: Import get_async_session instead of get_db_session
-from app.db.session import get_async_session
+from app.db.session import get_async_session  # noqa: E402
 
 # Ensure TEST_DATABASE_URL is correctly defined, using your ASYNC_DATABASE_URI from settings
 # It seems ASYNC_DATABASE_URI should be ASYNC_SQLALCHEMY_DATABASE_URL based on your session.py

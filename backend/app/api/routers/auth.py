@@ -8,6 +8,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import exceptions
 from fastapi_users.authentication import JWTStrategy
 from jose import JWTError, jwt
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -315,7 +316,6 @@ async def check_session(
 
 
 # --- Change Password Endpoint (for logged-in users) ---
-from pydantic import BaseModel, Field
 
 
 class ChangePasswordRequest(BaseModel):
@@ -326,7 +326,7 @@ class ChangePasswordRequest(BaseModel):
 @auth_router.patch("/password", summary="Change password (logged in users)")
 @limiter.limit("3/minute")
 async def change_password(
-    request: Request,
+    request: Request,  # noqa: ARG001 - Name 'request' required by rate limiter
     body: ChangePasswordRequest,
     current_user: UserModel = Depends(current_active_user),
     user_manager: UserManager = Depends(get_user_manager),
@@ -356,7 +356,7 @@ async def change_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e.reason) if hasattr(e, "reason") else str(e),
-        )
+        ) from e
 
     # Update password
     hashed_new_password = password_helper.hash(body.new_password)

@@ -137,7 +137,7 @@ async def create_user_admin(
         "Only Superusers can update other Superusers."
     ),
 )
-async def update_user_by_id_admin(
+async def update_user_by_id_admin(  # noqa: C901
     update_data: AdminUserUpdate,
     target_user: User = Depends(get_target_user_or_404),
     current_user: User = Depends(get_current_active_admin_user),

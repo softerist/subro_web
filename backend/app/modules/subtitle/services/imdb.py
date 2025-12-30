@@ -19,15 +19,18 @@ def _patch_pkgutil_find_loader() -> None:
 
 _patch_pkgutil_find_loader()
 
-import imdb
-from rapidfuzz import fuzz
+import imdb  # noqa: E402
+from rapidfuzz import fuzz  # noqa: E402
 
-from app.core.config import settings
-from app.modules.subtitle.core.constants import (  # Import specific items to avoid long prefixes
+from app.core.config import settings  # noqa: E402
+from app.modules.subtitle.core.constants import (  # noqa: E402
     FUZZY_MATCH_THRESHOLD,
     TYPE_MAP,
 )
-from app.modules.subtitle.utils.network_utils import create_session_with_retries, make_request
+from app.modules.subtitle.utils.network_utils import (  # noqa: E402
+    create_session_with_retries,
+    make_request,
+)
 
 logger = logging.getLogger(__name__)
 

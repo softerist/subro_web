@@ -187,11 +187,11 @@ async def verify_mfa_login(
     # Get user
     try:
         user = await user_manager.get(mfa_user_id)
-    except Exception:
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid MFA session.",
-        )
+        ) from e
 
     if not user or not user.is_active:
         raise HTTPException(
