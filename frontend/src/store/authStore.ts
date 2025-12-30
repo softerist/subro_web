@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { UserPreferences } from "@/features/admin/types";
 
 interface User {
   id: string;
@@ -8,6 +9,7 @@ interface User {
   api_key_preview?: string | null;
   is_superuser: boolean;
   force_password_change?: boolean;
+  preferences?: UserPreferences;
 }
 
 interface AuthState {

@@ -190,7 +190,7 @@ db-migrate-and-apply: db-makemigrations db-apply-migration ## Generate migration
 
 
 .PHONY: dev ensure-migrations stop-prod prod reset-prod add-test-statistics reset-prod-with-stats reset-dev reset-dev-db add-test-statistics-dev reset-dev-with-stats rebuild-prod rebuild-dev-with-stats rebuild-prod-with-stats
-dev: stop-prod ensure-migrations compose-up ## Start the full stack (generates initial migration if needed, uses existing volumes)
+dev: stop-prod ensure-migrations compose-up db-migrate ## Start the full stack (generates initial migration if needed, uses existing volumes)
 	@echo "Development stack is up."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8444"
@@ -208,7 +208,6 @@ ensure-migrations:
 	else \
 		echo "Migration files found. Skipping generation."; \
 	fi
-	@echo "Running database migrations..."
 
 prod: ensure-dev-cleanup ## Deploy to production using blue-green deployment script
 	@echo "Deploying to production..."
@@ -342,7 +341,7 @@ test-integration-prod: ## Run integration tests inside prod container (requires 
 	@docker cp backend/tests blue-api-1:/app/
 	@docker cp backend/pyproject.toml blue-api-1:/app/
 	@echo "Installing test dependencies..."
-	@docker exec blue-api-1 pip install pytest pytest-asyncio websockets redis --quiet
+	@docker exec blue-api-1 pip install pytest pytest-asyncio pytest-dotenv websockets redis --quiet
 	@echo "Running integration tests inside prod container..."
 	docker exec -e TEST_API_BASE_URL=http://localhost:8000 \
 		-e TEST_WS_BASE_URL=ws://localhost:8000 \

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
-from sqlalchemy import DateTime, String, func  # text is not needed if no server_default
+from sqlalchemy import JSON, DateTime, String, func  # text is not needed if no server_default
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base
@@ -40,6 +40,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         DateTime(timezone=True), nullable=True
     )  # Updated when password changes, used to invalidate old tokens
     force_password_change: Mapped[bool] = mapped_column(default=False, nullable=False)
+    preferences: Mapped[dict | None] = mapped_column(JSON, default={}, nullable=True)
     jobs: Mapped[list["Job"]] = relationship(
         "Job",
         back_populates="user",

@@ -30,10 +30,22 @@ from app.db.models.user import User
 
 # API base URL - configurable via environment, defaults to Caddy proxy
 # Use TEST_API_BASE_URL/TEST_WS_BASE_URL for custom endpoints
-# For direct API access (dev): http://localhost:8001
-# For Caddy proxy (prod): https://localhost:8443
-API_BASE_URL = os.getenv("TEST_API_BASE_URL", "https://localhost:8443")
-WS_BASE_URL = os.getenv("TEST_WS_BASE_URL", "wss://localhost:8443")
+# For direct API access (dev): http://api:8000 (inside Docker) or http://localhost:8001 (host)
+# For Caddy proxy (prod): https://<DOMAIN_NAME>
+DEFAULT_BASE_HOST = "localhost:8444"
+DEFAULT_SCHEME = "https"
+
+if Path("/.dockerenv").exists():
+    DEFAULT_BASE_HOST = "api:8000"
+    DEFAULT_SCHEME = "http"
+elif os.getenv("ENVIRONMENT") == "production" and os.getenv("DOMAIN_NAME"):
+    DEFAULT_BASE_HOST = os.getenv("DOMAIN_NAME")
+
+API_BASE_URL = os.getenv("TEST_API_BASE_URL", f"{DEFAULT_SCHEME}://{DEFAULT_BASE_HOST}")
+WS_BASE_URL = os.getenv(
+    "TEST_WS_BASE_URL",
+    f"{'ws' if DEFAULT_SCHEME == 'http' else 'wss'}://{DEFAULT_BASE_HOST}",
+)
 
 # SSL context for self-signed certificates in local testing
 _ssl_context = ssl.create_default_context()

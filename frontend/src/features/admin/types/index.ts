@@ -1,3 +1,8 @@
+export interface UserPreferences {
+  mfa_banner_dismissed?: boolean;
+  [key: string]: unknown;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -6,6 +11,7 @@ export interface User {
   is_verified: boolean;
   role: "admin" | "standard";
   created_at?: string; // Optional if not always present
+  preferences?: UserPreferences;
 }
 
 export interface UserCreate {
@@ -24,4 +30,5 @@ export interface UserUpdate {
   is_active?: boolean;
   mfa_enabled?: boolean;
   force_password_change?: boolean;
+  preferences?: UserPreferences;
 }

@@ -37,10 +37,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { useAuthStore } from "@/store/authStore";
 import { mfaApi, MfaSetupResponse } from "../api/mfa";
 
 export function MfaSettings() {
   const queryClient = useQueryClient();
+  const userId = useAuthStore((state) => state.user?.id);
   const [setupData, setSetupData] = useState<MfaSetupResponse | null>(null);
   const [verifyCode, setVerifyCode] = useState("");
   const [disablePassword, setDisablePassword] = useState("");
@@ -50,13 +52,13 @@ export function MfaSettings() {
 
   // Fetch MFA status
   const { data: status, isLoading: statusLoading } = useQuery({
-    queryKey: ["mfa-status"],
+    queryKey: ["mfa-status", userId],
     queryFn: mfaApi.getStatus,
   });
 
   // Fetch trusted devices
   const { data: devices = [] } = useQuery({
-    queryKey: ["trusted-devices"],
+    queryKey: ["trusted-devices", userId],
     queryFn: mfaApi.getTrustedDevices,
     enabled: status?.mfa_enabled,
   });
@@ -87,7 +89,7 @@ export function MfaSettings() {
     onSuccess: () => {
       setSetupData(null);
       setVerifyCode("");
-      queryClient.invalidateQueries({ queryKey: ["mfa-status"] });
+      queryClient.invalidateQueries({ queryKey: ["mfa-status", userId] });
     },
     onError: (err: unknown) => {
       const errorMessage = (
@@ -103,8 +105,8 @@ export function MfaSettings() {
     onSuccess: () => {
       setShowDisableDialog(false);
       setDisablePassword("");
-      queryClient.invalidateQueries({ queryKey: ["mfa-status"] });
-      queryClient.invalidateQueries({ queryKey: ["trusted-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["mfa-status", userId] });
+      queryClient.invalidateQueries({ queryKey: ["trusted-devices", userId] });
     },
     onError: (err: unknown) => {
       const errorMessage = (
@@ -118,7 +120,7 @@ export function MfaSettings() {
   const revokeMutation = useMutation({
     mutationFn: mfaApi.revokeTrustedDevice,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["trusted-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["trusted-devices", userId] });
     },
   });
 

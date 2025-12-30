@@ -43,7 +43,11 @@ import { PasswordSettings } from "@/features/auth/components/PasswordSettings";
 type SettingsTab = "integrations" | "qbittorrent" | "security";
 
 export default function SettingsPage() {
-  const [currentTab, setCurrentTab] = useState<SettingsTab>("integrations");
+  const { user, setUser } = useAuthStore();
+  const isAdmin = user?.role === "admin" || user?.is_superuser;
+  const [currentTab, setCurrentTab] = useState<SettingsTab>(
+    isAdmin ? "integrations" : "security",
+  );
   const [settings, setSettings] = useState<SettingsRead | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -62,7 +66,6 @@ export default function SettingsPage() {
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
   const [generatedApiKey, setGeneratedApiKey] = useState<string | null>(null);
 
-  const { user, setUser } = useAuthStore();
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
     type: "deepl" | "google" | null;
@@ -84,7 +87,7 @@ export default function SettingsPage() {
     { id: "integrations", label: "API Integrations", icon: Plug },
     { id: "qbittorrent", label: "qBittorrent", icon: HardDrive },
     { id: "security", label: "Security", icon: ShieldCheck },
-  ] as const;
+  ].filter((tab) => (isAdmin ? true : tab.id === "security"));
 
   const hasChanges = Object.keys(formData).length > 0;
 
@@ -123,8 +126,13 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
-    loadSettings();
-  }, []);
+    if (isAdmin) {
+      loadSettings();
+    } else {
+      setIsLoading(false);
+      setCurrentTab("security");
+    }
+  }, [isAdmin]);
 
   const loadSettings = async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -348,7 +356,11 @@ export default function SettingsPage() {
     <div className="space-y-6 px-4 pt-3 pb-3 page-enter page-stagger">
       <PageHeader
         title="Settings"
-        description="Manage your application configuration"
+        description={
+          isAdmin
+            ? "Manage your application configuration"
+            : "Manage your account security"
+        }
         icon={Settings}
         iconClassName="from-amber-500 to-orange-500 shadow-amber-500/20"
       />
@@ -1497,28 +1509,34 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <SavePill
-        isVisible={hasChanges}
-        isLoading={isSaving}
-        hasChanges={hasChanges}
-        onSave={handleSave}
-        onDiscard={handleDiscard}
-        isSuccess={!!success}
-        containerRef={cardRef}
-      />
+      {isAdmin && (
+        <SavePill
+          isVisible={hasChanges}
+          isLoading={isSaving}
+          hasChanges={hasChanges}
+          onSave={handleSave}
+          onDiscard={handleDiscard}
+          isSuccess={!!success}
+          containerRef={cardRef}
+        />
+      )}
 
-      <ConfirmDialog
-        key={`${confirmState.index}-${confirmState.targetRect?.top}`}
-        open={confirmState.open}
-        onOpenChange={(open) => setConfirmState((prev) => ({ ...prev, open }))}
-        title={confirmState.title}
-        description={confirmState.description}
-        onConfirm={executeDelete}
-        isLoading={isSaving}
-        variant="destructive"
-        confirmLabel="Remove"
-        targetRect={confirmState.targetRect}
-      />
+      {isAdmin && (
+        <ConfirmDialog
+          key={`${confirmState.index}-${confirmState.targetRect?.top}`}
+          open={confirmState.open}
+          onOpenChange={(open) =>
+            setConfirmState((prev) => ({ ...prev, open }))
+          }
+          title={confirmState.title}
+          description={confirmState.description}
+          onConfirm={executeDelete}
+          isLoading={isSaving}
+          variant="destructive"
+          confirmLabel="Remove"
+          targetRect={confirmState.targetRect}
+        />
+      )}
     </div>
   );
 }

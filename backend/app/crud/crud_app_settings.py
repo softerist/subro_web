@@ -11,6 +11,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decrypt_value, encrypt_value, mask_sensitive_value
@@ -86,10 +88,18 @@ class CRUDAppSettings:
 
         if settings is None:
             logger.info("AppSettings row not found. Creating with defaults.")
-            settings = AppSettings(id=1, setup_completed=False)
-            db.add(settings)
-            await db.commit()
-            await db.refresh(settings)
+            try:
+                await db.execute(
+                    insert(AppSettings)
+                    .values(id=1, setup_completed=False)
+                    .on_conflict_do_nothing(index_elements=[AppSettings.id])
+                )
+                await db.commit()
+            except IntegrityError:
+                # Another process created the singleton row first.
+                await db.rollback()
+            result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
+            settings = result.scalar_one()
 
         return settings
 

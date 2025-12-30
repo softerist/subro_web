@@ -31,6 +31,7 @@ RUN npm run build
 FROM nginx:stable-alpine AS production
 RUN apk add --no-cache curl
 COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.main.conf /etc/nginx/nginx.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Support running as non-root
