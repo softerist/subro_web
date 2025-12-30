@@ -1,5 +1,3 @@
-# src/utils/file_utils.py
-
 import codecs  # For reading/writing with specific encodings like utf-8-sig
 import logging
 import os

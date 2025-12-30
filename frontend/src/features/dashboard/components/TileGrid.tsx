@@ -37,7 +37,6 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
     undefined,
   );
 
-  // Sync local state with fetched data
   useEffect(() => {
     if (tiles) {
       setLocalTiles(tiles);
@@ -60,7 +59,6 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
         const newIndex = items.findIndex((item) => item.id === over.id);
         const newOrder = arrayMove(items, oldIndex, newIndex);
 
-        // Trigger API update
         reorderTiles({ ordered_ids: newOrder.map((t) => t.id) });
 
         return newOrder;
@@ -103,16 +101,6 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
     );
   }
 
-  /*
-    if (!localTiles?.length && !isEditable) {
-        return (
-            <div className="text-center text-muted-foreground py-10">
-                No tiles available.
-            </div>
-        );
-    }
-    */
-
   return (
     <>
       {isEditable ? (
@@ -135,7 +123,6 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
                   onDelete={handleDelete}
                 />
               ))}
-              {/* Add New Tile Button (in grid) */}
               <button
                 type="button"
                 className="flex w-full items-center justify-center h-full border-2 border-dashed border-border/60 rounded-xl cursor-pointer hover:border-primary/50 hover:bg-accent/30 transition-all duration-200 min-h-[120px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"

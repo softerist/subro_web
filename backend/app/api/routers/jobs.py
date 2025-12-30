@@ -1,4 +1,3 @@
-# backend/app/api/routers/jobs.py
 import logging
 from datetime import UTC, datetime  # Python 3.11+ for UTC, for older use datetime.timezone.utc
 
@@ -7,7 +6,6 @@ from pathlib import Path
 from typing import Annotated  # List for Python < 3.9 compatibility with list[]
 from uuid import UUID
 
-# FastAPI imports
 from fastapi import (
     APIRouter,
     Body,
@@ -29,9 +27,7 @@ from app.core.security import current_active_user  # Your user dependency
 from app.db.models.job import Job, JobStatus
 from app.db.models.user import User  # Assuming User model for type hinting
 from app.db.session import get_async_session
-
-# Ensure these schemas are correctly defined and imported from app.schemas.job
-from app.schemas.job import (  # Removed JobUpdate as we'll set directly
+from app.schemas.job import (
     JobCreate,
     JobCreateInternal,
     JobRead,

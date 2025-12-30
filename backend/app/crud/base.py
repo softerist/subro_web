@@ -1,5 +1,4 @@
-# backend/app/crud/base.py
-from typing import Any, Generic, TypeVar  # Ensure all necessary imports
+from typing import Any, Generic, TypeVar
 
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
@@ -7,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement  # For type hinting order_by clauses
 
-from app.db.base_class import Base  # Your project's Base SQLAlchemy model
+from app.db.base_class import Base
 
 ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)

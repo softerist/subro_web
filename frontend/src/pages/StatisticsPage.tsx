@@ -78,8 +78,7 @@ export default function StatisticsPage() {
   };
 
   const handleShowLess = () => {
-    // Reset to first page without refetching if we want to be efficient,
-    // or just slice the local array. Slicing local array is faster.
+    // Keep only first page of already-loaded items
     setHistory((prev) => prev.slice(0, PAGE_SIZE));
     setCurrentPage(1);
   };

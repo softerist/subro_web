@@ -1,6 +1,3 @@
-# backend/app/exceptions.py
-
-
 class TaskSetupError(Exception):
     """Base exception for errors during task setup."""
 

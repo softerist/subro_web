@@ -1,4 +1,3 @@
-# src/core/strategies/local_scanner.py
 import logging
 from pathlib import Path
 

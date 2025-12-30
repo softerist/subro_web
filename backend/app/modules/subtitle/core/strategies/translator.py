@@ -1,4 +1,3 @@
-# src/core/strategies/translator.py
 import logging
 from pathlib import Path
 

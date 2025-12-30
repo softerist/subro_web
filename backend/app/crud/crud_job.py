@@ -1,4 +1,3 @@
-# backend/app/crud/crud_job.py
 import logging
 from datetime import (
     UTC,  # Keeping your import if you prefer it and are on Python 3.11+
@@ -170,9 +169,6 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
 
         return update_data
 
-    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    # +++ NEW METHOD TO FIX AttributeError                                      +++
-    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     async def update_job_start_details(
         self,
         db: AsyncSession,
@@ -213,10 +209,6 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
             f"Job {job_id} start details updated. Status: RUNNING, Celery ID: {celery_task_id}."
         )
         return db_obj
-
-    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    # +++ END OF NEW METHOD                                                       +++
-    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
     @staticmethod
     def _handle_started_at(
@@ -267,5 +259,4 @@ class CRUDJob(CRUDBase[Job, JobCreateInternal, JobUpdate]):
         return update_data
 
 
-# Instantiate the CRUDJob object for easy importing
 job = CRUDJob(Job)

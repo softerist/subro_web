@@ -1,5 +1,3 @@
-# src/utils/subtitle_parser.py
-
 import html
 import logging
 import re

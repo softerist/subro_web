@@ -42,20 +42,16 @@ import {
 const GRID_ROW_HEIGHT = 30;
 const GRID_MARGIN_Y = 7;
 
-// Default layouts for different breakpoints
+// --- Grid Layouts ---
 const DEFAULT_LAYOUTS = {
   lg: [
-    // Left column (4 cols): Quick Links on top (h=5 to fix scroll), New Job below (h=9). Total height = 14.
     { i: "quick-links", x: 0, y: 0, w: 4, h: 5, minH: 3 },
     { i: "new-job", x: 0, y: 5, w: 4, h: 9, minH: 6 },
-    // Right column top (8 cols): Stats row (4 cards x 2 width = 8). Fixes "too long" tags.
     { i: "stat-total", x: 4, y: 0, w: 2, h: 2, minH: 2 },
     { i: "stat-active", x: 6, y: 0, w: 2, h: 2, minH: 2 },
     { i: "stat-today", x: 8, y: 0, w: 2, h: 2, minH: 2 },
     { i: "stat-success", x: 10, y: 0, w: 2, h: 2, minH: 2 },
-    // Right column below stats: Recent Jobs. Starts at y=2. Ends at y=14. h = 12.
     { i: "recent-jobs", x: 4, y: 2, w: 8, h: 12, minH: 4 },
-    // Bottom full width: Log Viewer. Starts at y=14. h=14 (Maximized with reduced top padding).
     { i: "logs", x: 0, y: 14, w: 12, h: 14, minH: 6 },
   ],
   md: [
@@ -64,12 +60,11 @@ const DEFAULT_LAYOUTS = {
     { i: "stat-total", x: 4, y: 0, w: 2, h: 2 },
     { i: "stat-active", x: 6, y: 0, w: 2, h: 2 },
     { i: "stat-today", x: 8, y: 0, w: 2, h: 2 },
-    { i: "stat-success", x: 10, y: 0, w: 1, h: 2 }, // Last one squeezes in md
+    { i: "stat-success", x: 10, y: 0, w: 1, h: 2 },
     { i: "recent-jobs", x: 4, y: 2, w: 6, h: 12, minH: 4 },
     { i: "logs", x: 0, y: 14, w: 10, h: 14, minH: 6 },
   ],
   sm: [
-    // Mobile layout: Quick Links first at top
     { i: "quick-links", x: 0, y: 0, w: 1, h: 5, minH: 3 },
     { i: "stat-total", x: 0, y: 5, w: 1, h: 2 },
     { i: "stat-active", x: 0, y: 7, w: 1, h: 2 },
@@ -86,7 +81,7 @@ const STORAGE_KEY = "dashboard-layouts-v21";
 export default function DashboardPage() {
   const user = useAuthStore((state) => state.user);
   const accessToken = useAuthStore((state) => state.accessToken);
-  const isAdmin = user?.role === "admin" || user?.is_superuser; // Keep original isAdmin logic
+  const isAdmin = user?.role === "admin" || user?.is_superuser;
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [activeBreakpoint, setActiveBreakpoint] = useState("lg");
@@ -112,7 +107,6 @@ export default function DashboardPage() {
     window.location.reload();
   };
 
-  // Fetch job stats
   const { data: jobs } = useQuery({
     queryKey: ["jobs", { limit: 100 }],
     queryFn: () => jobsApi.getAll({ limit: 100 }),
@@ -120,7 +114,6 @@ export default function DashboardPage() {
     enabled: !!accessToken,
   });
 
-  // Calculate stats
   const totalJobs = jobs?.length || 0;
   const activeJobs = jobs?.filter((j) => j.status === "RUNNING").length || 0;
   const completedToday =
@@ -145,7 +138,6 @@ export default function DashboardPage() {
     setSelectedJobId(job ? job.id : null);
   };
 
-  // Pagination state for job list (no longer affects grid size)
   const INITIAL_VISIBLE = 5;
   const LOAD_MORE_INCREMENT = 10;
   const [visibleJobCount, setVisibleJobCount] = useState(INITIAL_VISIBLE);
@@ -208,7 +200,7 @@ export default function DashboardPage() {
         );
         const defaultH = defaultItem?.h ?? 12;
 
-        // Only allow growing beyond the default, never shrinking below it
+        // Bound height to never shrink below default
         const boundedH = Math.max(defaultH, nextH);
         if (currentItem.h === boundedH) {
           return prev;
@@ -241,7 +233,6 @@ export default function DashboardPage() {
     };
   }, [activeBreakpoint]);
 
-  // Helper for drag handle
   const DragHandle = () => (
     <div className="drag-handle absolute top-0.5 right-0.5 p-1 cursor-grab active:cursor-grabbing text-muted-foreground/10 hover:text-muted-foreground/30 transition-colors z-20">
       <GripHorizontal className="h-3 w-3" />

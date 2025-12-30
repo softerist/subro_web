@@ -1,7 +1,6 @@
 import axios from "axios";
 import { useAuthStore } from "@/store/authStore";
 
-// Create base instance
 export const api = axios.create({
   baseURL: "/api", // Caddy will proxy this to the backend
   headers: {

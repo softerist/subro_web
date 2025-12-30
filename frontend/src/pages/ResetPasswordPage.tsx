@@ -1,9 +1,3 @@
-// frontend/src/pages/ResetPasswordPage.tsx
-/**
- * Reset Password Page
- * Allows users to set a new password using a reset token.
- */
-
 import { useState, useEffect } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";

@@ -1,5 +1,3 @@
-# src/utils/network_utils.py
-
 import logging
 
 import requests

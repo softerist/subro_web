@@ -1,4 +1,3 @@
-# src/core/strategies/online_fetcher.py
 import logging
 import tempfile
 from pathlib import Path

@@ -1,5 +1,3 @@
-# src/services/opensubtitles_client.py
-
 import logging
 from typing import Any
 

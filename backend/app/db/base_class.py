@@ -1,6 +1,3 @@
-# backend/app/db/base_class.py
-# Remove unused imports like Mapped, mapped_column, Column, String, PG_UUID, uuid if not used directly in THIS file for mixins etc.
-
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase  # Use DeclarativeBase for modern SQLAlchemy
 
@@ -19,8 +16,6 @@ convention = {
 metadata_obj = MetaData(naming_convention=convention)
 
 
-# Create the base class for all SQLAlchemy models.
-# All models should inherit from this Base.
 class Base(DeclarativeBase):
     """
     Base class for all SQLAlchemy models in the application.
@@ -28,9 +23,3 @@ class Base(DeclarativeBase):
     """
 
     metadata = metadata_obj
-
-
-# You could also define Base more simply if you prefer the older style,
-# but `class Base(DeclarativeBase): metadata = metadata_obj` is the modern way.
-# Older style (also works):
-# Base = declarative_base(metadata=metadata_obj)

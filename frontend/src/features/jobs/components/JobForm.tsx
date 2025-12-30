@@ -28,7 +28,6 @@ import { jobsApi } from "../api/jobs";
 import { LANGUAGES } from "../constants/languages";
 import { useAuthStore } from "@/store/authStore";
 
-// Validation Schema
 const formSchema = z.object({
   folder_path: z.string().min(1, "Target folder is required"),
   language: z.string().optional(),
@@ -68,7 +67,6 @@ export function JobForm() {
     return detail?.message || fallback;
   };
 
-  // Fetch Allowed Folders from API (with error suppression since endpoint may not exist)
   const { data: allowedFolders, isLoading: isLoadingFolders } = useQuery({
     queryKey: ["allowed-folders"],
     queryFn: jobsApi.getAllowedFolders,
@@ -78,7 +76,6 @@ export function JobForm() {
     enabled: !!accessToken,
   });
 
-  // Setup Form
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -88,7 +85,6 @@ export function JobForm() {
     },
   });
 
-  // Create Job Mutation
   const mutation = useMutation({
     mutationFn: jobsApi.create,
     onSuccess: () => {

@@ -61,6 +61,30 @@ We follow a trunk-based development model using the `main` branch as the single 
   - Write unit and integration tests for new features and bug fixes. Aim for high test coverage (>95% backend).
   - Keep functions and components focused (Single Responsibility Principle).
 
+## Comment Style
+
+Good comments explain **WHY**, not **WHAT**. Code should be self-explanatory for what it does.
+
+### Keep These Comments
+
+- **Docstrings** for public functions/classes
+- **WHY-reasoning** explaining non-obvious decisions or trade-offs
+- **Linter directives:** `# noqa`, `# type: ignore`, `// eslint-disable`, `# fmt: off/on`
+- **Side-effect imports:** Comments like `# Import... to ensure models are registered`
+
+### Avoid These Comments
+
+- Comments that restate what code does (e.g., `i += 1  # increment i`)
+- Stale TODOs older than 6 months
+- Debug markers (`# DEBUG`, `# INSERTED`)
+- Excessive section dividers
+
+### Style Guidelines
+
+- **Section headers (if needed):** Use `# --- Section Name ---` format, max 1-2 per file
+- **Inline comments:** Explain rationale only, not obvious logic
+- **Docstrings:** Use Google-style format for consistency
+
 ## Issue Tracking
 
 - We use GitHub Issues to track bugs, feature requests, and tasks.

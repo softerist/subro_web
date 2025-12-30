@@ -1,5 +1,3 @@
-# src/services/torrent_client.py
-
 import logging
 
 import qbittorrentapi

@@ -1,9 +1,6 @@
-# src/services/opensubtitles.py
-# MODIFIED: Added state management for single auth/logout per run.
+"""OpenSubtitles API service with state management for single auth/logout per run."""
 
 import logging
-
-# import html # Not strictly needed based on current usage, uncomment if necessary
 from typing import Any
 
 # Import config, network utils, etc.
@@ -19,7 +16,6 @@ logger = logging.getLogger(__name__)
 # Define valid options for filters
 VALID_FILTER_OPTIONS = {"include", "exclude", "only"}
 
-# --- Configuration ---
 APP_NAME = getattr(settings, "USER_AGENT_APP_NAME", "SubtitleTool")
 APP_VERSION = getattr(settings, "USER_AGENT_APP_VERSION", "1.0")
 MIN_OPENSUBS_MATCH_SCORE = getattr(settings, "OPENSUBTITLES_MIN_MATCH_SCORE", 10)
@@ -33,7 +29,6 @@ LOGOUT_URL = f"{BASE_URL}/logout"
 # Shared session
 network_session = create_session_with_retries()
 
-# --- Module-level State Management ---
 _current_opensubs_token = None
 _auth_failed_this_run = False  # Tracks if auth failed in the current script execution
 
@@ -68,9 +63,9 @@ def _get_dynamic_setting(db_field, env_var_name=None):
                         try:
                             return decrypt_value(val)
                         except Exception:
-                            return val  # Return raw if decrypt fails (maybe not encrypted?)
+                            return val
     except Exception:
-        pass  # Debug log only?
+        pass
 
     # 2. Fallback to Environment
     if env_var_name:
@@ -104,7 +99,6 @@ def is_authenticated():
     return bool(_current_opensubs_token)
 
 
-# --- Authentication ---
 def authenticate():
     """
     Authenticates with the OpenSubtitles API if not already authenticated
@@ -232,7 +226,6 @@ def logout():
     return logout_success
 
 
-# --- Internal API Call Helper with Re-Authentication on 401 ---
 def _opensubs_api_request(method, url, needs_auth=True, retry_on_401=True, **kwargs):
     """
     Internal helper to make API requests.
@@ -509,7 +502,6 @@ def get_download_info(file_id):
 
 def download_subtitle_content(download_link):
     """Downloads subtitle content (no auth needed, uses separate session)."""
-    # --- This function remains the same as v2 ---
     if not download_link:
         logger.error("Cannot download subtitle: link missing.")
         return None
@@ -540,8 +532,6 @@ def download_subtitle_content(download_link):
         return None
 
 
-# --- Matching Logic ---
-# --- The find_best_subtitle_match function remains the same as v2 ---
 def find_best_subtitle_match(subtitle_results, target_release_name):  # noqa: C901
     """
     Scores and finds the best matching subtitle from a list of OpenSubtitles API results.
@@ -611,7 +601,6 @@ def find_best_subtitle_match(subtitle_results, target_release_name):  # noqa: C9
     return best_match
 
 
-# --- Explicit Exports ---
 __all__ = [
     "authenticate",
     "download_subtitle_content",
