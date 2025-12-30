@@ -22,11 +22,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Detect environment and set log path
-if Path("/app/logs/translation_log.json").exists():
-    JSON_LOG_PATH = Path("/app/logs/translation_log.json")
+container_log_path = Path("/app/logs/translation_log.json")
+local_app_logs = backend_path / "app" / "logs" / "translation_log.json"
+
+if container_log_path.exists():
+    JSON_LOG_PATH = container_log_path
+elif local_app_logs.exists():
+    JSON_LOG_PATH = local_app_logs
 else:
-    # Host path for fallback (not used inside container if volume is mounted)
-    JSON_LOG_PATH = Path("/home/user/subro_web/logs/translation_log.json")
+    # Default fallback: check current directory (matches translator.py behavior)
+    JSON_LOG_PATH = Path("translation_log.json")
 
 
 def parse_isoformat(dt_str):

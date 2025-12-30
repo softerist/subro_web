@@ -17,12 +17,14 @@ logger = logging.getLogger(__name__)
 
 
 def migrate():  # noqa: C901
-    # 1. Find the log file
+    # 1. Find the log file (consistent with translator.py and populate_db_from_json.py)
     log_paths = [
-        Path("logs/translation_log.json"),
-        Path("app/logs/translation_log.json"),
-        Path(__file__).resolve().parent.parent / "logs" / "translation_log.json",
-        Path(__file__).resolve().parent.parent / "app" / "logs" / "translation_log.json",
+        Path("/app/logs/translation_log.json"),  # Docker container path
+        Path("app/logs/translation_log.json"),  # Local dev from backend/ root
+        Path(__file__).resolve().parent.parent
+        / "app"
+        / "logs"
+        / "translation_log.json",  # Relative to script
     ]
     log_file = next((p for p in log_paths if p.exists()), None)
 

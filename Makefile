@@ -253,7 +253,7 @@ rebuild-prod: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
 	@echo "Setup Page:           https://localhost:8443/setup"
 
-add-test-statistics: ## Populate translation_log and deepl_usage tables from logs/translation_log.json
+add-test-statistics: ## Populate translation_log and deepl_usage tables from /app/logs/translation_log.json
 	@echo "Copying and running population script..."
 	@docker cp backend/scripts/populate_db_from_json.py blue-api-1:/app/scripts/
 	@docker exec -u appuser blue-api-1 python3 scripts/populate_db_from_json.py

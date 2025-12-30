@@ -76,12 +76,6 @@ except ImportError:
     DATABASE_AVAILABLE = False
     # In a real application, handle missing config loader more robustly.
 
-try:
-    from app.modules.subtitle.utils.file_utils import find_project_root
-
-    PROJECT_ROOT_FUNC_AVAILABLE = True
-except ImportError:
-    PROJECT_ROOT_FUNC_AVAILABLE = False
 
 # ------------------------------------------------------------------
 #  Global Settings (Placeholders - Initialized by Loader/Main)
@@ -175,22 +169,26 @@ def _ensure_initialized():
         NLTK_PUNKT_AVAILABLE = False
 
     # --- Translation Log File ---
-    try:
-        if PROJECT_ROOT_FUNC_AVAILABLE:
-            _project_root = find_project_root(Path(__file__).resolve().parent)
-            TRANSLATION_LOG_FILE = str(Path(_project_root) / "logs" / "translation_log.json")
-            logger.info(f"Translation log file path target: {TRANSLATION_LOG_FILE}")
-        else:
-            logger.warning(
-                "Project root finding function unavailable. Using default log file name in CWD."
-            )
-            TRANSLATION_LOG_FILE = str(Path.cwd() / "translation_log.json")
-    except Exception as e:
-        logger.error(
-            f"Could not determine project root for log file: {e}. Using default 'translation_log.json' in current directory.",
-            exc_info=True,
-        )
-        TRANSLATION_LOG_FILE = str(Path.cwd() / "translation_log.json")
+    # Preferred: Docker container path
+    container_log_path = Path("/app/logs/translation_log.json")
+
+    if container_log_path.parent.exists():
+        # We are likely in the container or have the structure set up
+        TRANSLATION_LOG_FILE = str(container_log_path)
+    else:
+        # Fallback: resolve app/logs relative to this file, independent of CWD.
+        try:
+            local_app_logs = Path(__file__).resolve().parents[3] / "logs" / "translation_log.json"
+            if local_app_logs.parent.exists():
+                TRANSLATION_LOG_FILE = str(local_app_logs)
+            else:
+                # Last resort: absolute fallback or CWD
+                TRANSLATION_LOG_FILE = "translation_log.json"
+        except Exception as e:
+            logger.warning(f"Could not resolve optimal log path: {e}. Using default.")
+            TRANSLATION_LOG_FILE = "translation_log.json"
+
+    logger.info(f"Translation log file path set to: {TRANSLATION_LOG_FILE}")
 
     _is_module_initialized = True
 
