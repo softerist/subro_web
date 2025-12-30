@@ -28,8 +28,10 @@ ENV APP_HOME=/app \
 WORKDIR ${APP_HOME} # Use the ENV variable
 
 # Install Poetry globally using the build argument
-# Also update pip first
-RUN pip install --upgrade pip && pip install poetry==${POETRY_VERSION}
+# Also update pip first and install gosu
+RUN apt-get update && apt-get install -y --no-install-recommends gosu && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip install --upgrade pip && pip install poetry==${POETRY_VERSION}
 
 
 # Create a non-root user and group early for consistent permissions
@@ -123,9 +125,6 @@ RUN if [ ! -f /app/scripts/sub_downloader.py ]; then \
 # Make Python scripts executable
 RUN find /app/scripts -type f -iname "*.py" -exec chmod +x {} \;
 
-# Switch to non-root user for running the application
-USER appuser
-
 # Expose the port (good practice)
 EXPOSE 8000
 
@@ -153,9 +152,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unrar-free \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy installed runtime dependencies (venv) from DEVELOPMENT stage (fallback strategy)
+# Copy installed runtime dependencies (venv) from BUILDER stage (runtime-only deps)
 # Using /app/.venv as configured by POETRY_VIRTUALENVS_IN_PROJECT=true
-COPY --chown=appuser:appuser --from=development /app/.venv /app/.venv
+COPY --chown=appuser:appuser --from=builder /app/.venv /app/.venv
 
 # Copy configuration and migration files
 COPY --chown=appuser:appuser pyproject.toml alembic.ini ./
@@ -163,6 +162,7 @@ COPY --chown=appuser:appuser alembic ./alembic
 
 # Copy only the application code needed for runtime
 COPY --chown=appuser:appuser app ./app
+COPY --chown=appuser:appuser secrets ./secrets
 
 # Ensure scripts directory exists and copy all scripts from development stage
 RUN mkdir -p /app/scripts
@@ -177,8 +177,11 @@ RUN chmod +x /usr/local/bin/alass-cli
 COPY --chown=appuser:appuser --from=development /app/nltk_data /app/nltk_data
 ENV NLTK_DATA=/app/nltk_data
 
-USER appuser
 EXPOSE 8000
+
+# Set the entrypoint script
+# This script waits for DB, runs migrations, then executes CMD
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
 
 # Use the venv Python via the updated PATH
 # Using uvicorn from PATH
@@ -187,7 +190,7 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # --- Production Stage (Worker) ---
 FROM production-api AS production-worker
-# Inherits everything from production-api (user, venv, code, WORKDIR, USER, PATH)
+# Inherits everything from production-api (user, venv, code, WORKDIR, USER, PATH, ENTRYPOINT)
 
 # Use the venv Python via the updated PATH
 CMD ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=INFO"]

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -9,24 +9,110 @@ import {
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import { getSetupStatus } from "@/lib/settingsApi";
+import { authApi } from "@/features/auth/api/auth";
 import LoginPage from "@/pages/LoginPage";
+import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import SetupPage from "@/pages/SetupPage";
 import DashboardPage from "@/pages/DashboardPage";
 import SettingsPage from "@/pages/SettingsPage";
 import StatisticsPage from "@/pages/StatisticsPage";
 import { UsersPage } from "@/features/admin/pages/UsersPage";
 import { PathsPage } from "@/features/paths/routes/PathsPage";
+import { ForceChangePasswordPage } from "@/features/auth/pages/ForceChangePasswordPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
 // Loading spinner component
 const LoadingSpinner = () => (
-  <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+  <div className="min-h-screen bg-background flex items-center justify-center">
     <div className="text-center space-y-4">
-      <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
-      <p className="text-slate-400 text-sm">Loading...</p>
+      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+      <p className="text-muted-foreground text-sm">Loading...</p>
     </div>
   </div>
 );
+
+// Auth Bootstrap - refresh session on initial load if possible
+const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
+  const [isReady, setIsReady] = useState(false);
+  const setupCompleted = useSettingsStore((state) => state.setupCompleted);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const login = useAuthStore((state) => state.login);
+  const logout = useAuthStore((state) => state.logout);
+  const setAccessToken = useAuthStore((state) => state.setAccessToken);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const bootstrap = async () => {
+      // If we have an access token already, we're ready
+      if (accessToken) {
+        if (isMounted) {
+          setIsReady(true);
+        }
+        return;
+      }
+
+      // If setup is not completed or we don't know yet, don't try to refresh auth
+      // This prevents 401 errors in the console on the setup page
+      if (setupCompleted === false) {
+        if (isMounted) {
+          setIsReady(true);
+        }
+        return;
+      }
+
+      try {
+        const sessionStatus = await authApi.checkSession();
+
+        if (sessionStatus.is_authenticated && sessionStatus.access_token) {
+          const newAccessToken = sessionStatus.access_token;
+          setAccessToken(newAccessToken);
+          try {
+            const user = await authApi.getMe();
+            if (isMounted && user) {
+              login(newAccessToken, {
+                id: user.id,
+                email: user.email,
+                role: user.role ?? "user",
+                api_key_preview: user.api_key_preview ?? null,
+                is_superuser: user.is_superuser ?? false,
+              });
+            }
+          } catch (err) {
+            if (isMounted) {
+              logout();
+            }
+          }
+        } else if (isMounted && isAuthenticated) {
+          // If we thought we were authenticated but backend says no -> logout
+          logout();
+        }
+      } catch (err) {
+        if (isMounted && isAuthenticated) {
+          logout();
+        }
+      }
+
+      if (isMounted) {
+        setIsReady(true);
+      }
+    };
+
+    bootstrap();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [accessToken, isAuthenticated, login, logout, setAccessToken]);
+
+  if (!isReady) {
+    return <LoadingSpinner />;
+  }
+
+  return <>{children}</>;
+};
 
 // Setup Check Wrapper - checks if setup is completed
 const SetupCheckWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -109,47 +195,79 @@ const PublicRoute = ({ children }: { children: JSX.Element }) => {
 function AppRoutes() {
   return (
     <SetupCheckWrapper>
-      <Routes>
-        {/* Setup route - public, only accessible when setup not completed */}
-        <Route path="/setup" element={<SetupPage />} />
+      <AuthBootstrap>
+        <Routes>
+          {/* Setup route - public, only accessible when setup not completed */}
+          <Route path="/setup" element={<SetupPage />} />
 
-        {/* Login route - public */}
-        <Route
-          path="/login"
-          element={
-            <PublicRoute>
-              <LoginPage />
-            </PublicRoute>
-          }
-        />
-
-        {/* Protected routes with DashboardLayout */}
-        <Route
-          element={
-            <ProtectedRoute>
-              <DashboardLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/paths" element={<PathsPage />} />
-          <Route path="/statistics" element={<StatisticsPage />} />
-          <Route path="/admin/users" element={<UsersPage />} />
-
-          {/* Admin-only settings page */}
+          {/* Login route - public */}
           <Route
-            path="/settings"
+            path="/login"
             element={
-              <AdminRoute>
-                <SettingsPage />
-              </AdminRoute>
+              <PublicRoute>
+                <LoginPage />
+              </PublicRoute>
             }
           />
-        </Route>
 
-        {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+          {/* Forgot Password route - public */}
+          <Route
+            path="/forgot-password"
+            element={
+              <PublicRoute>
+                <ForgotPasswordPage />
+              </PublicRoute>
+            }
+          />
+
+          {/* Reset Password route - public */}
+          <Route
+            path="/reset-password"
+            element={
+              <PublicRoute>
+                <ResetPasswordPage />
+              </PublicRoute>
+            }
+          />
+
+          {/* Force Password Change route - protected but outside DashboardLayout to avoid infinite loop */}
+          <Route
+            path="/change-password"
+            element={
+              <ProtectedRoute>
+                <ForceChangePasswordPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Protected routes with DashboardLayout */}
+          <Route
+            element={
+              <ProtectedRoute>
+                <DashboardLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/paths" element={<PathsPage />} />
+            <Route path="/statistics" element={<StatisticsPage />} />
+            <Route path="/admin/users" element={<UsersPage />} />
+
+            {/* Admin-only settings page */}
+            <Route
+              path="/settings"
+              element={
+                <AdminRoute>
+                  <SettingsPage />
+                </AdminRoute>
+              }
+            />
+          </Route>
+
+          {/* Default redirect */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </AuthBootstrap>
     </SetupCheckWrapper>
   );
 }

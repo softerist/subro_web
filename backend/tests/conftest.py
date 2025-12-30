@@ -1,16 +1,27 @@
 # backend/tests/conftest.py
+import logging  # Added to configure logging
+import os
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 import pytest_asyncio
+from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.core.config import settings
-from app.db.models.user import Base
+# Ensure test env values override container defaults before settings import.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env.test", override=True)
+
+# Keep log output clean
+logging.getLogger("faker").setLevel(logging.WARNING)
+
+from app.core.config import settings  # noqa: E402
+from app.core.rate_limit import limiter  # noqa: E402
+from app.db.models.user import Base  # noqa: E402
 
 # MODIFIED LINE: Import get_async_session instead of get_db_session
-from app.db.session import get_async_session
-from app.main import app as fastapi_app
+from app.db.session import get_async_session  # noqa: E402
 
 # Ensure TEST_DATABASE_URL is correctly defined, using your ASYNC_DATABASE_URI from settings
 # It seems ASYNC_DATABASE_URI should be ASYNC_SQLALCHEMY_DATABASE_URL based on your session.py
@@ -20,7 +31,23 @@ if not settings.ASYNC_SQLALCHEMY_DATABASE_URL:
     raise ValueError(
         "Test database URL (ASYNC_SQLALCHEMY_DATABASE_URL) is not configured in settings for tests."
     )
-TEST_DATABASE_URL = str(settings.ASYNC_SQLALCHEMY_DATABASE_URL)  # Make sure it's a string
+raw_test_db_url = str(settings.ASYNC_SQLALCHEMY_DATABASE_URL)
+override_test_db_url = os.getenv("TEST_DATABASE_URL")
+
+if override_test_db_url:
+    url = make_url(override_test_db_url)
+    if Path("/.dockerenv").exists() and url.host in {"localhost", "127.0.0.1"}:
+        docker_host = os.getenv("TEST_DATABASE_HOST", "db_test")
+        docker_port = int(os.getenv("TEST_DATABASE_PORT", "5432"))
+        url = url.set(host=docker_host, port=docker_port)
+    TEST_DATABASE_URL = url.render_as_string(hide_password=False)
+else:
+    url = make_url(raw_test_db_url)
+    if Path("/.dockerenv").exists() and url.host in {"localhost", "127.0.0.1"}:
+        docker_host = os.getenv("TEST_DATABASE_HOST", "db_test")
+        docker_port = int(os.getenv("TEST_DATABASE_PORT", "5432"))
+        url = url.set(host=docker_host, port=docker_port)
+    TEST_DATABASE_URL = url.render_as_string(hide_password=False)
 
 
 # @pytest.fixture(scope="session")
@@ -40,7 +67,12 @@ async def test_engine():
         TEST_DATABASE_URL, echo=getattr(settings, "DB_ECHO_TESTS", False)
     )  # Allow specific test echo
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        # Use CASCADE to handle foreign key dependencies
+        from sqlalchemy import text
+
+        # Drop all tables with CASCADE to avoid FK constraint errors
+        for table in reversed(Base.metadata.sorted_tables):
+            await conn.execute(text(f'DROP TABLE IF EXISTS "{table.name}" CASCADE'))
         await conn.run_sync(Base.metadata.create_all)
     try:
         yield engine
@@ -80,12 +112,18 @@ async def test_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, N
         finally:
             pass  # db_session fixture handles its own closure
 
+    from app.main import app as fastapi_app
+
     # MODIFIED LINE: Use the imported get_async_session
     fastapi_app.dependency_overrides[get_async_session] = override_get_async_session_for_test
 
-    async with AsyncClient(
-        transport=ASGITransport(app=fastapi_app), base_url="http://test"
-    ) as client:
-        yield client
-
-    fastapi_app.dependency_overrides.clear()
+    limiter_enabled = limiter.enabled
+    limiter.enabled = False
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=fastapi_app), base_url="http://test"
+        ) as client:
+            yield client
+    finally:
+        limiter.enabled = limiter_enabled
+        fastapi_app.dependency_overrides.clear()

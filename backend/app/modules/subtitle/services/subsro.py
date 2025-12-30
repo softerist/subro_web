@@ -148,7 +148,9 @@ def find_subtitle_download_urls(imdb_id, language_code="ro"):
 
     soup = _fetch_and_parse_page(page_url)
     if not soup:
-        logging.warning(f"Could not fetch or parse Subs.ro page for IMDb ID {imdb_id}")
+        logging.info(
+            f"Subs.ro: No subtitle page found for IMDb ID {imdb_id} (page may not exist yet)."
+        )
         return []
 
     download_urls = _extract_download_links(soup, language_code)

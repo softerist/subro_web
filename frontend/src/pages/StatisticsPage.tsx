@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { BarChart3 } from "lucide-react";
 import {
   getTranslationStats,
   TranslationStatsResponse,
   getTranslationHistory,
   TranslationLogEntry,
 } from "@/lib/settingsApi";
+import { PageHeader } from "@/components/common/PageHeader";
 import {
   Card,
   CardContent,
@@ -20,12 +22,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PathCell } from "@/components/ui/path-cell";
 
 export default function StatisticsPage() {
   const [stats, setStats] = useState<TranslationStatsResponse | null>(null);
   const [history, setHistory] = useState<TranslationLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedEntryId, setExpandedEntryId] = useState<number | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -51,7 +55,7 @@ export default function StatisticsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64 page-enter">
-        <div className="text-slate-400">Loading statistics...</div>
+        <div className="text-muted-foreground">Loading statistics...</div>
       </div>
     );
   }
@@ -59,7 +63,7 @@ export default function StatisticsPage() {
   if (error) {
     return (
       <div className="flex items-center justify-center h-64 page-enter">
-        <div className="text-red-400">{error}</div>
+        <div className="text-destructive">{error}</div>
       </div>
     );
   }
@@ -67,30 +71,28 @@ export default function StatisticsPage() {
   const formatNumber = (n: number) => n.toLocaleString();
 
   return (
-    <div className="space-y-6 page-enter page-stagger">
-      <div>
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-          Translation Statistics
-        </h1>
-        <p className="text-slate-400">
-          Overview of DeepL and Google Cloud translation usage
-        </p>
-      </div>
+    <div className="space-y-6 px-4 pt-3 pb-3 page-enter page-stagger">
+      <PageHeader
+        title="Translation Statistics"
+        description="Overview of DeepL and Google Cloud translation usage"
+        icon={BarChart3}
+        iconClassName="from-sky-500 to-blue-600 shadow-blue-500/20"
+      />
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         {/* All Time */}
-        <Card className="bg-slate-800/50 border-slate-700 soft-hover">
+        <Card className="bg-card/50 border-border soft-hover">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               All Time
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-2xl font-bold text-card-foreground">
               {formatNumber(stats?.all_time.total_characters || 0)}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               characters across{" "}
               {formatNumber(stats?.all_time.total_translations || 0)}{" "}
               translations
@@ -107,17 +109,17 @@ export default function StatisticsPage() {
         </Card>
 
         {/* Last 30 Days */}
-        <Card className="bg-slate-800/50 border-slate-700 soft-hover">
+        <Card className="bg-card/50 border-border soft-hover">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               Last 30 Days
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-2xl font-bold text-card-foreground">
               {formatNumber(stats?.last_30_days.total_characters || 0)}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               characters across{" "}
               {formatNumber(stats?.last_30_days.total_translations || 0)}{" "}
               translations
@@ -135,17 +137,17 @@ export default function StatisticsPage() {
         </Card>
 
         {/* Last 7 Days */}
-        <Card className="bg-slate-800/50 border-slate-700 soft-hover">
+        <Card className="bg-card/50 border-border soft-hover">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               Last 7 Days
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-2xl font-bold text-card-foreground">
               {formatNumber(stats?.last_7_days.total_characters || 0)}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               characters across{" "}
               {formatNumber(stats?.last_7_days.total_translations || 0)}{" "}
               translations
@@ -164,54 +166,81 @@ export default function StatisticsPage() {
       </div>
 
       {/* Recent Translations Table */}
-      <Card className="bg-slate-800/50 border-slate-700 soft-hover">
+      <Card className="bg-card/50 border-border soft-hover">
         <CardHeader>
-          <CardTitle className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+          <CardTitle className="text-lg sm:text-xl font-bold title-gradient">
             Recent Translations
           </CardTitle>
-          <CardDescription className="text-slate-400">
+          <CardDescription className="text-muted-foreground">
             Last 10 translation jobs
           </CardDescription>
         </CardHeader>
         <CardContent>
           {history.length === 0 ? (
-            <p className="text-slate-500 text-center py-8">
+            <p className="text-muted-foreground text-center py-8">
               No translation history yet
             </p>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow className="border-slate-700">
-                  <TableHead className="text-slate-400">File</TableHead>
-                  <TableHead className="text-slate-400">Service</TableHead>
-                  <TableHead className="text-slate-400">Characters</TableHead>
-                  <TableHead className="text-slate-400">Status</TableHead>
-                  <TableHead className="text-slate-400">Date</TableHead>
+                <TableRow className="hover:bg-transparent border-b border-border/40">
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                    File
+                  </TableHead>
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden sm:table-cell">
+                    Service
+                  </TableHead>
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                    Characters
+                  </TableHead>
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                    Status
+                  </TableHead>
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden md:table-cell">
+                    Date
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {history.map((entry) => (
-                  <TableRow key={entry.id} className="border-slate-700">
-                    <TableCell className="text-white font-mono text-sm truncate max-w-[200px]">
-                      {entry.file_name}
+                  <TableRow
+                    key={entry.id}
+                    className="border-border cursor-pointer hover:bg-accent/50 transition-colors"
+                    onClick={() =>
+                      setExpandedEntryId(
+                        expandedEntryId === entry.id ? null : entry.id,
+                      )
+                    }
+                  >
+                    <TableCell className="py-2">
+                      <PathCell
+                        path={entry.file_name}
+                        className="text-foreground font-mono text-sm"
+                        isExpanded={expandedEntryId === entry.id}
+                        onToggle={() =>
+                          setExpandedEntryId(
+                            expandedEntryId === entry.id ? null : entry.id,
+                          )
+                        }
+                      />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-2 hidden sm:table-cell">
                       <span
                         className={`px-2 py-0.5 text-xs rounded-full ${
                           entry.service_used.includes("deepl")
                             ? "bg-violet-500/20 text-violet-400"
                             : entry.service_used.includes("google")
                               ? "bg-blue-500/20 text-blue-400"
-                              : "bg-slate-700 text-slate-400"
+                              : "bg-muted/70 text-muted-foreground"
                         }`}
                       >
                         {entry.service_used}
                       </span>
                     </TableCell>
-                    <TableCell className="text-slate-300">
+                    <TableCell className="py-2 text-foreground text-sm">
                       {formatNumber(entry.characters_billed)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-2">
                       <span
                         className={`px-2 py-0.5 text-xs rounded-full ${
                           entry.status === "success"
@@ -222,7 +251,7 @@ export default function StatisticsPage() {
                         {entry.status}
                       </span>
                     </TableCell>
-                    <TableCell className="text-slate-400 text-sm">
+                    <TableCell className="py-2 text-muted-foreground text-sm hidden md:table-cell">
                       {new Date(entry.timestamp).toLocaleDateString()}
                     </TableCell>
                   </TableRow>

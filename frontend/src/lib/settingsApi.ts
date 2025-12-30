@@ -28,14 +28,27 @@ export interface DeepLUsage {
   valid: boolean | null | undefined;
 }
 
+export interface GoogleUsage {
+  total_characters: number;
+  this_month_characters: number;
+  source: "google_cloud_monitoring" | "google_cloud_monitoring_cached";
+  last_updated?: string | null;
+}
+
 export interface SettingsRead extends SettingsUpdate {
   setup_completed: boolean;
   deepl_usage?: DeepLUsage[];
+  google_usage?: GoogleUsage;
   // Validation status from backend
-  tmdb_valid?: boolean;
-  omdb_valid?: boolean;
+  tmdb_valid?: string; // "valid", "invalid", "limit_reached", or undefined
+  omdb_valid?: string; // "valid", "invalid", "limit_reached", or undefined
   opensubtitles_valid?: boolean;
   opensubtitles_key_valid?: boolean;
+  // OpenSubtitles subscription info
+  opensubtitles_level?: string; // e.g. "VIP Member", "Standard"
+  opensubtitles_vip?: boolean;
+  opensubtitles_allowed_downloads?: number;
+  opensubtitles_rate_limited?: boolean;
   // Google Cloud status
   google_cloud_configured?: boolean;
   google_cloud_project_id?: string | null;
@@ -59,10 +72,12 @@ export const getSetupStatus = async (): Promise<SetupStatus> => {
 // Public endpoint - complete setup (only works if setup_completed is false)
 export const completeSetup = async (
   data: SetupComplete,
+  setupToken?: string,
 ): Promise<SetupStatus> => {
   const response = await axios.post<SetupStatus>(
     "/api/v1/setup/complete",
     data,
+    setupToken ? { headers: { "X-Setup-Token": setupToken } } : undefined,
   );
   return response.data;
 };
@@ -71,11 +86,16 @@ export const completeSetup = async (
 export const skipSetup = async (
   adminEmail?: string,
   adminPassword?: string,
+  setupToken?: string,
 ): Promise<SetupStatus> => {
-  const response = await axios.post<SetupStatus>("/api/v1/setup/skip", {
-    admin_email: adminEmail || null,
-    admin_password: adminPassword || null,
-  });
+  const response = await axios.post<SetupStatus>(
+    "/api/v1/setup/skip",
+    {
+      admin_email: adminEmail || null,
+      admin_password: adminPassword || null,
+    },
+    setupToken ? { headers: { "X-Setup-Token": setupToken } } : undefined,
+  );
   return response.data;
 };
 

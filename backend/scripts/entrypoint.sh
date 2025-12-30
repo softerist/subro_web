@@ -8,6 +8,35 @@ WAIT_TIMEOUT="${WAIT_TIMEOUT:-60}"
 MAX_MIGRATION_ATTEMPTS="${MAX_MIGRATION_ATTEMPTS:-5}" # Increase attempts
 MIGRATION_RETRY_SLEEP="${MIGRATION_RETRY_SLEEP:-5}"   # Seconds between retries
 
+# --- User/Group ID Management ---
+PUID="${PUID:-1000}"
+PGID="${PGID:-1000}"
+
+echo "Entrypoint: Setting appuser UID to $PUID and GID to $PGID..."
+# Ensure group exists with correct GID
+if ! getent group appuser > /dev/null 2>&1; then
+    groupadd -g "$PGID" appuser
+else
+    groupmod -o -g "$PGID" appuser
+fi
+
+# Ensure user exists with correct UID
+if ! getent passwd appuser > /dev/null 2>&1; then
+    useradd -u "$PUID" -g "$PGID" -d /app appuser
+else
+    usermod -o -u "$PUID" appuser
+fi
+
+# Ensure critical directories are owned by appuser
+echo "Entrypoint: Ensuring ownership for appuser..."
+chown appuser:appuser /app
+# We only chown the top-level of mapped media folders to avoid long recursions
+chown appuser:appuser /mnt/sata0/Media 2>/dev/null || true
+chown appuser:appuser /app/logs 2>/dev/null || true
+# Ensure translation log directory exists and is writable
+mkdir -p /app/app/modules/subtitle/services/logs 2>/dev/null || true
+chown -R appuser:appuser /app/app/modules/subtitle/services/logs 2>/dev/null || true
+
 # --- Wait for Database ---
 echo "Entrypoint: Waiting for database $DB_HOST:$DB_PORT..."
 # Use nc (netcat) for waiting - needs netcat-openbsd installed in Dockerfile
@@ -110,6 +139,14 @@ while [ $MIGRATION_ATTEMPT -lt $MAX_MIGRATION_ATTEMPTS ]; do
 done
 echo "---"
 
+# --- Database Bootstrapping ---
+echo "Entrypoint: Running 'poetry run python -m app.initial_data' for bootstrapping..."
+if ! poetry run python -m app.initial_data; then
+  echo "Entrypoint: 'initial_data.py' failed. Setup may be incomplete." >&2
+else
+  echo "Entrypoint: 'initial_data.py' finished successfully."
+fi
+
 # --- Final Check and Execution ---
 if [ "$MIGRATIONS_UP_TO_DATE" != "true" ]; then
   echo "Error: Failed to confirm database migrations are up-to-date after $MAX_MIGRATION_ATTEMPTS attempts." >&2
@@ -118,6 +155,7 @@ if [ "$MIGRATIONS_UP_TO_DATE" != "true" ]; then
   # exit 1
 fi
 
-echo "Entrypoint: Migration check loop finished. Starting main application command..."
+echo "Entrypoint: Migration check loop finished. Starting main application command as appuser..."
 # Execute the command passed to the entrypoint (e.g., the CMD from Dockerfile)
-exec "$@"
+# Use gosu to drop privileges to appuser
+exec gosu appuser "$@"

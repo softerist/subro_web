@@ -5,6 +5,9 @@ from contextlib import asynccontextmanager
 # --- Project Specific Imports ---
 from app.core.config import settings
 
+# Import all models to ensure they are registered in the registry
+from app.db import base  # noqa: F401
+
 # Celery import (your existing fallback logic is good)
 try:
     from app.tasks.celery_app import celery_app  # type: ignore
@@ -59,6 +62,7 @@ from app.api.routers.auth import auth_router as custom_auth_router
 from app.api.routers.dashboard import router as dashboard_router
 from app.api.routers.files import router as files_router
 from app.api.routers.jobs import router as jobs_router
+from app.api.routers.mfa import router as mfa_router
 from app.api.routers.settings import router as settings_router
 
 # *** NEW IMPORTS FOR SETUP AND SETTINGS ROUTERS ***
@@ -198,9 +202,9 @@ app = FastAPI(
     description=settings.APP_DESCRIPTION,
     lifespan=lifespan,
     root_path=effective_root_path,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    docs_url=f"{settings.API_V1_STR}/docs",
-    redoc_url=f"{settings.API_V1_STR}/redoc",
+    openapi_url=settings.OPENAPI_URL,
+    docs_url=settings.DOCS_URL,
+    redoc_url=settings.REDOC_URL,
     servers=[{"url": openapi_server_url, "description": "Current environment server"}],
     openapi_components={
         "securitySchemes": {
@@ -219,6 +223,19 @@ app = FastAPI(
 
 # --- Rate Limiting Setup ---
 app.state.limiter = limiter
+
+# --- Root Redirect ---
+if settings.ENVIRONMENT == "development":
+    from fastapi.responses import RedirectResponse
+
+    @app.get("/", include_in_schema=False)
+    async def root_redirect():
+        """Redirect root to API documentation in development."""
+        if settings.DOCS_URL:
+            return RedirectResponse(url=settings.DOCS_URL)
+        return {"status": "running", "environment": "development"}
+
+
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
@@ -233,8 +250,16 @@ if settings.BACKEND_CORS_ORIGINS:
             CORSMiddleware,
             allow_origins=origins,
             allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=[
+                "Content-Type",
+                "Authorization",
+                "X-API-Key",
+                "X-Setup-Token",
+                "Accept",
+                "Origin",
+                "X-Requested-With",
+            ],
         )
         logger.info(f"CORS enabled for origins: {origins}")
     else:
@@ -310,6 +335,8 @@ api_v1_router.include_router(storage_paths_router, prefix="/storage-paths", tags
 api_v1_router.include_router(setup_router)  # prefix is already "/setup" in router
 # Settings requires admin auth - used for updating configuration after setup
 api_v1_router.include_router(settings_router)  # prefix is already "/settings" in router
+# MFA - Multi-Factor Authentication endpoints
+api_v1_router.include_router(mfa_router)  # prefix is already "/auth/mfa" in router
 # Translation statistics - requires admin auth
 api_v1_router.include_router(
     translation_stats_router
@@ -353,51 +380,57 @@ async def api_v1_root_endpoint():
     }
 
 
-@api_v1_router.get("/test-db-users", tags=["Debug"])
-async def test_db_users(db: AsyncSession = Depends(get_async_session)):
-    try:
-        stmt = select(UserModel).limit(1)
-        result = await db.execute(stmt)
-        user = result.scalar_one_or_none()
-        if user:
-            return {"status": "User table accessible", "first_user_email": user.email}
-        return {"status": "User table accessible, but no users found."}
-    except Exception as e:
-        logger.error(f"Error in /test-db-users: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"DB Test Error: {e!s}") from e
+if settings.ENVIRONMENT != "production":
+
+    @api_v1_router.get("/test-db-users", tags=["Debug"])
+    async def test_db_users(db: AsyncSession = Depends(get_async_session)):
+        try:
+            stmt = select(UserModel).limit(1)
+            result = await db.execute(stmt)
+            user = result.scalar_one_or_none()
+            if user:
+                return {"status": "User table accessible", "first_user_email": user.email}
+            return {"status": "User table accessible, but no users found."}
+        except Exception as e:
+            logger.error(f"Error in /test-db-users: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"DB Test Error: {e!s}") from e
 
 
-@api_v1_router.get(
-    "/healthz",
-    tags=["Health Checks"],
-    summary="Detailed API and Dependencies Health Check",
-    status_code=status.HTTP_200_OK,
-)
-async def health_check_api_v1_detailed(db: AsyncSession = Depends(get_async_session)):
-    db_status = "unavailable"
-    try:
-        await db.execute(text("SELECT 1"))
-        db_status = "connected"
-    except Exception as e:
-        logger.error(
-            f"Health check (detailed): Database connection failed. Error: {e}",
-            exc_info=settings.DEBUG,
+# --- Health Check Endpoints ---
+# Move health_check_api_v1_detailed to be registered conditionally on app
+if settings.HEALTHZ_URL:
+
+    @app.get(
+        settings.HEALTHZ_URL,
+        tags=["Health Checks"],
+        summary="Detailed API and Dependencies Health Check",
+        status_code=status.HTTP_200_OK,
+    )
+    async def health_check_api_v1_detailed(db: AsyncSession = Depends(get_async_session)):
+        db_status = "unavailable"
+        try:
+            await db.execute(text("SELECT 1"))
+            db_status = "connected"
+        except Exception as e:
+            logger.error(
+                f"Health check (detailed): Database connection failed. Error: {e}",
+                exc_info=settings.DEBUG,
+            )
+        dependencies_status = {"database": db_status}
+        overall_status = (
+            "ok"
+            if all(status == "connected" for status in dependencies_status.values())
+            else "degraded"
         )
-    dependencies_status = {"database": db_status}
-    overall_status = (
-        "ok"
-        if all(status == "connected" for status in dependencies_status.values())
-        else "degraded"
-    )
-    if overall_status == "ok":
-        return {"status": overall_status, "dependencies": dependencies_status}
-    logger.error(
-        f"API health check (detailed) failed. Status: {overall_status}, Dependencies: {dependencies_status}"
-    )
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail={"status": overall_status, "dependencies": dependencies_status},
-    )
+        if overall_status == "ok":
+            return {"status": overall_status, "dependencies": dependencies_status}
+        logger.error(
+            f"API health check (detailed) failed. Status: {overall_status}, Dependencies: {dependencies_status}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": overall_status, "dependencies": dependencies_status},
+        )
 
 
 app.include_router(api_v1_router, prefix=settings.API_V1_STR)

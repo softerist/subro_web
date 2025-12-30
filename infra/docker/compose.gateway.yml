@@ -1,6 +1,8 @@
 services:
   caddy:
-    image: caddy:2-alpine
+    build:
+      context: .
+      dockerfile: Caddy.Dockerfile
     restart: always
     command: caddy run --config /etc/caddy/Caddyfile.prod --adapter caddyfile
     ports:
@@ -18,7 +20,7 @@ services:
       - caddy_net
       - internal_net
     env_file:
-      - ../../.env.prod
+      - ../.env.prod
 
 volumes:
   caddy_data:

@@ -60,6 +60,7 @@ via an external loader (like Pydantic settings) or within the
 try:
     # Example: Using a hypothetical settings object
     from app.core.config import settings
+    from app.db import base as _  # noqa: F401 Ensure all models are registered before DB access
     from app.db.models.deepl_usage import DeepLUsage
     from app.db.models.translation_log import TranslationLog
     from app.db.session import SyncSessionLocal
@@ -629,16 +630,14 @@ def get_deepl_usage(api_key: str) -> dict | None:  # noqa: C901
         status_code = http_err.response.status_code
         response_text = http_err.response.text[:200]
         if status_code == 403:  # Forbidden - Invalid Key
-            logger.error(
-                f"DeepL usage check failed for key '...{key_suffix}': Invalid API Key (403 Forbidden). Please check the key."
+            logger.warning(
+                f"DeepL key '...{key_suffix}': Invalid or expired API key (403). Key will be skipped."
             )
         elif status_code == 429:  # Too Many Requests
-            logger.warning(
-                f"DeepL usage check rate-limited for key '...{key_suffix}' (429 Too Many Requests). Try again later."
-            )
+            logger.warning(f"DeepL key '...{key_suffix}': Rate limited (429). Try again later.")
         elif status_code == 456:  # Quota Exceeded (specific DeepL code)
-            logger.error(
-                f"DeepL usage check failed for key '...{key_suffix}': Quota Exceeded (456). Key unusable until reset."
+            logger.warning(
+                f"DeepL key '...{key_suffix}': Monthly quota exceeded (456). Key unusable until reset."
             )
             # We can still return a dict indicating quota is full
             return {
@@ -1016,7 +1015,7 @@ class TranslationManager:
                     self.deepl_usage_cache[next_index]["valid"] = False
 
         # If loop completes without finding a usable key
-        logger.error("No valid DeepL keys with available quota found after checking all keys.")
+        logger.warning("No valid DeepL keys with available quota found after checking all keys.")
         # Consider re-checking usage here if desired, but could be slow
         # self.update_deepl_usage_cache()
         return False
@@ -1561,7 +1560,7 @@ class TranslationManager:
                             should_retry_deepl = True  # Loop again with the new key
                         else:
                             # Switch failed, or no *new* usable key found, or non-recoverable error
-                            logger.error(
+                            logger.warning(
                                 f"Batch {batch_idx}: DeepL key switch failed or no new key available. Falling back to Google Translate API."
                             )
                             translated_batch_texts = None  # Ensure fallback is triggered
@@ -1582,8 +1581,15 @@ class TranslationManager:
             # --- Fallback to Google for the batch if DeepL failed or wasn't used ---
             if translated_batch_texts is None:
                 if self.google_client:  # Check if Google is available
+                    # Build a user-friendly reason for the fallback
+                    fallback_reason = "DeepL unavailable"
+                    if last_exception_batch:
+                        if isinstance(last_exception_batch, ValueError):
+                            fallback_reason = "No valid DeepL keys available"
+                        else:
+                            fallback_reason = f"DeepL error: {type(last_exception_batch).__name__}"
                     logger.info(
-                        f"Batch {batch_idx}: Falling back to Google Translate. Last DeepL error: {type(last_exception_batch).__name__ if last_exception_batch else 'N/A'}"
+                        f"Batch {batch_idx}: Falling back to Google Translate. Reason: {fallback_reason}"
                     )
 
                     # Re-chunk the *current DeepL batch* for Google's limits
@@ -1855,7 +1861,7 @@ class TranslationManager:
                             logger.info(f"Chunk {chunk_idx}: Switched key. Retrying DeepL.")
                             should_retry_deepl_chunk = True
                         else:
-                            logger.error(
+                            logger.warning(
                                 f"Chunk {chunk_idx}: DeepL key switch failed or no new key. Breaking DeepL attempts."
                             )
                             translated_chunk_text = None  # Ensure fallback
@@ -1876,8 +1882,15 @@ class TranslationManager:
             # --- Fallback to Google if DeepL failed ---
             if translated_chunk_text is None:
                 if self.google_client:
+                    # Build a user-friendly reason for the fallback
+                    fallback_reason = "DeepL unavailable"
+                    if last_exception_chunk:
+                        if isinstance(last_exception_chunk, ValueError):
+                            fallback_reason = "No valid DeepL keys available"
+                        else:
+                            fallback_reason = f"DeepL error: {type(last_exception_chunk).__name__}"
                     logger.info(
-                        f"Chunk {chunk_idx}: Falling back to Google. Last DeepL error: {type(last_exception_chunk).__name__ if last_exception_chunk else 'N/A'}"
+                        f"Chunk {chunk_idx}: Falling back to Google. Reason: {fallback_reason}"
                     )
                     try:
                         translated_chunk_text, billed_chars_chunk = self._translate_google_chunk(
@@ -2087,7 +2100,7 @@ class TranslationManager:
                     # --- NEW: Log the translation job itself ---
                     if TranslationLog:
                         # Determine overall status
-                        overall_status = self._determine_overall_service(service_details)
+                        overall_status = self._summarize_service_status(service_details)
 
                         log_entry = TranslationLog(
                             file_name=file_name,
@@ -2107,7 +2120,8 @@ class TranslationManager:
                         logger.debug(f"Logged translation job for file: {file_name}")
 
             except Exception as e:
-                logger.error(f"Failed to update DeepL usage in database: {e}", exc_info=True)
+                logger.error(f"CRITICAL Database error in _log_usage: {e}", exc_info=True)
+                raise  # Propagate error so job fails properly
 
         # 2. Update JSON Log (Maintain for backward compatibility/backup)
         try:
@@ -2220,7 +2234,7 @@ class TranslationManager:
 _translation_manager_instance = None
 
 
-def get_translation_manager():
+def get_translation_manager():  # noqa: C901
     """
     Singleton accessor for the TranslationManager.
     Initializes the manager on first call. Ensures config is loaded first.
@@ -2239,43 +2253,90 @@ def get_translation_manager():
                 GOOGLE_CREDENTIALS_PATH, \
                 DEEPL_QUOTA_PER_KEY
 
-            # --- DIRECTLY LOAD FROM settings ---
-            # Remove the "if not..." checks for this test
+            # --- 1. Load Defaults from Environment (via settings) ---
             if CONFIG_LOADER_AVAILABLE and settings:
-                # Always try to load from settings directly
-                DEEPL_KEYS = [k for k in getattr(settings, "DEEPL_API_KEYS", []) if k]
+                DEEPL_KEYS = [k for k in (getattr(settings, "DEEPL_API_KEYS", None) or []) if k]
                 GOOGLE_PROJECT_ID_CONFIG = getattr(settings, "GOOGLE_PROJECT_ID", None)
                 GOOGLE_CREDENTIALS_PATH = getattr(settings, "GOOGLE_CREDENTIALS_PATH", None)
                 DEEPL_QUOTA_PER_KEY = getattr(settings, "DEEPL_CHARACTER_QUOTA", 500000)
 
-                logger.debug("Attempted direct load from settings:")
-                logger.debug(
-                    f"  -> settings['deepl_api_keys'] resulted in DEEPL_KEYS: {len(DEEPL_KEYS)} keys"
-                )
-                logger.debug(
-                    f"  -> settings['google_project_id'] resulted in GOOGLE_PROJECT_ID_CONFIG: {GOOGLE_PROJECT_ID_CONFIG}"
-                )
-                logger.debug(
-                    f"  -> settings['google_credentials_path'] resulted in GOOGLE_CREDENTIALS_PATH: {GOOGLE_CREDENTIALS_PATH}"
-                )
+            # --- 2. Attempt Direct DB Override (Sync) ---
+            # This ensures that changes made in the UI (saved to DB) take precedence
+            # over static environment variables.
+            if DATABASE_AVAILABLE and SyncSessionLocal:
+                logger.debug("Checking Database for configuration overrides...")
+                try:
+                    # Import base to ensure all models are registered in metadata/mapping
+                    from sqlalchemy import select
 
-            elif not CONFIG_LOADER_AVAILABLE:
+                    from app.core.security import decrypt_value
+                    from app.db.models.app_settings import AppSettings
+
+                    with SyncSessionLocal() as session:
+                        result = session.execute(select(AppSettings).where(AppSettings.id == 1))
+                        db_settings = result.scalar_one_or_none()
+
+                        if db_settings:
+                            # --- DeepL Keys ---
+                            # If deepl_api_keys is set in DB (even empty string), it overrides Env
+                            if db_settings.deepl_api_keys is not None:
+                                raw_keys = db_settings.deepl_api_keys
+                                if raw_keys == "":
+                                    # Explicitly disabled
+                                    DEEPL_KEYS = []
+                                    logger.info(
+                                        "DeepL API Keys explicitly cleared by Database settings."
+                                    )
+                                else:
+                                    try:
+                                        decrypted_json = decrypt_value(raw_keys)
+                                        parsed_keys = json.loads(decrypted_json)
+                                        if isinstance(parsed_keys, list):
+                                            DEEPL_KEYS = [
+                                                str(k).strip()
+                                                for k in parsed_keys
+                                                if str(k).strip()
+                                            ]
+                                            logger.info(
+                                                f"Loaded {len(DEEPL_KEYS)} DeepL keys from Database settings (overriding env)."
+                                            )
+                                    except Exception as db_key_err:
+                                        DEEPL_KEYS = []
+                                        logger.error(
+                                            "Failed to decrypt/parse DeepL keys from DB; disabling DeepL keys to avoid env fallback: %s",
+                                            db_key_err,
+                                        )
+
+                            # --- Google Credentials ---
+                            # Logic: If DB has credential blob, use that.
+                            # Since we can't easily write a temp file here safely in all contexts,
+                            # we might rely on the Env path if DB is empty, OR we need to handle blob usage.
+                            # For now, let's respect project_id override at least.
+                            if db_settings.google_cloud_project_id:
+                                GOOGLE_PROJECT_ID_CONFIG = db_settings.google_cloud_project_id
+                                logger.info(
+                                    f"Using Google Project ID from Database: {GOOGLE_PROJECT_ID_CONFIG}"
+                                )
+
+                            # Note: Handling raw Google Credentials blob from DB requires writing to a file
+                            # because google-cloud-library expects a file path or environment variable content.
+                            # Current implementation prioritizes the config path if DB blob logic isn't fully implemented in Translator.
+                            # However, if using Env vars, user settings usually write to a generic shared path or rely on Env.
+
+                except Exception as db_err:
+                    logger.warning(
+                        f"Failed to load settings from Database (falling back to Env): {db_err}"
+                    )
+
+            if not CONFIG_LOADER_AVAILABLE:
                 logger.warning(
                     "Configuration loader not available. Ensure global config variables (DEEPL_KEYS, etc.) are set manually."
                 )
-            else:  # settings object itself might be None or empty if loading failed earlier?
-                logger.error(
-                    "Settings object is not available or empty when trying to load globals."
-                )
 
-            # --- (Keep the original debug logs from previous step here if desired) ---
+            logger.debug(f"Reference Settings Loaded -> DEEPL_KEYS: {len(DEEPL_KEYS)} keys")
             logger.debug(
-                f"Global GOOGLE_PROJECT_ID_CONFIG after direct load attempt: {GOOGLE_PROJECT_ID_CONFIG}"
+                f"Reference Settings Loaded -> GOOGLE_PROJECT_ID: {GOOGLE_PROJECT_ID_CONFIG}"
             )
-            logger.debug(
-                f"Global GOOGLE_CREDENTIALS_PATH after direct load attempt: {GOOGLE_CREDENTIALS_PATH}"
-            )
-            # --- END (Keep the original debug logs...) ---
 
             # Now, instantiate the manager
             _translation_manager_instance = TranslationManager()

@@ -18,6 +18,7 @@ export function useJobLogs(jobId: string | null) {
   const activeJobIdRef = useRef<string | null>(null);
   // Track logs synchronously to avoid state update race conditions
   const currentLogsRef = useRef<LogMessage[]>([]);
+  const statusRef = useRef<string>("IDLE");
 
   useEffect(() => {
     // Clean up previous WebSocket
@@ -33,7 +34,7 @@ export function useJobLogs(jobId: string | null) {
       currentLogsRef.current.length > 0
     ) {
       logsCache.set(activeJobIdRef.current, [...currentLogsRef.current]);
-      statusCache.set(activeJobIdRef.current, status);
+      statusCache.set(activeJobIdRef.current, statusRef.current);
     }
 
     // Reset state for new job
@@ -80,10 +81,11 @@ export function useJobLogs(jobId: string | null) {
       // Don't connect if component unmounted or job changed
       if (activeJobIdRef.current !== wsJobId) return;
 
-      // Construct WebSocket URL
+      // Construct WebSocket URL - use window.location to work with proxies/Caddy
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const baseUrl = import.meta.env.VITE_WS_BASE_URL
         ? import.meta.env.VITE_WS_BASE_URL
-        : `ws://${window.location.hostname}:8000/api/v1`;
+        : `${protocol}//${window.location.host}/api/v1`;
 
       const url = `${baseUrl}/ws/jobs/${wsJobId}/logs?token=${token}`;
 
@@ -180,16 +182,20 @@ export function useJobLogs(jobId: string | null) {
     };
   }, [jobId, token]);
 
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
   // Cleanup effect
   useEffect(() => {
     return () => {
       // On unmount/change, ensure we saved the latest logs from Ref
       if (activeJobIdRef.current && currentLogsRef.current.length > 0) {
         logsCache.set(activeJobIdRef.current, [...currentLogsRef.current]);
-        statusCache.set(activeJobIdRef.current, status);
+        statusCache.set(activeJobIdRef.current, statusRef.current);
       }
     };
-  }, [status]); // Only depend on status, logs are in ref
+  }, []); // Use refs for latest values
 
   return { logs, status };
 }

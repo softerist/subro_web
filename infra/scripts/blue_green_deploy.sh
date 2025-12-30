@@ -89,6 +89,23 @@ if ! docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" exe
 fi
 echo "--- Migrations Completed ---"
 
+# 3.6 Re-encrypt Encrypted Fields (key rotation)
+if [ "${REENCRYPT_ON_DEPLOY:-1}" != "0" ]; then
+    echo "--- Re-encrypting Encrypted Fields (if rotation active) ---"
+    REENCRYPT_ARGS=()
+    if [ "${REENCRYPT_FORCE:-0}" = "1" ]; then
+        REENCRYPT_ARGS+=("--force")
+    fi
+    if ! docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" exec -T api python /app/scripts/reencrypt_encrypted_fields.py "${REENCRYPT_ARGS[@]}"; then
+        echo "Error: Re-encryption failed. Aborting."
+        docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" down
+        exit 1
+    fi
+    echo "--- Re-encryption Step Completed ---"
+else
+    echo "--- Re-encryption Skipped (REENCRYPT_ON_DEPLOY=0) ---"
+fi
+
 # 4. Switch Traffic (Update Caddy)
 echo "--- Switching Traffic to $NEW_COLOR ---"
 

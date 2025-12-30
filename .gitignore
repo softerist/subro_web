@@ -4,6 +4,7 @@
 *.swp
 *~
 .#*
+.smart-coding-cache/
 
 # --- Python ---
 __pycache__/
@@ -43,6 +44,7 @@ nosetests.xml
 .hypothesis/
 .pytest_cache/
 .cache/
+.ruff_cache/
 
 # --- Environment Files ---
 .env
@@ -110,3 +112,12 @@ Desktop.ini
 # --- Secrets ---
 *.pem
 *.key
+
+# --- NLTK Data (downloaded at build time) ---
+nltk_data/
+**/nltk_data/
+*.pickle
+punkt.zip
+heuristic-mcp
+heuristic-mcp-repo
+.smart-coding-cache/

@@ -35,6 +35,7 @@ export default function SetupPage() {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const setupToken = import.meta.env.VITE_SETUP_TOKEN || "";
 
   // Settings form state
   const [settings, setSettings] = useState<SettingsUpdate>({
@@ -49,6 +50,21 @@ export default function SetupPage() {
     qbittorrent_username: "",
     qbittorrent_password: "",
   });
+
+  const getSetupErrorMessage = (err: unknown, fallback: string) => {
+    const detail = (
+      err as {
+        response?: { data?: { detail?: string | { message?: string } } };
+      }
+    )?.response?.data?.detail;
+    if (typeof detail === "string") {
+      return detail;
+    }
+    if (detail && typeof detail === "object" && "message" in detail) {
+      return detail.message || fallback;
+    }
+    return err instanceof Error ? err.message : fallback;
+  };
 
   const handleNext = () => {
     if (currentStep === "welcome") setCurrentStep("admin");
@@ -107,13 +123,11 @@ export default function SetupPage() {
             : undefined,
       };
 
-      await completeSetup(data);
+      await completeSetup(data, setupToken || undefined);
       setSetupCompleted(true);
       navigate("/login");
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Setup failed. Please try again.";
-      setError(message);
+      setError(getSetupErrorMessage(err, "Setup failed. Please try again."));
     } finally {
       setIsLoading(false);
     }
@@ -126,16 +140,14 @@ export default function SetupPage() {
     try {
       // Skip but still create admin if provided
       if (adminEmail && adminPassword) {
-        await skipSetup(adminEmail, adminPassword);
+        await skipSetup(adminEmail, adminPassword, setupToken || undefined);
       } else {
-        await skipSetup();
+        await skipSetup(undefined, undefined, setupToken || undefined);
       }
       setSetupCompleted(true);
       navigate("/login");
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Skip failed. Please try again.";
-      setError(message);
+      setError(getSetupErrorMessage(err, "Skip failed. Please try again."));
     } finally {
       setIsLoading(false);
     }
@@ -149,7 +161,7 @@ export default function SetupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4 page-enter">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 page-enter">
       <div className="w-full max-w-lg page-stagger">
         {/* Progress indicator */}
         <div className="flex justify-center mb-8">
@@ -160,7 +172,7 @@ export default function SetupPage() {
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                       currentStep === step
-                        ? "bg-blue-600 text-white"
+                        ? "bg-primary text-primary-foreground"
                         : index <
                             [
                               "welcome",
@@ -169,34 +181,34 @@ export default function SetupPage() {
                               "finish",
                             ].indexOf(currentStep)
                           ? "bg-green-600 text-white"
-                          : "bg-slate-700 text-slate-400"
+                          : "bg-muted text-muted-foreground"
                     }`}
                   >
                     {index + 1}
                   </div>
-                  {index < 3 && <div className="w-8 h-0.5 bg-slate-700" />}
+                  {index < 3 && <div className="w-8 h-0.5 bg-muted" />}
                 </div>
               ),
             )}
           </div>
         </div>
 
-        <Card className="bg-slate-800/50 border-slate-700 backdrop-blur soft-hover">
+        <Card className="bg-card/50 border-border backdrop-blur soft-hover">
           {/* Welcome Step */}
           {currentStep === "welcome" && (
             <>
               <CardHeader className="text-center">
-                <CardTitle className="text-3xl text-white">
+                <CardTitle className="text-2xl sm:text-3xl font-bold title-gradient">
                   Welcome to Subro Web
                 </CardTitle>
-                <CardDescription className="text-slate-400">
+                <CardDescription className="text-muted-foreground">
                   Let&apos;s set up your subtitle download manager. This wizard
                   will help you configure the admin account and optional
                   integrations.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="text-center text-slate-300 text-sm">
+                <div className="text-center text-muted-foreground text-sm">
                   <p>You&apos;ll configure:</p>
                   <ul className="mt-2 space-y-1">
                     <li>✓ Admin account credentials</li>
@@ -210,7 +222,7 @@ export default function SetupPage() {
                     variant="ghost"
                     onClick={handleSkip}
                     disabled={isLoading}
-                    className="text-slate-400 hover:text-white"
+                    className="text-muted-foreground hover:text-foreground"
                   >
                     Skip Setup
                   </Button>
@@ -229,10 +241,10 @@ export default function SetupPage() {
           {currentStep === "admin" && (
             <>
               <CardHeader>
-                <CardTitle className="text-2xl text-white">
+                <CardTitle className="text-xl sm:text-2xl font-bold title-gradient">
                   Create Admin Account
                 </CardTitle>
-                <CardDescription className="text-slate-400">
+                <CardDescription className="text-muted-foreground">
                   Set up the administrator account for managing the application.
                 </CardDescription>
               </CardHeader>
@@ -250,7 +262,7 @@ export default function SetupPage() {
                     </Alert>
                   )}
                   <div className="space-y-2">
-                    <Label htmlFor="email" className="text-slate-300">
+                    <Label htmlFor="email" className="text-muted-foreground">
                       Email
                     </Label>
                     <Input
@@ -259,11 +271,11 @@ export default function SetupPage() {
                       value={adminEmail}
                       onChange={(e) => setAdminEmail(e.target.value)}
                       placeholder="admin@example.com"
-                      className="bg-slate-900 border-slate-600 text-white"
+                      className="bg-background border-input text-foreground"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="password" className="text-slate-300">
+                    <Label htmlFor="password" className="text-muted-foreground">
                       Password
                     </Label>
                     <Input
@@ -272,11 +284,14 @@ export default function SetupPage() {
                       value={adminPassword}
                       onChange={(e) => setAdminPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="bg-slate-900 border-slate-600 text-white"
+                      className="bg-background border-input text-foreground"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="confirmPassword" className="text-slate-300">
+                    <Label
+                      htmlFor="confirmPassword"
+                      className="text-muted-foreground"
+                    >
                       Confirm Password
                     </Label>
                     <Input
@@ -285,22 +300,20 @@ export default function SetupPage() {
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="bg-slate-900 border-slate-600 text-white"
+                      className="bg-background border-input text-foreground"
                     />
                   </div>
+
                   <div className="flex justify-between pt-4">
                     <Button
                       type="button"
                       variant="ghost"
                       onClick={handleBack}
-                      className="text-slate-400"
+                      className="text-muted-foreground"
                     >
                       Back
                     </Button>
-                    <Button
-                      type="submit"
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
+                    <Button type="submit" className="">
                       Continue
                     </Button>
                   </div>
@@ -313,10 +326,10 @@ export default function SetupPage() {
           {currentStep === "integrations" && (
             <>
               <CardHeader>
-                <CardTitle className="text-2xl text-white">
+                <CardTitle className="text-xl sm:text-2xl font-bold title-gradient">
                   Configure Integrations
                 </CardTitle>
-                <CardDescription className="text-slate-400">
+                <CardDescription className="text-muted-foreground">
                   Optional: Add your API keys for enhanced functionality. Leave
                   blank to use defaults from environment.
                 </CardDescription>
@@ -324,46 +337,70 @@ export default function SetupPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
                   <div className="space-y-2">
-                    <Label className="text-slate-300">TMDB API Key</Label>
+                    <Label
+                      htmlFor="tmdb-api-key"
+                      className="text-muted-foreground"
+                    >
+                      TMDB API Key
+                    </Label>
                     <Input
+                      id="tmdb-api-key"
+                      name="tmdb_api_key"
                       value={settings.tmdb_api_key || ""}
                       onChange={(e) =>
                         updateSetting("tmdb_api_key", e.target.value)
                       }
                       placeholder="Leave blank to use default"
-                      className="bg-slate-900 border-slate-600 text-white"
+                      className="bg-background border-input text-foreground"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-slate-300">OMDB API Key</Label>
+                    <Label
+                      htmlFor="omdb-api-key"
+                      className="text-muted-foreground"
+                    >
+                      OMDB API Key
+                    </Label>
                     <Input
+                      id="omdb-api-key"
+                      name="omdb_api_key"
                       value={settings.omdb_api_key || ""}
                       onChange={(e) =>
                         updateSetting("omdb_api_key", e.target.value)
                       }
                       placeholder="Leave blank to use default"
-                      className="bg-slate-900 border-slate-600 text-white"
+                      className="bg-background border-input text-foreground"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-slate-300">
+                    <Label
+                      htmlFor="opensubtitles-api-key"
+                      className="text-muted-foreground"
+                    >
                       OpenSubtitles API Key
                     </Label>
                     <Input
+                      id="opensubtitles-api-key"
+                      name="opensubtitles_api_key"
                       value={settings.opensubtitles_api_key || ""}
                       onChange={(e) =>
                         updateSetting("opensubtitles_api_key", e.target.value)
                       }
                       placeholder="Leave blank to use default"
-                      className="bg-slate-900 border-slate-600 text-white"
+                      className="bg-background border-input text-foreground"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label className="text-slate-300">
+                      <Label
+                        htmlFor="opensubtitles-username"
+                        className="text-muted-foreground"
+                      >
                         OpenSubtitles Username
                       </Label>
                       <Input
+                        id="opensubtitles-username"
+                        name="opensubtitles_username"
                         value={settings.opensubtitles_username || ""}
                         onChange={(e) =>
                           updateSetting(
@@ -372,14 +409,19 @@ export default function SetupPage() {
                           )
                         }
                         placeholder="Leave blank to use default"
-                        className="bg-slate-900 border-slate-600 text-white"
+                        className="bg-background border-input text-foreground"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-slate-300">
+                      <Label
+                        htmlFor="opensubtitles-password"
+                        className="text-muted-foreground"
+                      >
                         OpenSubtitles Password
                       </Label>
                       <Input
+                        id="opensubtitles-password"
+                        name="opensubtitles_password"
                         type="password"
                         value={settings.opensubtitles_password || ""}
                         onChange={(e) =>
@@ -389,17 +431,24 @@ export default function SetupPage() {
                           )
                         }
                         placeholder="Leave blank to use default"
-                        className="bg-slate-900 border-slate-600 text-white"
+                        className="bg-background border-input text-foreground"
                       />
                     </div>
                   </div>
-                  <div className="border-t border-slate-700 pt-4 mt-4">
-                    <p className="text-sm text-slate-400 mb-3">
+                  <div className="border-t border-border pt-4 mt-4">
+                    <p className="text-sm text-muted-foreground mb-3">
                       DeepL Translation (optional)
                     </p>
                     <div className="space-y-2">
-                      <Label className="text-slate-300">DeepL API Keys</Label>
+                      <Label
+                        htmlFor="deepl-api-keys"
+                        className="text-muted-foreground"
+                      >
+                        DeepL API Keys
+                      </Label>
                       <textarea
+                        id="deepl-api-keys"
+                        name="deepl_api_keys"
                         value={(settings.deepl_api_keys || []).join("\n")}
                         onChange={(e) =>
                           updateSetting(
@@ -408,21 +457,21 @@ export default function SetupPage() {
                           )
                         }
                         placeholder="One API key per line (optional)"
-                        className="w-full h-20 bg-slate-900 border border-slate-600 rounded-md p-2 text-white placeholder:text-slate-500 text-sm font-mono"
+                        className="w-full h-20 bg-background border border-input rounded-md p-2 text-foreground placeholder:text-muted-foreground text-sm font-mono transition-colors hover:border-ring/40 hover:bg-accent/30 focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       />
                     </div>
                   </div>
-                  <div className="border-t border-slate-700 pt-4 mt-4">
-                    <p className="text-sm text-slate-400 mb-3">
+                  <div className="border-t border-border pt-4 mt-4">
+                    <p className="text-sm text-muted-foreground mb-3">
                       Google Cloud Translation (optional)
                     </p>
                     <div className="space-y-2">
-                      <Label className="text-slate-300">
+                      <h4 className="text-sm text-muted-foreground">
                         Service Account JSON Credentials
-                      </Label>
+                      </h4>
                       <div className="flex items-center gap-2">
                         <label className="flex-1 cursor-pointer">
-                          <div className="flex items-center justify-center px-4 py-3 bg-slate-900 border border-slate-600 border-dashed rounded-md text-slate-400 hover:border-blue-500 hover:text-blue-400 transition-colors">
+                          <div className="flex items-center justify-center px-4 py-3 bg-secondary border border-border border-dashed rounded-md text-muted-foreground hover:border-primary hover:text-primary transition-colors">
                             <svg
                               className="w-5 h-5 mr-2"
                               fill="none"
@@ -436,16 +485,22 @@ export default function SetupPage() {
                                 d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
                               />
                             </svg>
-                            <span className="text-sm">
+                            <span
+                              id="google-cloud-upload-label"
+                              className="text-sm"
+                            >
                               {settings.google_cloud_credentials
                                 ? "✓ Credentials loaded"
                                 : "Upload JSON file"}
                             </span>
                           </div>
                           <input
+                            id="google-cloud-credentials-upload"
+                            name="google_cloud_credentials_upload"
                             type="file"
                             accept=".json"
                             className="hidden"
+                            aria-labelledby="google-cloud-upload-label"
                             onChange={(e) => {
                               const file = e.target.files?.[0];
                               if (file) {
@@ -469,8 +524,9 @@ export default function SetupPage() {
                             onClick={() =>
                               updateSetting("google_cloud_credentials", "")
                             }
-                            className="p-2 text-slate-400 hover:text-red-400 transition-colors"
+                            className="p-2 text-muted-foreground hover:text-destructive transition-colors"
                             title="Remove credentials"
+                            aria-label="Remove credentials"
                           >
                             <svg
                               className="w-5 h-5"
@@ -488,30 +544,44 @@ export default function SetupPage() {
                           </button>
                         )}
                       </div>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-muted-foreground">
                         Upload your Google Cloud service account JSON file
                       </p>
                     </div>
                   </div>
-                  <div className="border-t border-slate-700 pt-4 mt-4">
-                    <p className="text-sm text-slate-400 mb-3">
+                  <div className="border-t border-border pt-4 mt-4">
+                    <p className="text-sm text-muted-foreground mb-3">
                       qBittorrent (for torrent monitoring)
                     </p>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="text-slate-300">Host</Label>
+                        <Label
+                          htmlFor="qbittorrent-host"
+                          className="text-muted-foreground"
+                        >
+                          Host
+                        </Label>
                         <Input
+                          id="qbittorrent-host"
+                          name="qbittorrent_host"
                           value={settings.qbittorrent_host || ""}
                           onChange={(e) =>
                             updateSetting("qbittorrent_host", e.target.value)
                           }
                           placeholder="localhost"
-                          className="bg-slate-900 border-slate-600 text-white"
+                          className="bg-background border-input text-foreground"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-slate-300">Port</Label>
+                        <Label
+                          htmlFor="qbittorrent-port"
+                          className="text-muted-foreground"
+                        >
+                          Port
+                        </Label>
                         <Input
+                          id="qbittorrent-port"
+                          name="qbittorrent_port"
                           type="number"
                           value={settings.qbittorrent_port || ""}
                           onChange={(e) =>
@@ -521,7 +591,7 @@ export default function SetupPage() {
                             )
                           }
                           placeholder="8080"
-                          className="bg-slate-900 border-slate-600 text-white"
+                          className="bg-background border-input text-foreground"
                         />
                       </div>
                     </div>
@@ -531,14 +601,11 @@ export default function SetupPage() {
                   <Button
                     variant="ghost"
                     onClick={handleBack}
-                    className="text-slate-400"
+                    className="text-muted-foreground"
                   >
                     Back
                   </Button>
-                  <Button
-                    onClick={handleNext}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
+                  <Button onClick={handleNext} className="">
                     Continue
                   </Button>
                 </div>
@@ -550,10 +617,10 @@ export default function SetupPage() {
           {currentStep === "finish" && (
             <>
               <CardHeader className="text-center">
-                <CardTitle className="text-2xl text-white">
+                <CardTitle className="text-xl sm:text-2xl font-bold title-gradient">
                   Ready to Go!
                 </CardTitle>
-                <CardDescription className="text-slate-400">
+                <CardDescription className="text-muted-foreground">
                   Your setup is complete. Click finish to save your
                   configuration and start using Subro Web.
                 </CardDescription>
@@ -564,14 +631,14 @@ export default function SetupPage() {
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 )}
-                <div className="bg-slate-900/50 rounded-lg p-4 space-y-2 text-sm">
-                  <div className="flex justify-between text-slate-300">
+                <div className="bg-muted/50 rounded-lg p-4 space-y-2 text-sm">
+                  <div className="flex justify-between text-muted-foreground">
                     <span>Admin Email:</span>
-                    <span className="text-white">{adminEmail}</span>
+                    <span className="text-foreground">{adminEmail}</span>
                   </div>
-                  <div className="flex justify-between text-slate-300">
+                  <div className="flex justify-between text-muted-foreground">
                     <span>API Keys Configured:</span>
-                    <span className="text-white">
+                    <span className="text-foreground">
                       {Object.values(settings).filter((v) => v).length} fields
                     </span>
                   </div>
@@ -580,14 +647,14 @@ export default function SetupPage() {
                   <Button
                     variant="ghost"
                     onClick={handleBack}
-                    className="text-slate-400"
+                    className="text-muted-foreground"
                   >
                     Back
                   </Button>
                   <Button
                     onClick={handleComplete}
                     disabled={isLoading}
-                    className="bg-green-600 hover:bg-green-700"
+                    className=""
                   >
                     {isLoading ? "Saving..." : "Finish Setup"}
                   </Button>

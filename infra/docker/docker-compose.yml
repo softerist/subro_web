@@ -4,7 +4,9 @@
 
 services:
   caddy:
-    image: caddy:2-alpine
+    build:
+      context: .
+      dockerfile: Caddy.Dockerfile
     ports:
       - "8090:8090" # Expose Caddy's HTTP port on host 8090
       - "8444:8444" # Expose Caddy's HTTPS port on host 8444
@@ -45,7 +47,7 @@ services:
       - PYTHONPATH=/app # May still be needed
       - POSTGRES_SERVER=db # This would also work if devcontainer.json didn't set it
       - FIRST_SUPERUSER_EMAIL=${FIRST_SUPERUSER_EMAIL:-admin@example.com}
-      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD:-securepassword123}
+      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD:-SecurePassword123}
     networks:
       - app_network
     depends_on:
@@ -85,7 +87,7 @@ services:
       - PYTHONPATH=/app
       - POSTGRES_SERVER=db # This would also work if devcontainer.json didn't set it
       - FIRST_SUPERUSER_EMAIL=${FIRST_SUPERUSER_EMAIL:-admin@example.com}
-      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD:-securepassword123}
+      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD:-SecurePassword123}
     networks:
       - app_network
     depends_on:
@@ -129,9 +131,6 @@ services:
       - ../../.env
     environment:
       - NODE_ENV=development
-      # VITE_API_BASE_URL is often set here or via .env to configure the frontend build
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-https://localhost:8444/api/v1}
-      - VITE_WS_BASE_URL=${VITE_WS_BASE_URL:-wss://localhost:8444/api/v1}
     networks:
       - app_network
     restart: unless-stopped

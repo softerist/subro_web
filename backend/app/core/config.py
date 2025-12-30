@@ -7,6 +7,7 @@ import sys
 from typing import Literal
 
 from pydantic import (
+    AliasChoices,
     EmailStr,
     Field,
     PostgresDsn,
@@ -29,7 +30,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: Literal["development", "staging", "production"] = Field(
         default="development", validation_alias="APP_ENV"
     )
-    DEBUG: bool = Field(default=False, validation_alias="DEBUG_MODE")
+    DEBUG: bool = Field(default=False, validation_alias=AliasChoices("DEBUG_MODE", "DEBUG"))
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO",
         validation_alias="LOG_LEVEL",
@@ -42,6 +43,11 @@ class Settings(BaseSettings):
         default="", description="Root path for the application if served under a subpath."
     )
     USE_HTTPS: bool = Field(default=False, validation_alias="USE_HTTPS_IN_CADDYFILE_SNIPPETS")
+    FRONTEND_URL: str = Field(
+        default="https://localhost:8443",
+        description="Frontend URL for email links (password reset, etc.)",
+        validation_alias="FRONTEND_URL",
+    )
 
     # --- Core Application Settings ---
     APP_NAME: str = Field(default="Subtitle Downloader", validation_alias="APP_NAME")
@@ -51,11 +57,26 @@ class Settings(BaseSettings):
         validation_alias="APP_DESCRIPTION",
     )
     API_V1_STR: str = Field(default="/api/v1", validation_alias="API_V1_STR")
+    OPENAPI_URL: str | None = Field(default=None, validation_alias="OPENAPI_URL")
+    DOCS_URL: str | None = Field(default=None, validation_alias="DOCS_URL")
+    REDOC_URL: str | None = Field(default=None, validation_alias="REDOC_URL")
+    HEALTHZ_URL: str | None = Field(default=None, validation_alias="HEALTHZ_URL")
 
     # --- JWT & Authentication Settings ---
-    SECRET_KEY: str = Field(validation_alias="JWT_SECRET_KEY")
+    SECRET_KEY: str = Field(validation_alias=AliasChoices("JWT_SECRET_KEY", "SECRET_KEY"))
     JWT_REFRESH_SECRET_KEY: str = Field(validation_alias="JWT_REFRESH_SECRET_KEY")
+    API_KEY_PEPPER: str | None = Field(default=None, validation_alias="API_KEY_PEPPER")
     ALGORITHM: str = Field(default="HS256", validation_alias="ALGORITHM")
+    DATA_ENCRYPTION_KEYS_ENV_STR: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("DATA_ENCRYPTION_KEYS", "DATA_ENCRYPTION_KEY"),
+    )
+    RESET_PASSWORD_TOKEN_SECRET: str | None = Field(
+        default=None, validation_alias="RESET_PASSWORD_TOKEN_SECRET"
+    )
+    VERIFICATION_TOKEN_SECRET: str | None = Field(
+        default=None, validation_alias="VERIFICATION_TOKEN_SECRET"
+    )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
         default=30, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES"
     )
@@ -67,11 +88,39 @@ class Settings(BaseSettings):
     COOKIE_SAMESITE: Literal["lax", "strict", "none"] = Field(
         default="strict", validation_alias="COOKIE_SAMESITE"
     )
-    OPEN_SIGNUP: bool = Field(default=True, validation_alias="OPEN_SIGNUP")
+    OPEN_SIGNUP: bool = Field(default=False, validation_alias="OPEN_SIGNUP")
+
+    # --- Account Lockout Settings ---
+    LOGIN_MAX_ATTEMPTS: int = Field(
+        default=5,
+        description="Max failed login attempts before lockout",
+        validation_alias="LOGIN_MAX_ATTEMPTS",
+    )
+    LOGIN_LOCKOUT_MINUTES: int = Field(
+        default=15,
+        description="Lockout duration in minutes after max failed attempts",
+        validation_alias="LOGIN_LOCKOUT_MINUTES",
+    )
+    LOGIN_ATTEMPT_WINDOW_MINUTES: int = Field(
+        default=30,
+        description="Time window (minutes) to count failed attempts",
+        validation_alias="LOGIN_ATTEMPT_WINDOW_MINUTES",
+    )
+
+    # --- Mailgun Email Settings ---
+    MAILGUN_API_KEY: str | None = Field(default=None, validation_alias="MAILGUN_API_KEY")
+    MAILGUN_DOMAIN: str | None = Field(default=None, validation_alias="MAILGUN_DOMAIN")
+    MAILGUN_FROM_EMAIL: str | None = Field(default=None, validation_alias="MAILGUN_FROM_EMAIL")
+    MAILGUN_FROM_NAME: str = Field(default="Subro Web", validation_alias="MAILGUN_FROM_NAME")
 
     # --- Initial Superuser Settings ---
-    FIRST_SUPERUSER_EMAIL: EmailStr = Field(validation_alias="FIRST_SUPERUSER_EMAIL")
-    FIRST_SUPERUSER_PASSWORD: str = Field(validation_alias="FIRST_SUPERUSER_PASSWORD")
+    FIRST_SUPERUSER_EMAIL: EmailStr | None = Field(
+        default=None, validation_alias="FIRST_SUPERUSER_EMAIL"
+    )
+    FIRST_SUPERUSER_PASSWORD: str | None = Field(
+        default=None, validation_alias="FIRST_SUPERUSER_PASSWORD"
+    )
+    SETUP_TOKEN: str | None = Field(default=None, validation_alias="SETUP_TOKEN")
 
     # --- External API Keys (optional, can be overridden via Settings UI) ---
     TMDB_API_KEY: str | None = Field(default=None, validation_alias="TMDB_API_KEY")
@@ -255,17 +304,22 @@ class Settings(BaseSettings):
     # --- Fields for complex parsing ---
     allowed_media_folders_env_str: str = Field(
         default='["/mnt/sata0/Media","/mnt/sata1/Media"]',
-        validation_alias="ALLOWED_MEDIA_FOLDERS_ENV",
+        validation_alias=AliasChoices("ALLOWED_MEDIA_FOLDERS", "ALLOWED_MEDIA_FOLDERS_ENV"),
     )
     backend_cors_origins_env_str: str | None = Field(
         default='["http://localhost:5173","http://localhost:8000","https://localhost"]',
-        validation_alias="BACKEND_CORS_ORIGINS",
+        validation_alias=AliasChoices("BACKEND_CORS_ORIGINS", "BACKEND_CORS_ORIGINS_ENV"),
     )
 
     # --- Private storage for parsed values ---
     _parsed_allowed_media_folders: list[str] = []
     _parsed_backend_cors_origins: list[str] = []
     _parsed_deepl_api_keys: list[str] = []
+    _parsed_data_encryption_keys: list[str] = []
+
+    @property
+    def DATA_ENCRYPTION_KEYS(self) -> list[str]:
+        return self._parsed_data_encryption_keys
 
     @property
     def DEEPL_API_KEYS(self) -> list[str]:
@@ -304,7 +358,18 @@ class Settings(BaseSettings):
         return parsed_list
 
     @model_validator(mode="after")
-    def _process_complex_fields_and_debug_overrides(self) -> "Settings":
+    def _run_post_init_logic(self) -> "Settings":
+        """Orchestrates post-initialization logic to reduce complexity."""
+        self._parse_complex_fields()
+        self._apply_debug_overrides()
+        self._configure_docs()
+
+        if self.ROOT_PATH and self.ROOT_PATH != "/":
+            self.ROOT_PATH = self.ROOT_PATH.strip("/")
+        return self
+
+    def _parse_complex_fields(self) -> None:
+        """Parses JSON list strings from environment variables."""
         self._parsed_allowed_media_folders = self._parse_string_list_input_helper(
             self.allowed_media_folders_env_str, "ALLOWED_MEDIA_FOLDERS"
         )
@@ -314,32 +379,49 @@ class Settings(BaseSettings):
         self._parsed_deepl_api_keys = self._parse_string_list_input_helper(
             self.DEEPL_API_KEYS_ENV_STR, "DEEPL_API_KEYS"
         )
+        self._parsed_data_encryption_keys = self._parse_string_list_input_helper(
+            self.DATA_ENCRYPTION_KEYS_ENV_STR, "DATA_ENCRYPTION_KEYS"
+        )
 
-        if self.DEBUG:
-            if self.LOG_LEVEL != "DEBUG":
-                logger.info("DEBUG mode is ON. Overriding LOG_LEVEL to DEBUG.")
-                self.LOG_LEVEL = "DEBUG"
-            if not self.DB_ECHO:
-                logger.info("DEBUG mode is ON. Overriding DB_ECHO to True.")
-                self.DB_ECHO = True
-            if not self.DB_ECHO_WORKER and self.DB_ECHO:
-                logger.info("DEBUG mode is ON & DB_ECHO is True. Setting DB_ECHO_WORKER to True.")
-                self.DB_ECHO_WORKER = True
-            if self.COOKIE_SECURE:  # In debug mode, cookies might be insecure for http://localhost
-                logger.info("DEBUG mode is ON. Overriding COOKIE_SECURE to False.")
-                self.COOKIE_SECURE = False
-        elif self.ENVIRONMENT != "development" and not self.COOKIE_SECURE:  # For prod/staging
-            # If not in dev and cookies are not secure, make them secure if HTTPS is intended
-            if self.USE_HTTPS:
+    def _apply_debug_overrides(self) -> None:
+        """Applies configuration overrides when DEBUG mode is enabled."""
+        if not self.DEBUG:
+            # Handle non-development environment security defaults
+            if self.ENVIRONMENT != "development" and not self.COOKIE_SECURE and self.USE_HTTPS:
                 self.COOKIE_SECURE = True
-            else:
+            elif self.ENVIRONMENT != "development" and not self.COOKIE_SECURE:
                 logger.warning(
-                    "Non-development environment with USE_HTTPS=False, COOKIE_SECURE remains False. Consider security implications."
+                    "Non-development environment with USE_HTTPS=False, COOKIE_SECURE remains False."
                 )
+            return
 
-        if self.ROOT_PATH and self.ROOT_PATH != "/":  # Avoid stripping if it's just "/"
-            self.ROOT_PATH = self.ROOT_PATH.strip("/")
-        return self
+        if self.LOG_LEVEL != "DEBUG":
+            logger.info("DEBUG mode is ON. Overriding LOG_LEVEL to DEBUG.")
+            self.LOG_LEVEL = "DEBUG"
+        if not self.DB_ECHO:
+            logger.info("DEBUG mode is ON. Overriding DB_ECHO to True.")
+            self.DB_ECHO = True
+        if not self.DB_ECHO_WORKER and self.DB_ECHO:
+            logger.info("DEBUG mode is ON & DB_ECHO is True. Setting DB_ECHO_WORKER to True.")
+            self.DB_ECHO_WORKER = True
+        if self.COOKIE_SECURE:
+            logger.info("DEBUG mode is ON. Overriding COOKIE_SECURE to False.")
+            self.COOKIE_SECURE = False
+
+    def _configure_docs(self) -> None:
+        """Configures API documentation URLs based on environment."""
+        if self.ENVIRONMENT == "development":
+            if self.OPENAPI_URL is None:
+                self.OPENAPI_URL = f"{self.API_V1_STR}/openapi.json"
+            if self.DOCS_URL is None:
+                self.DOCS_URL = f"{self.API_V1_STR}/docs"
+            if self.REDOC_URL is None:
+                self.REDOC_URL = f"{self.API_V1_STR}/redoc"
+            if self.HEALTHZ_URL is None:
+                self.HEALTHZ_URL = f"{self.API_V1_STR}/healthz"
+        else:
+            # In other environments, docs are None (disabled) unless explicitly set.
+            pass  # HEALTHZ_URL remains None if not explicitly set
 
     @property
     def ALLOWED_MEDIA_FOLDERS(self) -> list[str]:

@@ -35,16 +35,28 @@ async def download_file(
     Security: Only allows downloading files from configured media folders.
     """
     file_path = Path(path)
-
-    # Security check: Ensure file exists
-    if not file_path.exists():
+    try:
+        resolved_file_path = file_path.resolve(strict=True)
+    except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found",
         )
+    except RuntimeError as e:  # e.g. symlink loop
+        logger.warning(f"Path resolution failed for download '{path}': {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Path could not be resolved.",
+        ) from e
+    except Exception as e:  # NOSONAR
+        logger.warning(f"Unexpected error during path resolution for download '{path}': {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Path resolution failed.",
+        ) from e
 
     # Security check: Ensure it's a file, not a directory
-    if not file_path.is_file():
+    if not resolved_file_path.is_file():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Path is not a file",
@@ -52,7 +64,25 @@ async def download_file(
 
     # Security check: Ensure file is within allowed media folders
     allowed_folders = settings.ALLOWED_MEDIA_FOLDERS or []
-    is_allowed = any(str(file_path).startswith(str(folder)) for folder in allowed_folders)
+    resolved_allowed_folders: list[Path] = []
+    for folder in allowed_folders:
+        try:
+            resolved_allowed_folders.append(Path(folder).resolve(strict=True))
+        except FileNotFoundError:
+            logger.error(f"Configured allowed base path '{folder}' does not exist. Skipping.")
+        except RuntimeError as e:  # e.g. symlink loop
+            logger.error(
+                f"Resolution of configured allowed base path '{folder}' failed (e.g. symlink loop). Skipping: {e}"
+            )
+        except Exception as e:  # NOSONAR
+            logger.error(
+                f"Unexpected error during resolution of configured allowed base path '{folder}'. Skipping: {e}"
+            )
+
+    is_allowed = any(
+        resolved_file_path == base or base in resolved_file_path.parents
+        for base in resolved_allowed_folders
+    )
     if not is_allowed and allowed_folders:
         logger.warning(
             f"Attempted download outside allowed folders: {path} by {current_user.email}"
@@ -65,7 +95,7 @@ async def download_file(
     logger.info(f"File download: {path} by {current_user.email}")
 
     return FileResponse(
-        path=str(file_path),
-        filename=file_path.name,
+        path=str(resolved_file_path),
+        filename=resolved_file_path.name,
         media_type="application/octet-stream",
     )

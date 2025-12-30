@@ -7,7 +7,7 @@ from pathlib import Path
 
 # --- Configuration Constants within this module ---
 DEFAULT_CONSOLE_LOG_LEVEL = logging.INFO
-DEFAULT_FILE_LOG_LEVEL = logging.DEBUG
+DEFAULT_FILE_LOG_LEVEL = logging.INFO
 LOG_FILE_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 LOG_FILE_BACKUP_COUNT = 2  # Keep 2 backup logs
 
@@ -62,7 +62,7 @@ def _setup_file_handler(logger, log_file_path):
             backupCount=LOG_FILE_BACKUP_COUNT,
             encoding="utf-8",
         )
-        f_handler.setLevel(DEFAULT_FILE_LOG_LEVEL)  # File log always DEBUG
+        f_handler.setLevel(DEFAULT_FILE_LOG_LEVEL)  # File log defaults to INFO
         f_format = logging.Formatter(
             "%(asctime)s - %(levelname)-8s - [%(name)s:%(lineno)d] - %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",

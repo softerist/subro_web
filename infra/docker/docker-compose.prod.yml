@@ -1,0 +1,166 @@
+# infra/docker/docker-compose.prod.yml
+# Production-hardened configuration
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  api:
+    build:
+      target: production-api # Use production stage
+    # Security: Read-only root filesystem
+    read_only: true
+    # Writable areas via tmpfs (in-memory, ephemeral)
+    tmpfs:
+      - /tmp:size=256M,mode=1777
+      - /run:size=64M,mode=755
+    # Security: Drop all capabilities, add only what's needed
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE # If binding to ports < 1024 (not needed for 8000)
+    # Security: Prevent privilege escalation
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - APP_ENV=production
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+    # Remove development volume mounts
+    volumes:
+      # Production: Only mount necessary data volumes, not source code
+      - /mnt/usb3/Media/Movies:/mnt/usb3/Media/Movies:ro # Read-only media access
+      - /root/Downloads:/downloads # For processing downloads
+      - app_logs:/app/logs # Persistent logs volume
+    # Override command for production (no poetry, no reload)
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--workers",
+        "4",
+      ]
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+
+  worker:
+    build:
+      target: production-worker # Use production stage
+    # Security: Read-only root filesystem
+    read_only: true
+    # Writable areas via tmpfs
+    tmpfs:
+      - /tmp:size=512M,mode=1777 # Worker needs more tmp for subtitle processing
+      - /run:size=64M,mode=755
+    # Security: Drop all capabilities
+    cap_drop:
+      - ALL
+    # Security: Prevent privilege escalation
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - APP_ENV=production
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+    # Remove development volume mounts
+    volumes:
+      # Production: Mount media folders with appropriate permissions
+      - /mnt/usb3/Media/Movies:/mnt/usb3/Media/Movies # Full access for writing subtitles
+      - /root/Downloads:/downloads # For processing downloads
+      - app_logs:/app/logs
+    # Override command for production
+    command:
+      [
+        "celery",
+        "-A",
+        "app.tasks.celery_app",
+        "worker",
+        "--loglevel=info",
+        "--concurrency=4",
+      ]
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 2G
+        reservations:
+          cpus: "1"
+          memory: 512M
+
+  frontend:
+    build:
+      target: production # Use production stage (nginx serving static files)
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M,mode=1777
+      - /var/cache/nginx:size=64M,mode=755
+      - /run:size=64M,mode=755
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    # No volume mounts needed - static files baked into image
+    volumes: []
+
+  redis:
+    # Security hardening for Redis
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  db:
+    # PostgreSQL already runs as non-root by default
+    # Add resource limits for production
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+
+  caddy:
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M,mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+
+# Production-specific volumes
+volumes:
+  app_logs:
+    driver: local

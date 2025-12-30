@@ -96,3 +96,11 @@ class ProcessingStrategy(ABC):
     def logger(self) -> logging.Logger:
         """Returns a logger instance named after the strategy class."""
         return logging.getLogger(self.name)
+
+    @property
+    def is_critical(self) -> bool:
+        """
+        Returns True if the pipeline should abort if this strategy fails.
+        Defaults to False.
+        """
+        return False

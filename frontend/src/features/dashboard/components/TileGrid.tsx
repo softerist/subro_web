@@ -23,7 +23,6 @@ import {
   TileEditorDialog,
   DashboardTile as DashboardTileType,
 } from "./TileEditorDialog";
-import { Card, CardContent } from "@/components/ui/card";
 
 interface TileGridProps {
   isEditable?: boolean;
@@ -99,7 +98,7 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
   if (isLoading && !localTiles?.length) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -107,7 +106,7 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
   /*
     if (!localTiles?.length && !isEditable) {
         return (
-            <div className="text-center text-slate-400 py-10">
+            <div className="text-center text-muted-foreground py-10">
                 No tiles available.
             </div>
         );
@@ -126,7 +125,7 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
             items={localTiles.map((t) => t.id)}
             strategy={rectSortingStrategy}
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 p-2">
               {localTiles.map((tile) => (
                 <SortableTile
                   key={tile.id}
@@ -137,22 +136,24 @@ export function TileGrid({ isEditable = false }: TileGridProps) {
                 />
               ))}
               {/* Add New Tile Button (in grid) */}
-              <Card
-                className="flex items-center justify-center h-full border-dashed cursor-pointer hover:border-primary/50 transition-colors min-h-[100px]"
+              <button
+                type="button"
+                className="flex w-full items-center justify-center h-full border-2 border-dashed border-border/60 rounded-xl cursor-pointer hover:border-primary/50 hover:bg-accent/30 transition-all duration-200 min-h-[120px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 onClick={handleCreate}
+                aria-label="Add tile"
               >
-                <CardContent className="flex flex-col items-center justify-center p-6 text-slate-400">
-                  <Plus className="h-8 w-8 mb-2" />
-                  <span className="text-sm font-medium">Add Tile</span>
-                </CardContent>
-              </Card>
+                <div className="flex flex-col items-center justify-center p-4 text-muted-foreground">
+                  <Plus className="h-6 w-6 mb-2" />
+                  <span className="text-xs font-medium">Add Tile</span>
+                </div>
+              </button>
             </div>
           </SortableContext>
         </DndContext>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 p-2">
           {!localTiles?.length ? (
-            <div className="col-span-full text-center text-slate-400 py-8">
+            <div className="col-span-full text-center text-muted-foreground py-8 text-sm">
               No tiles available.
             </div>
           ) : (

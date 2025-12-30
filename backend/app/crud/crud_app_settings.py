@@ -6,6 +6,7 @@ Implements singleton pattern - there is only ever one row in app_settings table.
 
 import json
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -17,6 +18,23 @@ from app.db.models.deepl_usage import DeepLUsage
 from app.schemas.app_settings import SettingsRead, SettingsUpdate
 
 logger = logging.getLogger(__name__)
+
+_DEEPL_REVALIDATION_COOLDOWN = timedelta(seconds=30)
+_deepl_revalidation_requested: dict[str, datetime] = {}
+
+
+def _should_schedule_deepl_revalidation(key_hash: str, now: datetime) -> bool:
+    last_requested = _deepl_revalidation_requested.get(key_hash)
+    if last_requested and now - last_requested < _DEEPL_REVALIDATION_COOLDOWN:
+        return False
+    _deepl_revalidation_requested[key_hash] = now
+    if len(_deepl_revalidation_requested) > 500:
+        cutoff = now - timedelta(minutes=10)
+        for existing_key, timestamp in list(_deepl_revalidation_requested.items()):
+            if timestamp < cutoff:
+                del _deepl_revalidation_requested[existing_key]
+    return True
+
 
 # Fields that should be encrypted in the database
 ENCRYPTED_FIELDS = {
@@ -361,15 +379,23 @@ class CRUDAppSettings:
             qbittorrent_password=self._get_effective_and_mask(
                 db_settings, env_settings, "qbittorrent_password"
             ),
-            allowed_media_folders=self._get_effective_list(
-                db_settings, env_settings, "allowed_media_folders", "ALLOWED_MEDIA_FOLDERS"
+            allowed_media_folders=await self._get_combined_allowed_folders(
+                db, db_settings, env_settings
             ),
             setup_completed=db_settings.setup_completed,
             # Validation status from DB cache
-            tmdb_valid=db_settings.tmdb_valid,
-            omdb_valid=db_settings.omdb_valid,
+            tmdb_valid=self._convert_tmdb_status(
+                db_settings.tmdb_valid, db_settings.tmdb_rate_limited
+            ),
+            omdb_valid=self._convert_omdb_status(
+                db_settings.omdb_valid, db_settings.omdb_rate_limited
+            ),
             opensubtitles_valid=db_settings.opensubtitles_valid,
             opensubtitles_key_valid=db_settings.opensubtitles_key_valid,
+            opensubtitles_level=db_settings.opensubtitles_level,
+            opensubtitles_vip=db_settings.opensubtitles_vip,
+            opensubtitles_allowed_downloads=db_settings.opensubtitles_allowed_downloads,
+            opensubtitles_rate_limited=db_settings.opensubtitles_rate_limited,
             # Google Cloud status - check DB first, then env path
             # Logic: If DB has value (even empty string), use it. If DB is None, check Env.
             google_cloud_configured=bool(
@@ -397,6 +423,7 @@ class CRUDAppSettings:
                     else None
                 )
             ),
+            google_usage=await self._get_google_usage_stats(db),
         )
 
     def _get_db_to_env_map(self) -> dict[str, str]:
@@ -433,6 +460,41 @@ class CRUDAppSettings:
             return mask_sensitive_value(str(raw))
 
         return ""
+
+    def _convert_tmdb_status(
+        self, db_valid: bool | None, db_rate_limited: bool | None = None
+    ) -> str | None:
+        """
+        Convert TMDB boolean validation status to string.
+        Returns: 'valid', 'invalid', 'limit_reached', or None
+        """
+        if db_valid is None:
+            return None
+        if db_valid is True:
+            return "valid"
+        # False - check if it's due to rate limiting or genuinely invalid
+        if db_rate_limited is True:
+            return "limit_reached"
+        return "invalid"
+
+    def _convert_omdb_status(
+        self, db_valid: bool | None, db_rate_limited: bool | None = None
+    ) -> str | None:
+        """
+        Convert OMDB boolean validation status to string.
+        Returns: 'valid', 'invalid', 'limit_reached', or None
+        Note: 'limit_reached' is detected in the validation layer based on
+        whether a previously valid key starts failing. The rate_limited flag
+        indicates this scenario.
+        """
+        if db_valid is None:
+            return None
+        if db_valid is True:
+            return "valid"
+        # False - check if it's due to rate limiting or genuinely invalid
+        if db_rate_limited is True:
+            return "limit_reached"
+        return "invalid"
 
     def _get_effective_plain(
         self, db_settings: AppSettings, _env_settings: Any, field_name: str
@@ -498,7 +560,27 @@ class CRUDAppSettings:
 
         return []
 
-    async def _get_deepl_usage_stats(
+    async def _get_combined_allowed_folders(
+        self, db: AsyncSession, db_settings: AppSettings, env_settings: Any
+    ) -> list[str]:
+        """Combine allowed folders from AppSettings (legacy/env) and StoragePaths (auto-added)."""
+        # 1. Get from AppSettings/Env
+        settings_paths = self._get_effective_list(
+            db_settings, env_settings, "allowed_media_folders", "ALLOWED_MEDIA_FOLDERS"
+        )
+
+        # 2. Get from StoragePath table
+        # Avoid circular import at module level
+        from app.crud.crud_storage_path import storage_path as crud_storage_path
+
+        db_paths_objs = await crud_storage_path.get_multi(db)
+        db_paths = [p.path for p in db_paths_objs]
+
+        # 3. Combine and Deduplicate
+        combined = list(set(settings_paths + db_paths))
+        return sorted(combined)
+
+    async def _get_deepl_usage_stats(  # noqa: C901
         self, db: AsyncSession, configured_keys: list[str]
     ) -> list[dict]:
         """Read DeepL usage stats from Database and merge with configured keys."""
@@ -506,24 +588,44 @@ class CRUDAppSettings:
         result = await db.execute(select(DeepLUsage))
         usage_records = result.scalars().all()
 
-        usage_map = {
-            record.key_identifier: {
-                "key_alias": f"...{record.key_identifier}",
-                "character_count": record.character_count,
-                "character_limit": record.character_limit,
-                "valid": record.valid,
-            }
-            for record in usage_records
-        }
-
         import hashlib
+
+        usage_map = {record.key_identifier: record for record in usage_records}
+        now = datetime.now(UTC)
+        revalidate_invalid_after = timedelta(minutes=5)
+        refresh_valid_after = timedelta(hours=24)
 
         # Check for missing keys and trigger background validation
         missing_keys = []
+        missing_hashes: set[str] = set()
+        pending_revalidate: set[str] = set()
         for key_str in configured_keys:
+            if not key_str or not isinstance(key_str, str) or not key_str.strip():
+                continue
+
             key_hash = hashlib.sha256(key_str.strip().encode()).hexdigest()
-            if key_hash not in usage_map:
-                missing_keys.append(key_str)
+            record = usage_map.get(key_hash)
+            if not record:
+                if key_hash not in missing_hashes:
+                    missing_keys.append(key_str)
+                    missing_hashes.add(key_hash)
+                continue
+
+            last_updated = record.last_updated
+            if last_updated and last_updated.tzinfo is None:
+                last_updated = last_updated.replace(tzinfo=UTC)
+            if record.valid is False:
+                if not last_updated or now - last_updated >= revalidate_invalid_after:
+                    if _should_schedule_deepl_revalidation(key_hash, now):
+                        if key_hash not in missing_hashes:
+                            missing_keys.append(key_str)
+                            missing_hashes.add(key_hash)
+                        pending_revalidate.add(key_hash)
+            elif last_updated and now - last_updated >= refresh_valid_after:
+                if _should_schedule_deepl_revalidation(key_hash, now):
+                    if key_hash not in missing_hashes:
+                        missing_keys.append(key_str)
+                        missing_hashes.add(key_hash)
 
         if missing_keys:
             try:
@@ -546,14 +648,22 @@ class CRUDAppSettings:
 
         final_stats = []
         for key_str in configured_keys:
+            if not key_str or not isinstance(key_str, str) or not key_str.strip():
+                continue
             # Look up by hash
             key_hash = hashlib.sha256(key_str.strip().encode()).hexdigest()
             suffix = key_str[-8:] if len(key_str) >= 8 else key_str
 
-            if key_hash in usage_map:
-                # Found record (by hash)
-                stat = usage_map[key_hash].copy()
-                stat["key_alias"] = f"...{suffix}"
+            record = usage_map.get(key_hash)
+            if record:
+                stat = {
+                    "key_alias": f"...{suffix}",
+                    "character_count": record.character_count,
+                    "character_limit": record.character_limit,
+                    "valid": record.valid,
+                }
+                if key_hash in pending_revalidate:
+                    stat["valid"] = None
                 final_stats.append(stat)
             else:
                 # Fallback if validation hasn't completed yet
@@ -567,6 +677,271 @@ class CRUDAppSettings:
                     }
                 )
         return final_stats
+
+    async def _get_google_usage_stats(self, db: AsyncSession) -> dict | None:
+        """
+        Get Google Translate usage stats from Google Cloud Monitoring API only.
+
+        Returns None if Cloud Monitoring is not available - local stats are on the Statistics page.
+        """
+        # Try to get real-time usage from Google Cloud Monitoring API (which handles persistence/fallback)
+        return await self._get_google_cloud_monitoring_usage(db)
+
+    async def _get_google_cloud_monitoring_usage(self, db: AsyncSession) -> dict | None:  # noqa: C901
+        """
+        Fetch Google Translate API usage from Google Cloud Monitoring API.
+
+        Returns dict with 'success' and 'data' or 'error' keys.
+        Only attempts to fetch if Google Cloud is properly configured and validated.
+        """
+        import asyncio
+        from datetime import UTC, datetime
+
+        try:
+            from google.cloud import monitoring_v3
+        except ImportError:
+            logger.debug("google-cloud-monitoring library not installed")
+            return None  # Silently skip if library not installed
+
+        # Get credentials and project ID from settings
+        db_settings = await self.get(db)
+
+        # Only attempt if Google Cloud is configured and validated
+        if not db_settings.google_cloud_valid:
+            return None  # Google Cloud not validated, skip silently
+
+        project_id = db_settings.google_cloud_project_id
+        if not project_id:
+            return None  # No project ID, skip silently
+
+        if not db_settings.google_cloud_credentials:
+            logger.debug("No Google Cloud credentials configured")
+            return None  # No credentials, skip silently
+
+        logger.debug(f"Cloud Monitoring API for project: {project_id}")
+
+        try:
+            import json
+            from datetime import timedelta
+
+            from google.oauth2 import service_account
+
+            from app.core.security import decrypt_value
+
+            # Decrypt the stored credentials JSON
+            try:
+                creds_json_str = decrypt_value(db_settings.google_cloud_credentials)
+                creds_json = json.loads(creds_json_str)
+            except Exception as e:
+                logger.warning(f"Failed to decrypt Google Cloud credentials: {e}")
+                return {"success": False, "error": "Failed to decrypt credentials"}
+
+            # Create credentials from the service account JSON
+            try:
+                credentials = service_account.Credentials.from_service_account_info(
+                    creds_json,
+                    scopes=["https://www.googleapis.com/auth/monitoring.read"],
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create credentials from service account: {e}")
+                return {"success": False, "error": f"Invalid service account: {e}"}
+
+            # Run in thread pool since the Google client is synchronous
+            def fetch_metrics():  # noqa: C901
+                from google.api_core import exceptions as google_exceptions
+
+                # --- API CALL Logic ---
+                try:
+                    client = monitoring_v3.MetricServiceClient(credentials=credentials)
+                    project_name = f"projects/{project_id}"
+
+                    # Query logic shared between standard and fallback
+                    now = datetime.now(UTC)
+                    start_time = now - timedelta(days=30)  # Last 30 days
+                    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+                    interval = monitoring_v3.TimeInterval()
+                    # Use standard datetime objects directly
+                    interval.end_time = now
+                    interval.start_time = start_time
+
+                    found_chars = None
+                    # final_source = "google_cloud_monitoring" # Removed unused
+
+                    # 1. Try Standard Metric (translate.googleapis.com/translation/character_count)
+                    try:
+                        results = client.list_time_series(
+                            request={
+                                "name": project_name,
+                                "filter": 'metric.type="translate.googleapis.com/translation/character_count"',
+                                "interval": interval,
+                                "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+                            }
+                        )
+                        points_found = False
+                        total_chars = 0
+                        this_month_chars = 0
+
+                        for series in results:
+                            points_found = True
+                            for point in series.points:
+                                chars = point.value.int64_value
+                                total_chars += chars
+                                point_time = point.interval.end_time
+                                if point_time >= month_start:
+                                    this_month_chars += chars
+
+                        if points_found:
+                            found_chars = (total_chars, this_month_chars)
+                        else:
+                            logger.info(
+                                "Standard metric returned no data. Trying fallback 'serviceruntime' metric..."
+                            )
+
+                    except google_exceptions.NotFound:
+                        logger.info(
+                            "Standard metric descriptor not found (404). Trying fallback 'serviceruntime' metric..."
+                        )
+
+                    # 2. Fallback Metric (serviceruntime.googleapis.com/quota/rate/net_usage)
+                    if found_chars is None:
+                        # Filter for quota_metric="translate.googleapis.com/default"
+                        fallback_filter = (
+                            'metric.type="serviceruntime.googleapis.com/quota/rate/net_usage" AND '
+                            'metric.label.quota_metric="translate.googleapis.com/default"'
+                        )
+
+                        results = client.list_time_series(
+                            request={
+                                "name": project_name,
+                                "filter": fallback_filter,
+                                "interval": interval,
+                                "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+                            }
+                        )
+
+                        total_chars = 0
+                        this_month_chars = 0
+
+                        for series in results:
+                            for point in series.points:
+                                chars = point.value.int64_value
+                                total_chars += chars
+                                point_time = point.interval.end_time
+                                if point_time >= month_start:
+                                    this_month_chars += chars
+
+                        found_chars = (total_chars, this_month_chars)
+                        # NOTE: Keep source as standard 'google_cloud_monitoring' even if fallback used?
+                        # Or maybe we don't need to distinguish for the UI unless it's cached.
+                        # Let's keep it clean.
+
+                    # Check final result
+                    if found_chars:
+                        total, month = found_chars
+                        # --- PERSISTENCE ---
+                        # Update DB with latest valid stats
+                        logger.info(f"Updated Google usage cache: Total={total}, Month={month}")
+                        # Use synchronous update since we are in a thread
+                        # But we don't have a session here. We should return the data and let the main loop update?
+                        # Or we do it in the async wrapper.
+                        # Actually, fetch_metrics is a sync function run in executor. It doesn't have DB access conveniently.
+                        # It handles raw API.
+
+                        return {
+                            "success": True,
+                            "data": {
+                                "total_characters": total,
+                                "this_month_characters": month,
+                                "source": "google_cloud_monitoring",
+                            },
+                        }
+                    else:
+                        return {"success": False, "error": "No metrics found."}
+
+                except google_exceptions.PermissionDenied as e:
+                    logger.warning(f"Cloud Monitoring permission denied: {e}")
+                    return {
+                        "success": False,
+                        "error": "Permission denied. Add 'Monitoring Viewer' role.",
+                    }
+                except google_exceptions.NotFound as e:
+                    # Treat "Cannot find metric" as 0 only if strictly looking for standard
+                    # But we already tried fallback.
+                    error_str = str(e)
+                    if (
+                        "Monitoring API has not been used" in error_str
+                        or "is not enabled" in error_str.lower()
+                    ):
+                        return {
+                            "success": False,
+                            "error": "Cloud Monitoring API is not enabled.",
+                        }
+                    if "Cannot find metric" in error_str:
+                        return {
+                            "success": True,
+                            "data": {
+                                "total_characters": 0,
+                                "this_month_characters": 0,
+                                "source": "google_cloud_monitoring_empty",
+                            },
+                        }
+                    return {"success": False, "error": f"Resource not found: {e}"}
+                except Exception as e:
+                    logger.warning(f"Unexpected error in Cloud Monitoring: {e}")
+                    return {"success": False, "error": str(e)}
+
+            # Run synchronous API call in thread pool
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, fetch_metrics)
+
+            # --- POST-FETCH PERSISTENCE & FALLBACK LOGIC ---
+            if result.get("success"):
+                # Persist to DB
+                data = result["data"]
+                total = data.get("total_characters", 0)
+                month = data.get("this_month_characters", 0)
+
+                # Update DB asynchronously
+                from sqlalchemy import update
+
+                await db.execute(
+                    update(AppSettings)
+                    .where(AppSettings.id == 1)
+                    .values(
+                        google_usage_total_chars=total,
+                        google_usage_month_chars=month,
+                        google_usage_last_updated=datetime.now(UTC),
+                    )
+                )
+                await db.commit()  # Important
+                return data
+            else:
+                # API Failed or Error
+                error_msg = result.get("error", "Unknown error")
+                logger.warning(
+                    f"Cloud Monitoring failed ({error_msg}). checking for cached data..."
+                )
+
+                # Check DB for cached data
+                if db_settings.google_usage_total_chars is not None:
+                    logger.info("Returning cached Google usage stats.")
+                    return {
+                        "total_characters": db_settings.google_usage_total_chars,
+                        "this_month_characters": db_settings.google_usage_month_chars,
+                        "source": "google_cloud_monitoring_cached",
+                        "last_updated": db_settings.google_usage_last_updated,
+                        "error": error_msg,  # Optional: pass failure reason to UI?
+                    }
+
+                # No cache available, return None (or maybe the error if we want the UI to show it)
+                # Usually None means "don't show section".
+                logger.warning("No cached Google usage data available.")
+                return None
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch Google Cloud Monitoring data: {e}")
+            return {"success": False, "error": str(e)}
 
 
 # Singleton instance

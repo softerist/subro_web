@@ -8,11 +8,11 @@ This project adheres to a Code of Conduct [Placeholder: Link to Code of Conduct 
 
 ## Getting Started
 
-1.  Ensure you have the necessary prerequisites installed (Docker, Git, Make, etc. - see `README.md`).
-2.  Fork the repository on GitHub.
-3.  Clone your fork locally: `git clone git@github.com:your-username/your-repo.git`
-4.  Set up the development environment as described in the `README.md` Quick Start section.
-5.  Install pre-commit hooks: `pre-commit install --install-hooks && pre-commit install --hook-type commit-msg`
+1. Ensure you have the necessary prerequisites installed (Docker, Git, Make, etc. - see `README.md`).
+2. Fork the repository on GitHub.
+3. Clone your fork locally: `git clone git@github.com:your-username/your-repo.git`
+4. Set up the development environment as described in the `README.md` Quick Start section.
+5. Install pre-commit hooks: `pre-commit install --install-hooks && pre-commit install --hook-type commit-msg`
 
 ## Branching Strategy
 
@@ -35,15 +35,15 @@ We follow a trunk-based development model using the `main` branch as the single 
 
 ## Pull Request (PR) Process
 
-1.  Ensure your feature branch is up-to-date with the latest `main` branch (`git pull origin main --rebase`). Resolve any conflicts.
-2.  Make sure all tests pass (`make test`) and linting checks pass (`make lint`). Pre-commit hooks should catch most linting issues.
-3.  Push your feature branch to your fork on GitHub.
-4.  Create a Pull Request from your feature branch to the original repository's `main` branch.
-5.  Provide a clear title and description for your PR, explaining the "what" and "why" of the changes. Link the relevant GitHub Issue if applicable (e.g., "Closes #15").
-6.  The CI pipeline must pass for the PR to be mergeable.
-7.  At least one approval from a maintainer (e.g., Technical Lead) is required for merging.
-8.  Address any code review feedback promptly. Push subsequent changes to the same feature branch; the PR will update automatically.
-9.  Once approved and CI passes, the maintainer will merge the PR using a squash merge to keep the `main` history clean.
+1. Ensure your feature branch is up-to-date with the latest `main` branch (`git pull origin main --rebase`). Resolve any conflicts.
+2. Make sure all tests pass (`make test`) and linting checks pass (`make lint`). Pre-commit hooks should catch most linting issues.
+3. Push your feature branch to your fork on GitHub.
+4. Create a Pull Request from your feature branch to the original repository's `main` branch.
+5. Provide a clear title and description for your PR, explaining the "what" and "why" of the changes. Link the relevant GitHub Issue if applicable (e.g., "Closes #15").
+6. The CI pipeline must pass for the PR to be mergeable.
+7. At least one approval from a maintainer (e.g., Technical Lead) is required for merging.
+8. Address any code review feedback promptly. Push subsequent changes to the same feature branch; the PR will update automatically.
+9. Once approved and CI passes, the maintainer will merge the PR using a squash merge to keep the `main` history clean.
 
 ## Coding Standards
 

@@ -1,5 +1,21 @@
 import { useEffect, useState, useRef } from "react";
-import { Plus, Trash2, AlertCircle } from "lucide-react";
+import {
+  AlertCircle,
+  Check,
+  Plus,
+  Trash2,
+  Copy,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  Terminal,
+  Plug,
+  HardDrive,
+  Settings,
+  ShieldCheck,
+} from "lucide-react";
+import { usersApi } from "@/lib/users";
+import { useAuthStore } from "@/store/authStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,8 +36,11 @@ import {
 } from "@/lib/settingsApi";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { SavePill } from "@/components/common/SavePill";
+import { PageHeader } from "@/components/common/PageHeader";
+import { MfaSettings } from "@/features/auth/components/MfaSettings";
+import { PasswordSettings } from "@/features/auth/components/PasswordSettings";
 
-type SettingsTab = "integrations" | "qbittorrent" | "paths";
+type SettingsTab = "integrations" | "qbittorrent" | "security";
 
 export default function SettingsPage() {
   const [currentTab, setCurrentTab] = useState<SettingsTab>("integrations");
@@ -39,6 +58,11 @@ export default function SettingsPage() {
   const [editingKeyIndex, setEditingKeyIndex] = useState<number | null>(null);
 
   // Confirmation Dialog State
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isGeneratingKey, setIsGeneratingKey] = useState(false);
+  const [generatedApiKey, setGeneratedApiKey] = useState<string | null>(null);
+
+  const { user, setUser } = useAuthStore();
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
     type: "deepl" | "google" | null;
@@ -56,7 +80,47 @@ export default function SettingsPage() {
   // Ref for dynamic SavePill centering
   const cardRef = useRef<HTMLDivElement>(null);
 
+  const tabs = [
+    { id: "integrations", label: "API Integrations", icon: Plug },
+    { id: "qbittorrent", label: "qBittorrent", icon: HardDrive },
+    { id: "security", label: "Security", icon: ShieldCheck },
+  ] as const;
+
   const hasChanges = Object.keys(formData).length > 0;
+
+  const handleRegenerateApiKey = async () => {
+    try {
+      setIsGeneratingKey(true);
+      const createdKey = await usersApi.regenerateApiKey();
+      setGeneratedApiKey(createdKey.api_key);
+      setShowApiKey(true);
+      setUser({ ...user!, api_key_preview: createdKey.preview });
+      setSuccess("API key generated. This value is shown only once.");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (error) {
+      setError("Failed to regenerate API key.");
+      console.error(error);
+    } finally {
+      setIsGeneratingKey(false);
+    }
+  };
+
+  const handleRevokeApiKey = async () => {
+    try {
+      setIsGeneratingKey(true);
+      await usersApi.revokeApiKey();
+      setGeneratedApiKey(null);
+      setShowApiKey(false);
+      setUser({ ...user!, api_key_preview: null });
+      setSuccess("API Key revoked successfully.");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (error) {
+      setError("Failed to revoke API key.");
+      console.error(error);
+    } finally {
+      setIsGeneratingKey(false);
+    }
+  };
 
   useEffect(() => {
     loadSettings();
@@ -275,67 +339,89 @@ export default function SettingsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64 page-enter">
-        <div className="text-slate-400">Loading settings...</div>
+        <div className="text-muted-foreground">Loading settings...</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 page-enter page-stagger">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-            Settings
-          </h1>
-          <p className="text-slate-400">
-            Manage your application configuration
-          </p>
-        </div>
-      </div>
+    <div className="space-y-6 px-4 pt-3 pb-3 page-enter page-stagger">
+      <PageHeader
+        title="Settings"
+        description="Manage your application configuration"
+        icon={Settings}
+        iconClassName="from-amber-500 to-orange-500 shadow-amber-500/20"
+      />
 
       {error && (
         <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
+      {success && (
+        <Alert className="border-green-500/50 bg-green-500/10 text-green-400">
+          <Check className="h-4 w-4" />
+          <AlertDescription>{success}</AlertDescription>
+        </Alert>
+      )}
+
       {/* Tab Navigation */}
-      <div className="flex gap-2 border-b border-slate-700 pb-2">
-        {[
-          { id: "integrations", label: "API Integrations" },
-          { id: "qbittorrent", label: "qBittorrent" },
-          { id: "paths", label: "Media Paths" },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setCurrentTab(tab.id as SettingsTab)}
-            className={`px-4 py-2 text-sm font-medium rounded-t transition-colors ${
-              currentTab === tab.id
-                ? "bg-slate-700 text-white"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex gap-2 rounded-2xl border border-border bg-card/40 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+        {tabs.map((tab) => {
+          const isActive = currentTab === tab.id;
+          const Icon = tab.icon;
+
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setCurrentTab(tab.id as SettingsTab)}
+              className={`group relative flex-1 overflow-hidden rounded-xl px-4 py-2 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 sm:text-sm ${
+                isActive
+                  ? "text-white"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              }`}
+            >
+              {isActive && (
+                <motion.span
+                  layoutId="settings-tab-indicator"
+                  transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary/90 via-sky-500/90 to-blue-600/90 shadow-lg shadow-sky-500/20 ring-1 ring-sky-400/40"
+                />
+              )}
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                <Icon
+                  className={`h-4 w-4 ${
+                    isActive
+                      ? "text-white"
+                      : "text-muted-foreground group-hover:text-foreground"
+                  }`}
+                />
+                <span className="whitespace-nowrap">{tab.label}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab Content */}
-      <Card ref={cardRef} className="soft-hover">
+      <Card ref={cardRef} className="soft-hover bg-card/50 border-border">
         {/* API Integrations */}
         {currentTab === "integrations" && (
           <>
             <CardHeader>
-              <CardTitle className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+              <CardTitle className="text-lg sm:text-xl font-bold title-gradient">
                 External Services
               </CardTitle>
-              <CardDescription className="text-slate-400">
+              <CardDescription className="text-muted-foreground">
                 Configure API keys for metadata providers and subtitle services.
                 Masked values indicate configured credentials from env.prod
                 file.
               </CardDescription>
 
-              <p className="mt-2 text-xs text-slate-500 italic">
+              <p className="mt-2 text-xs text-muted-foreground italic">
                 💡 Settings saved here override environment variables
                 (.env.prod).
               </p>
@@ -347,88 +433,123 @@ export default function SettingsPage() {
                   <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
                     <span className="text-white text-sm font-bold">📺</span>
                   </div>
-                  <h3 className="text-lg font-semibold text-white">
+                  <h3 className="text-lg font-semibold text-foreground">
                     Metadata Providers
                   </h3>
                 </div>
                 <div className="pl-10 space-y-6 max-w-xl">
                   {/* TMDB API Key */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs uppercase tracking-wider text-slate-500">
-                        TMDB API Key
-                      </Label>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Label
+                          htmlFor="tmdb-api-key"
+                          className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer"
+                        >
+                          TMDB API Key
+                        </Label>
+                        {settings?.tmdb_api_key &&
+                          settings.tmdb_api_key.trim() !== "" && (
+                            <span className="text-xs text-muted-foreground">
+                              (Free: ~40 req/10s)
+                            </span>
+                          )}
+                      </div>
                       {settings?.tmdb_api_key &&
                       settings.tmdb_api_key.trim() !== "" ? (
                         <span
                           className={`px-2 py-0.5 text-xs rounded-full ${
-                            settings?.tmdb_valid === true
+                            settings?.tmdb_valid === "valid"
                               ? "bg-emerald-500/20 text-emerald-400"
-                              : settings?.tmdb_valid === false
-                                ? "bg-red-500/20 text-red-400"
-                                : "bg-yellow-500/20 text-yellow-400"
+                              : settings?.tmdb_valid === "limit_reached"
+                                ? "bg-amber-500/20 text-amber-400"
+                                : settings?.tmdb_valid === "invalid"
+                                  ? "bg-red-500/20 text-red-400"
+                                  : "bg-amber-500/20 text-amber-500"
                           }`}
                         >
-                          {settings?.tmdb_valid === true
+                          {settings?.tmdb_valid === "valid"
                             ? "Valid"
-                            : settings?.tmdb_valid === false
-                              ? "Invalid"
-                              : "Not Validated"}
+                            : settings?.tmdb_valid === "limit_reached"
+                              ? "Limit Reached"
+                              : settings?.tmdb_valid === "invalid"
+                                ? "Invalid"
+                                : "Not Validated"}
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground">
                           Not Connected
                         </span>
                       )}
                     </div>
                     <Input
+                      id="tmdb-api-key"
+                      name="tmdb_api_key"
                       placeholder={settings?.tmdb_api_key || "Enter API key..."}
                       value={formData.tmdb_api_key || ""}
                       onChange={(e) =>
                         updateField("tmdb_api_key", e.target.value)
                       }
                       onKeyDown={handleInputKeyDown}
-                      className="bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-cyan-500 h-10 w-full"
+                      className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
                     />
                   </div>
 
                   {/* OMDB API Key */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs uppercase tracking-wider text-slate-500">
-                        OMDB API Key
-                      </Label>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Label
+                          htmlFor="omdb-api-key"
+                          className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer"
+                        >
+                          OMDB API Key
+                        </Label>
+                        {/* Free tier quota hint - always show when key is configured */}
+                        {settings?.omdb_api_key &&
+                          settings.omdb_api_key.trim() !== "" && (
+                            <span className="text-xs text-muted-foreground">
+                              (Free: 1000/day)
+                            </span>
+                          )}
+                      </div>
                       {settings?.omdb_api_key &&
                       settings.omdb_api_key.trim() !== "" ? (
                         <span
                           className={`px-2 py-0.5 text-xs rounded-full ${
-                            settings?.omdb_valid === true
+                            settings?.omdb_valid === "valid"
                               ? "bg-emerald-500/20 text-emerald-400"
-                              : settings?.omdb_valid === false
-                                ? "bg-red-500/20 text-red-400"
-                                : "bg-yellow-500/20 text-yellow-400"
+                              : settings?.omdb_valid === "limit_reached"
+                                ? "bg-amber-500/20 text-amber-400"
+                                : settings?.omdb_valid === "invalid"
+                                  ? "bg-red-500/20 text-red-400"
+                                  : "bg-amber-500/20 text-amber-500"
                           }`}
                         >
-                          {settings?.omdb_valid === true
+                          {settings?.omdb_valid === "valid"
                             ? "Valid"
-                            : settings?.omdb_valid === false
-                              ? "Invalid"
-                              : "Not Validated"}
+                            : settings?.omdb_valid === "limit_reached"
+                              ? "Limit Reached"
+                              : settings?.omdb_valid === "invalid"
+                                ? "Invalid"
+                                : "Not Validated"}
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground">
                           Not Connected
                         </span>
                       )}
                     </div>
                     <Input
+                      id="omdb-api-key"
+                      name="omdb_api_key"
                       placeholder={settings?.omdb_api_key || "Enter API key..."}
                       value={formData.omdb_api_key || ""}
                       onChange={(e) =>
                         updateField("omdb_api_key", e.target.value)
                       }
                       onKeyDown={handleInputKeyDown}
-                      className="bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-cyan-500 h-10 w-full"
+                      className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
                     />
                   </div>
                 </div>
@@ -436,19 +557,46 @@ export default function SettingsPage() {
 
               {/* OpenSubtitles Section */}
               <div className="space-y-4">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
                     <span className="text-white text-sm font-bold">💬</span>
                   </div>
-                  <h3 className="text-lg font-semibold text-white">
+                  <h3 className="text-lg font-semibold text-foreground">
                     OpenSubtitles
                   </h3>
+                  {/* Subscription tier badge */}
+                  {settings?.opensubtitles_level && (
+                    <span
+                      className={`ml-1 px-2 py-0.5 text-xs rounded-full ${
+                        settings.opensubtitles_vip
+                          ? "bg-amber-500/20 text-amber-400"
+                          : "bg-muted/50 text-muted-foreground"
+                      }`}
+                    >
+                      {settings.opensubtitles_level}
+                    </span>
+                  )}
+                  {/* Downloads allowance */}
+                  {settings?.opensubtitles_allowed_downloads && (
+                    <span className="text-xs text-muted-foreground">
+                      ({settings.opensubtitles_allowed_downloads}/day)
+                    </span>
+                  )}
+                  {/* Rate limit warning */}
+                  {settings?.opensubtitles_rate_limited && (
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-red-500/20 text-red-400">
+                      Limit Reached
+                    </span>
+                  )}
                 </div>
                 <div className="pl-10 space-y-6 max-w-xl">
                   {/* API Key */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs uppercase tracking-wider text-slate-500">
+                      <Label
+                        htmlFor="opensubtitles-api-key"
+                        className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer"
+                      >
                         API Key
                       </Label>
                       {settings?.opensubtitles_api_key &&
@@ -459,7 +607,7 @@ export default function SettingsPage() {
                               ? "bg-emerald-500/20 text-emerald-400"
                               : settings?.opensubtitles_key_valid === false
                                 ? "bg-red-500/20 text-red-400"
-                                : "bg-yellow-500/20 text-yellow-400"
+                                : "bg-amber-500/20 text-amber-500"
                           }`}
                         >
                           {settings?.opensubtitles_key_valid === true
@@ -469,12 +617,14 @@ export default function SettingsPage() {
                               : "Not Validated"}
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground">
                           Not Connected
                         </span>
                       )}
                     </div>
                     <Input
+                      id="opensubtitles-api-key"
+                      name="opensubtitles_api_key"
                       placeholder={
                         settings?.opensubtitles_api_key || "Enter API key..."
                       }
@@ -483,16 +633,16 @@ export default function SettingsPage() {
                         updateField("opensubtitles_api_key", e.target.value)
                       }
                       onKeyDown={handleInputKeyDown}
-                      className="bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-amber-500 h-10 w-full"
+                      className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
                     />
                   </div>
 
                   {/* OpenSubtitles Credentials */}
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs uppercase tracking-wider text-slate-500">
+                      <h4 className="text-xs uppercase tracking-wider text-muted-foreground">
                         Credentials
-                      </Label>
+                      </h4>
                       {(settings?.opensubtitles_username &&
                         settings.opensubtitles_username.trim() !== "") ||
                       (settings?.opensubtitles_password &&
@@ -503,7 +653,7 @@ export default function SettingsPage() {
                               ? "bg-emerald-500/20 text-emerald-400"
                               : settings?.opensubtitles_valid === false
                                 ? "bg-red-500/20 text-red-400"
-                                : "bg-yellow-500/20 text-yellow-400"
+                                : "bg-amber-500/20 text-amber-500"
                           }`}
                         >
                           {settings?.opensubtitles_valid === true
@@ -521,7 +671,7 @@ export default function SettingsPage() {
                                       : "Not Validated"}
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground">
                           Not Connected
                         </span>
                       )}
@@ -529,10 +679,15 @@ export default function SettingsPage() {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="text-[10px] uppercase tracking-widest text-slate-500">
+                        <Label
+                          htmlFor="opensubtitles-username"
+                          className="text-[10px] uppercase tracking-widest text-muted-foreground"
+                        >
                           Username
                         </Label>
                         <Input
+                          id="opensubtitles-username"
+                          name="opensubtitles_username"
                           placeholder={
                             settings?.opensubtitles_username ||
                             "Enter username..."
@@ -546,15 +701,20 @@ export default function SettingsPage() {
                             )
                           }
                           onKeyDown={handleInputKeyDown}
-                          className="bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-amber-500 h-10 w-full"
+                          className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-[10px] uppercase tracking-widest text-slate-500">
+                        <Label
+                          htmlFor="opensubtitles-password"
+                          className="text-[10px] uppercase tracking-widest text-muted-foreground"
+                        >
                           Password
                         </Label>
                         <Input
+                          id="opensubtitles-password"
+                          name="opensubtitles_password"
                           type="password"
                           autoComplete="new-password"
                           placeholder={
@@ -570,7 +730,7 @@ export default function SettingsPage() {
                             )
                           }
                           onKeyDown={handleInputKeyDown}
-                          className="bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-amber-500 h-10 w-full"
+                          className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
                         />
                       </div>
                     </div>
@@ -584,7 +744,7 @@ export default function SettingsPage() {
                   <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
                     <span className="text-white text-sm font-bold">🌐</span>
                   </div>
-                  <h3 className="text-lg font-semibold text-white">
+                  <h3 className="text-lg font-semibold text-foreground">
                     DeepL Translation
                   </h3>
                   {deeplKeys.length > 0 && (
@@ -599,7 +759,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="pl-10 space-y-6 max-w-xl">
                   <div className="space-y-4">
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-muted-foreground">
                       Manage DeepL API keys. Keys saved here will override
                       environment variable settings.
                     </p>
@@ -651,10 +811,13 @@ export default function SettingsPage() {
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95 }}
                             transition={{ duration: 0.2 }}
-                            className="space-y-3 p-4 bg-slate-900/30 rounded-xl border border-slate-700/50 transition-all duration-300 hover:border-slate-600 hover:bg-slate-900/40"
+                            className="space-y-3 p-4 bg-card/50 rounded-xl border border-border transition-all duration-300 hover:border-primary/30 hover:bg-card/70"
                           >
                             <div className="flex items-center justify-between mb-2">
-                              <Label className="text-xs uppercase tracking-wider text-slate-500">
+                              <Label
+                                htmlFor={`deepl-api-key-input-${index}`}
+                                className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer"
+                              >
                                 Key {index + 1}
                               </Label>
                               {status === "valid" ? (
@@ -666,11 +829,11 @@ export default function SettingsPage() {
                                   Invalid
                                 </span>
                               ) : status === "not_connected" ? (
-                                <span className="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground">
                                   Not Connected
                                 </span>
                               ) : (
-                                <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-500/20 text-yellow-400">
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-500">
                                   Not Validated
                                 </span>
                               )}
@@ -679,6 +842,8 @@ export default function SettingsPage() {
                             <div className="relative group">
                               {isEditing ? (
                                 <Input
+                                  id={`deepl-api-key-input-${index}`}
+                                  name={`deepl_api_keys[${index}]`}
                                   type="text"
                                   placeholder="Enter DeepL API key..."
                                   autoFocus
@@ -723,13 +888,23 @@ export default function SettingsPage() {
                                       }
                                     }
                                   }}
-                                  className="w-full pr-10 bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-violet-500 font-mono text-sm h-10 transition-all duration-300"
+                                  className="w-full pr-10 bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary font-mono text-sm h-10 transition-all duration-300"
                                 />
                               ) : (
                                 <div
-                                  className="w-full pr-10 px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-md font-mono text-sm text-slate-300 overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer hover:border-violet-500 hover:bg-slate-800 transition-colors"
+                                  id={`deepl-api-key-input-${index}`}
+                                  className="w-full pr-10 px-3 py-2 bg-background border border-input rounded-md font-mono text-sm text-foreground overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer hover:border-primary/40 hover:bg-accent/60 transition-colors text-left"
                                   onClick={() => setEditingKeyIndex(index)}
                                   title="Click to edit"
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      setEditingKeyIndex(index);
+                                    }
+                                  }}
+                                  aria-label={`Edit DeepL API key ${index + 1}`}
                                 >
                                   {isMasked
                                     ? key
@@ -745,7 +920,7 @@ export default function SettingsPage() {
                                 onClick={(e) =>
                                   handleKeyDeleteRequest(index, e)
                                 }
-                                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-slate-500 hover:text-destructive hover:bg-transparent"
+                                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-transparent"
                                 title="Remove key"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -756,7 +931,7 @@ export default function SettingsPage() {
                             {/* Usage Progress Bar - Integrated inside */}
                             {usage && (
                               <div className="mt-2 space-y-1">
-                                <div className="flex justify-between items-center text-[10px] text-slate-500">
+                                <div className="flex justify-between items-center text-[10px] text-muted-foreground">
                                   <span>Character Usage</span>
                                   <span>
                                     {usage.character_count.toLocaleString()} /{" "}
@@ -779,9 +954,9 @@ export default function SettingsPage() {
                                       : 0;
                                   const isFull = percent >= 100;
                                   return (
-                                    <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                                    <div className="h-1 rounded-full bg-muted/70 overflow-hidden">
                                       <div
-                                        className={`h-full transition-all duration-500 ${isFull ? "bg-red-500" : "bg-violet-500"}`}
+                                        className={`h-full transition-all duration-500 ${isFull ? "bg-destructive" : "bg-primary"}`}
                                         style={{ width: `${percent}%` }}
                                       />
                                     </div>
@@ -816,13 +991,13 @@ export default function SettingsPage() {
                   <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
                     <span className="text-white text-sm font-bold">☁️</span>
                   </div>
-                  <h3 className="text-lg font-semibold text-white">
+                  <h3 className="text-lg font-semibold text-foreground">
                     Google Cloud Translation
                   </h3>
                 </div>
                 <div className="pl-10 space-y-6 max-w-xl">
                   <div className="space-y-4">
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-muted-foreground">
                       Configure Google Cloud Translation API credentials. Upload
                       or paste your service account JSON file.
                     </p>
@@ -845,16 +1020,16 @@ export default function SettingsPage() {
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <Label className="text-xs uppercase tracking-wider text-slate-500">
+                            <h4 className="text-xs uppercase tracking-wider text-muted-foreground">
                               Project ID
-                            </Label>
+                            </h4>
                             <span
                               className={`px-2 py-0.5 text-xs rounded-full ${
                                 settings?.google_cloud_valid === true
                                   ? "bg-emerald-500/20 text-emerald-400"
                                   : settings?.google_cloud_valid === false
                                     ? "bg-red-500/20 text-red-400"
-                                    : "bg-yellow-500/20 text-yellow-400"
+                                    : "bg-amber-500/20 text-amber-500"
                               }`}
                             >
                               {settings?.google_cloud_valid === true
@@ -865,7 +1040,7 @@ export default function SettingsPage() {
                             </span>
                           </div>
                           <div className="relative group">
-                            <div className="w-full pr-10 px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-md font-mono text-sm text-slate-300 overflow-hidden text-ellipsis whitespace-nowrap">
+                            <div className="w-full pr-10 px-3 py-2 bg-background border border-input rounded-md font-mono text-sm text-foreground overflow-hidden text-ellipsis whitespace-nowrap">
                               {settings.google_cloud_project_id || "Unknown"}
                             </div>
                             <Button
@@ -873,7 +1048,7 @@ export default function SettingsPage() {
                               variant="ghost"
                               size="icon"
                               onClick={(e) => handleGoogleRemoveRequest(e)}
-                              className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-slate-500 hover:text-destructive hover:bg-transparent"
+                              className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-transparent"
                               title="Remove configuration"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -884,13 +1059,71 @@ export default function SettingsPage() {
                         {/* Error Message Display */}
                         {settings?.google_cloud_valid === false &&
                           settings.google_cloud_error && (
-                            <Alert className="bg-red-900/20 border-red-800 text-red-200">
-                              <AlertCircle className="h-4 w-4 stroke-red-400" />
+                            <Alert className="bg-destructive/10 border-destructive/20 text-destructive">
+                              <AlertCircle className="h-4 w-4 stroke-destructive" />
                               <AlertDescription className="ml-2 font-mono text-xs break-all">
                                 {settings.google_cloud_error}
                               </AlertDescription>
                             </Alert>
                           )}
+                        {/* Google Translate Usage Stats (from Cloud Monitoring API) */}
+                        {settings?.google_usage && (
+                          <div className="mt-4 p-3 rounded-lg border border-border/60 bg-muted/40">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                                Translation Usage
+                              </span>
+                              {settings.google_usage.source ===
+                              "google_cloud_monitoring" ? (
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                  Live
+                                </span>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <span className="px-2 py-0.5 text-xs rounded-full bg-muted/70 text-muted-foreground border border-border/60">
+                                    Local
+                                  </span>
+                                  <div
+                                    className="group relative"
+                                    title={
+                                      settings.google_usage.last_updated
+                                        ? `Last updated: ${new Date(settings.google_usage.last_updated).toLocaleString()}`
+                                        : "Using cached data"
+                                    }
+                                  >
+                                    <span className="px-2 py-0.5 text-xs rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 cursor-help">
+                                      API Unreachable
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <span className="text-xs text-muted-foreground">
+                                  This Month
+                                </span>
+                                <div className="text-sm font-mono text-foreground">
+                                  {settings.google_usage.this_month_characters.toLocaleString()}{" "}
+                                  <span className="text-muted-foreground">
+                                    chars
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <span className="text-xs text-muted-foreground">
+                                  All Time
+                                </span>
+                                <div className="text-sm font-mono text-foreground">
+                                  {settings.google_usage.total_characters.toLocaleString()}{" "}
+                                  <span className="text-muted-foreground">
+                                    chars
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </motion.div>
                     ) : (
                       <motion.div
@@ -907,7 +1140,10 @@ export default function SettingsPage() {
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <Label className="text-xs uppercase tracking-wider text-slate-500">
+                            <Label
+                              htmlFor="google-cloud-config"
+                              className="text-xs uppercase tracking-wider text-muted-foreground"
+                            >
                               JSON Config
                             </Label>
                             <span
@@ -916,7 +1152,7 @@ export default function SettingsPage() {
                                   ? "bg-emerald-500/20 text-emerald-400"
                                   : settings?.google_cloud_valid === false
                                     ? "bg-red-500/20 text-red-400"
-                                    : "bg-yellow-500/20 text-yellow-400"
+                                    : "bg-amber-500/20 text-amber-500"
                               }`}
                             >
                               {settings?.google_cloud_valid === true
@@ -927,7 +1163,9 @@ export default function SettingsPage() {
                             </span>
                           </div>
                           <textarea
-                            className="w-full h-32 bg-slate-900/50 border border-slate-700 rounded-md p-3 text-white placeholder:text-slate-500 font-mono text-xs resize-none focus:border-blue-500 focus:outline-none transition-all duration-300"
+                            id="google-cloud-config"
+                            name="google_cloud_credentials"
+                            className="w-full h-32 bg-background border border-input rounded-md p-3 text-foreground placeholder:text-muted-foreground font-mono text-xs resize-none transition-colors hover:border-ring/40 hover:bg-accent/30 focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                             placeholder='{"type": "service_account", "project_id": "...", ...}'
                             onChange={(e) => {
                               updateField(
@@ -938,9 +1176,13 @@ export default function SettingsPage() {
                           />
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-xs text-slate-500">or</span>
+                          <span className="text-xs text-muted-foreground">
+                            or
+                          </span>
                           <label className="cursor-pointer group">
                             <input
+                              id="google-cloud-config-file"
+                              name="google_cloud_credentials_file"
                               type="file"
                               accept=".json"
                               className="hidden"
@@ -992,35 +1234,193 @@ export default function SettingsPage() {
         {currentTab === "qbittorrent" && (
           <>
             <CardHeader>
-              <CardTitle className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+              <CardTitle className="text-lg sm:text-xl font-bold title-gradient">
                 qBittorrent Settings
               </CardTitle>
-              <CardDescription className="text-slate-400">
+              <CardDescription className="text-muted-foreground">
                 Configure connection to your qBittorrent instance for torrent
                 monitoring.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* API Key Section */}
+              <div className="bg-card/50 rounded-lg p-4 border border-border">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+                      <Terminal className="h-4 w-4 text-primary/80" />
+                      Webhook Integration / API Key
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Use this key to trigger downloads from qBittorrent
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRegenerateApiKey}
+                      disabled={isGeneratingKey}
+                      className="h-8 border-emerald-400 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-blue-500 dark:text-blue-400 dark:bg-blue-500/25 dark:hover:bg-blue-500/40 dark:hover:text-blue-300"
+                    >
+                      <RefreshCw
+                        className={`h-3.5 w-3.5 mr-2 ${isGeneratingKey ? "animate-spin" : ""}`}
+                      />
+                      {user?.api_key_preview ? "Regenerate" : "Generate"}
+                    </Button>
+                    {(user?.api_key_preview || generatedApiKey) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRevokeApiKey}
+                        disabled={isGeneratingKey}
+                        className="h-8 border-destructive/50 text-destructive hover:bg-destructive/10 dark:border-red-500 dark:text-red-400 dark:bg-red-500/25 dark:hover:bg-red-500/40 dark:hover:text-red-300"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-2" />
+                        Revoke
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {/* API Key Value */}
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="qbittorrent-api-key"
+                      className="text-xs uppercase tracking-wider text-muted-foreground"
+                    >
+                      Your API Key
+                    </Label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Input
+                          id="qbittorrent-api-key"
+                          name="api_key"
+                          readOnly
+                          value={
+                            generatedApiKey ||
+                            user?.api_key_preview ||
+                            "No API key generated — click Generate to create one"
+                          }
+                          type={
+                            generatedApiKey && !showApiKey ? "password" : "text"
+                          }
+                          className={`font-mono bg-background border-input pr-10 ${generatedApiKey || user?.api_key_preview ? "text-foreground" : "text-muted-foreground italic"}`}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0 h-full text-muted-foreground hover:text-foreground"
+                          onClick={() => setShowApiKey(!showApiKey)}
+                          disabled={!generatedApiKey}
+                          aria-label={
+                            showApiKey ? "Hide API key" : "Show API key"
+                          }
+                        >
+                          {showApiKey ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="bg-secondary/70 hover:bg-secondary text-secondary-foreground"
+                        onClick={() => {
+                          if (generatedApiKey) {
+                            navigator.clipboard.writeText(generatedApiKey);
+                            setSuccess("API Key copied to clipboard.");
+                            setTimeout(() => setSuccess(null), 2000);
+                          }
+                        }}
+                        disabled={!generatedApiKey}
+                        aria-label="Copy API key"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      {generatedApiKey
+                        ? "Save this key now. It won't be shown again."
+                        : "Only a preview is shown. Regenerate to view a new key."}
+                    </p>
+                  </div>
+
+                  {/* qBittorrent Command Helper */}
+                  {generatedApiKey && (
+                    <div className="space-y-2">
+                      <Label className="text-xs tracking-wider text-muted-foreground flex items-center justify-between">
+                        <span>
+                          qBittorrent Command (&quot;Run external program&quot;)
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          Click to copy
+                        </span>
+                      </Label>
+                      <div
+                        className="rounded-md border border-emerald-200 dark:border-sky-900/50 bg-emerald-50 dark:bg-sky-950/30 p-3 font-mono text-xs text-emerald-900 dark:text-sky-200 break-all cursor-pointer transition-colors hover:bg-emerald-100 dark:hover:bg-sky-950/50 hover:border-emerald-300 dark:hover:border-sky-800"
+                        onClick={() => {
+                          const cmd = `curl -X POST ${window.location.origin}/api/v1/jobs/ -H "X-API-Key: ${generatedApiKey}" -H "Content-Type: application/json" -d "{\\"folder_path\\": \\"%R/%N\\", \\"log_level\\": \\"INFO\\"}"`;
+                          navigator.clipboard.writeText(cmd);
+                          setSuccess("Command copied to clipboard.");
+                          setTimeout(() => setSuccess(null), 2000);
+                        }}
+                      >
+                        curl -X POST {window.location.origin}/api/v1/jobs/ \
+                        <br />
+                        &nbsp;&nbsp;-H &quot;X-API-Key: {generatedApiKey}&quot;
+                        \
+                        <br />
+                        &nbsp;&nbsp;-H &quot;Content-Type:
+                        application/json&quot; \<br />
+                        &nbsp;&nbsp;-d &quot;&#123;\&quot;folder_path\&quot;:
+                        \&quot;%R/%N\&quot;, \&quot;log_level\&quot;:
+                        \&quot;INFO\&quot;&#125;&quot;
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        Note: Replace <code>%R/%N</code> with qBittorrent&apos;s
+                        path variables if needed (e.g., <code>%D/%N</code> or{" "}
+                        <code>%F</code>).
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="pl-10 space-y-6 max-w-xl">
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-slate-500">
+                  <Label
+                    htmlFor="qbittorrent-host"
+                    className="text-xs uppercase tracking-wider text-muted-foreground"
+                  >
                     Host
                   </Label>
                   <Input
+                    id="qbittorrent-host"
+                    name="qbittorrent_host"
                     placeholder={settings?.qbittorrent_host || "Not configured"}
                     value={formData.qbittorrent_host || ""}
                     onChange={(e) =>
                       updateField("qbittorrent_host", e.target.value)
                     }
                     onKeyDown={handleInputKeyDown}
-                    className="bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500 h-10 w-full"
+                    className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-slate-500">
+                  <Label
+                    htmlFor="qbittorrent-port"
+                    className="text-xs uppercase tracking-wider text-muted-foreground"
+                  >
                     Port
                   </Label>
                   <Input
+                    id="qbittorrent-port"
+                    name="qbittorrent_port"
                     type="number"
                     placeholder={
                       settings?.qbittorrent_port?.toString() || "8080"
@@ -1033,14 +1433,19 @@ export default function SettingsPage() {
                       )
                     }
                     onKeyDown={handleInputKeyDown}
-                    className="bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500 h-10 w-full"
+                    className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-slate-500">
+                  <Label
+                    htmlFor="qbittorrent-username"
+                    className="text-xs uppercase tracking-wider text-muted-foreground"
+                  >
                     Username
                   </Label>
                   <Input
+                    id="qbittorrent-username"
+                    name="qbittorrent_username"
                     placeholder={
                       settings?.qbittorrent_username || "Not configured"
                     }
@@ -1049,14 +1454,20 @@ export default function SettingsPage() {
                       updateField("qbittorrent_username", e.target.value)
                     }
                     onKeyDown={handleInputKeyDown}
-                    className="bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500 h-10 w-full"
+                    autoComplete="off"
+                    className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-slate-500">
+                  <Label
+                    htmlFor="qbittorrent-password"
+                    className="text-xs uppercase tracking-wider text-muted-foreground"
+                  >
                     Password
                   </Label>
                   <Input
+                    id="qbittorrent-password"
+                    name="qbittorrent_password"
                     type="password"
                     placeholder={
                       settings?.qbittorrent_password
@@ -1068,52 +1479,8 @@ export default function SettingsPage() {
                       updateField("qbittorrent_password", e.target.value)
                     }
                     onKeyDown={handleInputKeyDown}
-                    className="bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500 h-10 w-full"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </>
-        )}
-
-        {/* Media Paths */}
-        {currentTab === "paths" && (
-          <>
-            <CardHeader>
-              <CardTitle className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-                Allowed Media Folders
-              </CardTitle>
-              <CardDescription className="text-slate-400">
-                Specify which folders the application can access for subtitle
-                downloads.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="pl-10 space-y-6 max-w-xl">
-                <Alert className="bg-amber-900/10 border-amber-500/20 text-amber-200">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription className="ml-2">
-                    Ensure the server has read/write permissions for these paths
-                    at the filesystem level.
-                  </AlertDescription>
-                </Alert>
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-slate-500">
-                    Paths (one per line)
-                  </Label>
-                  <textarea
-                    className="w-full h-32 bg-slate-900/50 border border-slate-700 rounded-md p-3 text-white placeholder:text-slate-500 font-mono text-sm focus:border-amber-500 focus:outline-none transition-all duration-300"
-                    placeholder={
-                      settings?.allowed_media_folders?.join("\n") ||
-                      "/mnt/media\n/data/videos"
-                    }
-                    value={(formData.allowed_media_folders || []).join("\n")}
-                    onChange={(e) => {
-                      const paths = e.target.value
-                        .split("\n")
-                        .filter((p) => p.trim());
-                      updateField("allowed_media_folders", paths);
-                    }}
+                    autoComplete="new-password"
+                    className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
                   />
                 </div>
               </div>
@@ -1121,6 +1488,14 @@ export default function SettingsPage() {
           </>
         )}
       </Card>
+
+      {/* Security Tab Content */}
+      {currentTab === "security" && (
+        <div className="space-y-6" ref={cardRef}>
+          <PasswordSettings />
+          <MfaSettings />
+        </div>
+      )}
 
       <SavePill
         isVisible={hasChanges}

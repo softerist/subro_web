@@ -28,7 +28,7 @@ export function LogViewer({ jobId, className }: LogViewerProps) {
     return (
       <div
         className={cn(
-          "flex h-full items-center justify-center text-slate-400",
+          "flex h-full items-center justify-center text-muted-foreground",
           className,
         )}
       >
@@ -40,20 +40,23 @@ export function LogViewer({ jobId, className }: LogViewerProps) {
   return (
     <div
       className={cn(
-        "flex flex-col border rounded-md overflow-hidden bg-black text-white font-mono text-sm shadow-sm",
+        "flex flex-col rounded-lg overflow-hidden font-mono text-[11px] sm:text-sm",
+        "bg-slate-50 text-slate-900 border border-border/60",
+        "dark:bg-black dark:text-white dark:border-gray-800",
         className,
       )}
     >
       {/* Header / Status Bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800">
-        <span className="font-semibold text-gray-300">
-          Logs: {jobId.slice(0, 8)}...
+      <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-border/40 dark:from-gray-900 dark:to-gray-900 dark:border-gray-800">
+        <span className="text-xs font-semibold text-slate-600 dark:text-gray-400 uppercase tracking-wide">
+          Logs •{" "}
+          <span className="font-mono text-primary">{jobId.slice(0, 8)}</span>
         </span>
         <div className="flex items-center gap-2">
           {status === "CONNECTED" || status === "RUNNING" ? (
             <Badge
               variant="outline"
-              className="text-green-400 border-green-900 bg-green-900/20"
+              className="text-xs text-emerald-600 border-emerald-200 bg-emerald-50 shadow-sm dark:text-green-400 dark:border-green-900 dark:bg-green-900/20"
             >
               <Loader2 className="mr-1 h-3 w-3 animate-spin" />
               Live
@@ -61,7 +64,7 @@ export function LogViewer({ jobId, className }: LogViewerProps) {
           ) : (
             <Badge
               variant="outline"
-              className="text-gray-400 border-gray-700 bg-gray-800"
+              className="text-xs text-slate-500 border-slate-200 bg-slate-50 shadow-sm dark:text-gray-400 dark:border-gray-700 dark:bg-gray-800"
             >
               {status}
             </Badge>
@@ -73,11 +76,13 @@ export function LogViewer({ jobId, className }: LogViewerProps) {
       <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
         <div className="space-y-1">
           {logs.length === 0 && (
-            <div className="text-gray-500 italic">Waiting for logs...</div>
+            <div className="text-slate-400 dark:text-gray-500 italic">
+              Waiting for logs...
+            </div>
           )}
           {logs.map((log, index) => (
             <div key={index} className="break-all whitespace-pre-wrap">
-              <span className="text-gray-500 mr-2 select-none">
+              <span className="text-slate-400 dark:text-gray-500 mr-2 select-none">
                 {log.payload.ts
                   ? new Date(log.payload.ts).toLocaleTimeString()
                   : ""}
@@ -85,12 +90,12 @@ export function LogViewer({ jobId, className }: LogViewerProps) {
               <span
                 className={cn(
                   log.type === "error"
-                    ? "text-red-400"
+                    ? "text-red-600 dark:text-red-400"
                     : log.type === "info"
-                      ? "text-blue-400"
+                      ? "text-blue-600 dark:text-blue-400"
                       : log.type === "status"
-                        ? "text-yellow-400"
-                        : "text-gray-300",
+                        ? "text-amber-600 dark:text-yellow-400"
+                        : "text-slate-700 dark:text-gray-300",
                 )}
               >
                 {log.payload.message || JSON.stringify(log.payload)}

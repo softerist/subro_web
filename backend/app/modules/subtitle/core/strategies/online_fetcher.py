@@ -24,6 +24,11 @@ class OnlineFetcher(ProcessingStrategy):
     it's stored as a candidate in the context.
     """
 
+    @property
+    def is_critical(self) -> bool:
+        """OnlineFetcher is not critical - if it fails (e.g., no IMDb ID), the pipeline should continue."""
+        return False
+
     def execute(self, context: ProcessingContext) -> bool:  # noqa: C901
         # --- Pre-conditions ---
         if context.found_final_ro:
@@ -33,9 +38,10 @@ class OnlineFetcher(ProcessingStrategy):
         imdb_id = context.video_info.get("imdb_id")
         if not imdb_id:
             self.logger.warning(
-                f"Skipping: Missing IMDb ID in context for video '{context.video_info.get('basename', 'Unknown')}'."
+                f"Warning: Missing IMDb ID for video '{context.video_info.get('basename', 'Unknown')}'. "
+                "Metadata identification failed (TMDB/OMDb). Cannot search for subtitles."
             )
-            return True
+            return True  # Critical failure - no imdb_id means we can't search online
 
         media_type = context.video_info.get("type")  # 'movie' or 'episode'
         if not media_type:

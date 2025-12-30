@@ -7,6 +7,9 @@ from celery.signals import worker_process_init, worker_process_shutdown
 
 from app.core.config import settings
 
+# Import all models to ensure they are registered in the registry
+from app.db import base  # noqa: F401
+
 # Import the worker-specific db resource management functions
 from app.db.session import dispose_worker_db_resources_sync, initialize_worker_db_resources
 
@@ -54,6 +57,8 @@ celery_app.conf.update(
 @worker_process_init.connect(weak=False)
 def init_worker_process_signal(**_kwargs):
     """Signal handler for when a Celery worker process starts."""
+    # Ensure all models are imported and registered
+
     logger.info("CELERY_WORKER_PROCESS_INIT: Applying nest_asyncio for event loop compatibility.")
     nest_asyncio.apply()  # <--- APPLIED NEST_ASYNCIO
     logger.info("CELERY_WORKER_PROCESS_INIT: nest_asyncio applied. Initializing DB resources.")

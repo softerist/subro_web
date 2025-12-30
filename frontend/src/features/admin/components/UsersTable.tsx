@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Loader2, UserCheck, UserX } from "lucide-react";
+import { Trash2, Loader2, UserCheck, UserX, Key } from "lucide-react";
 import { toast } from "sonner";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+
 import {
   Table,
   TableBody,
@@ -10,12 +14,44 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { User } from "../types";
 import { adminApi } from "../api/admin";
+import { useAuthStore } from "@/store/authStore";
+
+const resetPasswordSchema = z
+  .object({
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z.string(),
+    forcePasswordChange: z.boolean(),
+    disableMFA: z.boolean(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>;
 
 interface UsersTableProps {
   users: User[];
@@ -24,12 +60,29 @@ interface UsersTableProps {
 
 export function UsersTable({ users, isLoading }: UsersTableProps) {
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((state) => state.user);
 
   // Confirmation dialog state
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
     user: User | null;
   }>({ open: false, user: null });
+
+  // Reset Password state
+  const [resetState, setResetState] = useState<{
+    open: boolean;
+    user: User | null;
+  }>({ open: false, user: null });
+
+  const form = useForm<ResetPasswordFormValues>({
+    resolver: zodResolver(resetPasswordSchema),
+    defaultValues: {
+      password: "",
+      confirmPassword: "",
+      forcePasswordChange: true,
+      disableMFA: false,
+    },
+  });
 
   const deleteMutation = useMutation({
     mutationFn: adminApi.deleteUser,
@@ -55,6 +108,33 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
     },
   });
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({
+      id,
+      password,
+      force_password_change,
+      mfa_enabled,
+    }: {
+      id: string;
+      password: string;
+      force_password_change?: boolean;
+      mfa_enabled?: boolean;
+    }) =>
+      adminApi.updateUser(id, {
+        password,
+        force_password_change,
+        mfa_enabled,
+      }),
+    onSuccess: () => {
+      toast.success("Password reset successfully");
+      setResetState({ open: false, user: null });
+      form.reset();
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to reset password: ${error.message}`);
+    },
+  });
+
   const handleDeleteRequest = (user: User) => {
     setConfirmState({
       open: true,
@@ -62,9 +142,25 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
     });
   };
 
+  const handleResetRequest = (user: User) => {
+    setResetState({ open: true, user });
+    form.reset();
+  };
+
   const executeDelete = async () => {
     if (confirmState.user) {
       deleteMutation.mutate(confirmState.user.id);
+    }
+  };
+
+  const executeReset = (values: ResetPasswordFormValues) => {
+    if (resetState.user) {
+      resetPasswordMutation.mutate({
+        id: resetState.user.id,
+        password: values.password,
+        force_password_change: values.forcePasswordChange,
+        mfa_enabled: values.disableMFA ? false : undefined,
+      });
     }
   };
 
@@ -78,14 +174,22 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
 
   return (
     <>
-      <Card className="soft-hover overflow-hidden border-slate-700/50">
+      <Card className="soft-hover overflow-hidden border-border">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+            <TableRow className="hover:bg-transparent border-b border-border/40">
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                Email
+              </TableHead>
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden sm:table-cell">
+                Role
+              </TableHead>
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden md:table-cell">
+                Status
+              </TableHead>
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground text-right">
+                Actions
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -96,71 +200,97 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.email}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={user.is_superuser ? "outline" : "secondary"}
-                      className={
-                        user.is_superuser
-                          ? "bg-purple-500/20 text-purple-400 border-purple-500/20 hover:bg-purple-500/30"
-                          : ""
-                      }
-                    >
-                      {user.is_superuser
-                        ? "Superuser"
-                        : user.role || "standard"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={user.is_active ? "default" : "outline"}
-                      className={
-                        user.is_active
-                          ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/30"
-                          : ""
-                      }
-                    >
-                      {user.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() =>
-                        toggleActiveMutation.mutate({
-                          id: user.id,
-                          isActive: !user.is_active,
-                        })
-                      }
-                      disabled={toggleActiveMutation.isPending}
-                      title={user.is_active ? "Deactivate" : "Activate"}
-                    >
-                      {user.is_active ? (
-                        <UserX className="h-4 w-4 text-orange-500" />
-                      ) : (
-                        <UserCheck className="h-4 w-4 text-green-500" />
-                      )}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDeleteRequest(user)}
-                      disabled={deleteMutation.isPending}
-                      title="Delete User"
-                    >
-                      {deleteMutation.isPending &&
-                      confirmState.user?.id === user.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      )}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+              users.map((user) => {
+                // Permission Check:
+                // Admins (who are not superusers) cannot modify Superusers.
+                // Superusers can modify anyone.
+                const isTargetSuperuser = user.is_superuser;
+                const isCurrentSuperuser = currentUser?.is_superuser;
+                const canModify = !isTargetSuperuser || isCurrentSuperuser;
+
+                return (
+                  <TableRow key={user.id}>
+                    <TableCell className="py-2 text-sm font-medium">
+                      {user.email}
+                    </TableCell>
+                    <TableCell className="py-2 hidden sm:table-cell">
+                      <Badge
+                        variant={user.is_superuser ? "outline" : "secondary"}
+                        className={
+                          user.is_superuser
+                            ? "bg-purple-500/20 text-purple-400 border-purple-500/20 hover:bg-purple-500/30"
+                            : ""
+                        }
+                      >
+                        {user.is_superuser
+                          ? "Superuser"
+                          : user.role || "standard"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="py-2 hidden md:table-cell">
+                      <Badge
+                        variant={user.is_active ? "default" : "outline"}
+                        className={
+                          user.is_active
+                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/30"
+                            : ""
+                        }
+                      >
+                        {user.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="py-2 text-right space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleResetRequest(user)}
+                        disabled={!canModify}
+                        title={
+                          canModify
+                            ? "Reset Password"
+                            : "Cannot modify Superuser"
+                        }
+                        className={!canModify ? "opacity-50" : ""}
+                      >
+                        <Key className="h-4 w-4 text-blue-500" />
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() =>
+                          toggleActiveMutation.mutate({
+                            id: user.id,
+                            isActive: !user.is_active,
+                          })
+                        }
+                        disabled={toggleActiveMutation.isPending || !canModify}
+                        title={user.is_active ? "Deactivate" : "Activate"}
+                      >
+                        {user.is_active ? (
+                          <UserX className="h-4 w-4 text-orange-500" />
+                        ) : (
+                          <UserCheck className="h-4 w-4 text-green-500" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteRequest(user)}
+                        disabled={deleteMutation.isPending || !canModify}
+                        title="Delete User"
+                      >
+                        {deleteMutation.isPending &&
+                        confirmState.user?.id === user.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        )}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -180,6 +310,118 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
         variant="destructive"
         confirmLabel="Delete"
       />
+
+      <Dialog
+        open={resetState.open}
+        onOpenChange={(open) =>
+          setResetState((prev) => ({ ...prev, open: open }))
+        }
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Set a new password for <b>{resetState.user?.email}</b>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(executeReset)}
+              className="space-y-4"
+            >
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>New Password</FormLabel>
+                    <FormControl>
+                      <Input type="password" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirm Password</FormLabel>
+                    <FormControl>
+                      <Input type="password" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="forcePasswordChange"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4">
+                    <FormControl>
+                      <input
+                        type="checkbox"
+                        checked={field.value}
+                        onChange={field.onChange}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>Force Password Change</FormLabel>
+                      <p className="text-sm text-muted-foreground">
+                        User must change password on next login.
+                      </p>
+                    </div>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="disableMFA"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4">
+                    <FormControl>
+                      <input
+                        type="checkbox"
+                        checked={field.value}
+                        onChange={field.onChange}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>Disable 2FA</FormLabel>
+                      <p className="text-sm text-muted-foreground">
+                        Remove 2FA protection for this user.
+                      </p>
+                    </div>
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setResetState({ open: false, user: null })}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={resetPasswordMutation.isPending}
+                >
+                  {resetPasswordMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Reset Password
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

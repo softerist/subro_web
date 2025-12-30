@@ -5,12 +5,13 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select  # For SQLAlchemy 1.4+ style select
+from sqlalchemy.orm import selectinload
 
 # Project-specific imports
 from app.core.config import settings  # Ensures settings is available
 from app.core.users import (
     UserManager,  # For type hinting
-    current_active_superuser,
+    get_current_active_admin_user,
     get_user_manager,
 )
 from app.db.models.user import User  # For ORM operations and type hinting
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 admin_router = APIRouter(
     tags=["Admins - Admin Management"],
-    dependencies=[Depends(current_active_superuser)],  # Protects all routes in this router
+    dependencies=[Depends(get_current_active_admin_user)],  # Protects all routes in this router
 )
 
 
@@ -31,7 +32,10 @@ async def get_target_user_or_404(
     user_id: uuid.UUID, session: AsyncSession = Depends(get_async_session)
 ) -> User:
     """Dependency to fetch a user by ID or raise 404 Not Found."""
-    user = await session.get(User, user_id)
+    result = await session.execute(
+        select(User).options(selectinload(User.api_keys)).where(User.id == user_id)
+    )
+    user = result.scalars().first()
     if not user:
         logger.warning(f"Admin action attempted on non-existent user_id: {user_id}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="USER_NOT_FOUND")
@@ -45,7 +49,7 @@ async def get_target_user_or_404(
     "/users",
     tags=["Admins - Admin Management"],
     response_model=list[UserRead],
-    summary="List all users (Admin only)",
+    summary="List all users (Admin/Superuser only)",
     description="Retrieves a paginated list of all users, ordered by creation date (descending).",
 )
 async def list_users_admin(
@@ -80,7 +84,7 @@ async def list_users_admin(
 @admin_router.get(
     "/users/{user_id}",
     response_model=UserRead,
-    summary="Get specific user details (Admin only)",
+    summary="Get specific user details (Admin/Superuser only)",
     description="Retrieves details for a specific user by their ID.",
 )
 async def get_user_by_id_admin(
@@ -95,16 +99,24 @@ async def get_user_by_id_admin(
     "/users",
     response_model=UserRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a new user (Admin only)",
-    description="Creates a new user with specified role and attributes.",
+    summary="Create a new user (Admin/Superuser only)",
+    description="Creates a new user with specified role and attributes. Only Superusers can create other Superusers.",
 )
 async def create_user_admin(
     user_create: UserCreate,
     user_manager: UserManager = Depends(get_user_manager),
+    current_user: User = Depends(get_current_active_admin_user),
 ):
     """
     Creates a new user.
     """
+    # Guard: Only superusers can create superusers
+    if user_create.is_superuser and not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Superusers can create other Superusers.",
+        )
+
     try:
         created_user = await user_manager.create(user_create, safe=True)
         return created_user
@@ -119,22 +131,28 @@ async def create_user_admin(
 @admin_router.patch(
     "/users/{user_id}",
     response_model=UserRead,
-    summary="Update user details (Admin only)",
+    summary="Update user details (Admin/Superuser only)",
     description=(
-        "Updates a user's details such as email, active status, superuser status, or password. "
-        "The User model's validation logic (e.g., @validates decorator) should handle "
-        "consistency if 'is_superuser' is linked to a 'role' field."
+        "Updates a user's details. Admins can update Standard users. "
+        "Only Superusers can update other Superusers."
     ),
 )
-async def update_user_by_id_admin(
+async def update_user_by_id_admin(  # noqa: C901
     update_data: AdminUserUpdate,
     target_user: User = Depends(get_target_user_or_404),
+    current_user: User = Depends(get_current_active_admin_user),
     user_manager: UserManager = Depends(get_user_manager),
     session: AsyncSession = Depends(get_async_session),
 ):
     """
-    Updates a user's details (e.g., email, active status, superuser status, password) as an administrator.
+    Updates a user's details. Enforces hierarchy: Admin cannot update Superuser.
     """
+    # Guard Warning: Hierarchy Check
+    if target_user.is_superuser and not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admins cannot modify Superuser accounts.",
+        )
     update_data_dict = update_data.model_dump(exclude_unset=True)
     made_changes = False
 
@@ -144,16 +162,32 @@ async def update_user_by_id_admin(
             status_code=status.HTTP_400_BAD_REQUEST, detail="NO_UPDATE_DATA_PROVIDED"
         )
 
+    if "role" in update_data_dict:
+        update_data_dict["is_superuser"] = update_data_dict["role"] == "admin"
+    elif "is_superuser" in update_data_dict:
+        update_data_dict["role"] = "admin" if update_data_dict["is_superuser"] else "standard"
+
+    # Handle password field specially (User model has 'hashed_password', not 'password')
+    if "password" in update_data_dict:
+        password_value = update_data_dict.pop("password")
+        if password_value:
+            new_hashed_password = user_manager.password_helper.hash(password_value)
+            if target_user.hashed_password != new_hashed_password:
+                target_user.hashed_password = new_hashed_password
+                made_changes = True
+                logger.info(f"Admin reset password for user {target_user.id}")
+
     for key, value in update_data_dict.items():
         if hasattr(target_user, key):
             current_value = getattr(target_user, key)
-            if key == "password":
-                if value:  # Only hash and update if a new password string is provided
-                    new_hashed_password = user_manager.password_helper.hash(value)
-                    if target_user.hashed_password != new_hashed_password:
-                        target_user.hashed_password = new_hashed_password
-                        made_changes = True
-                        logger.debug(f"Admin changing password for user {target_user.id}")
+            if key == "mfa_enabled" and value is False:
+                # Explicit logic to disable MFA and clear secrets
+                if target_user.mfa_enabled:
+                    target_user.mfa_enabled = False
+                    target_user.mfa_secret = None
+                    target_user.mfa_backup_codes = None
+                    made_changes = True
+                    logger.info(f"Admin disabled MFA for user {target_user.id}")
             elif current_value != value:
                 setattr(target_user, key, value)
                 made_changes = True
@@ -203,12 +237,19 @@ async def update_user_by_id_admin(
 )
 async def delete_user_by_id_admin(
     target_user: User = Depends(get_target_user_or_404),
+    current_user: User = Depends(get_current_active_admin_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """
     Permanently deletes a user account.
     WARNING: This is a destructive operation.
     """
+    # Guard Warning: Hierarchy Check
+    if target_user.is_superuser and not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admins cannot delete Superuser accounts.",
+        )
     user_id_to_delete = target_user.id
     user_email_to_delete = target_user.email
 

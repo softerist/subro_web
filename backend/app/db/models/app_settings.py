@@ -5,7 +5,9 @@ This is a singleton table (only one row with id=1) that stores
 user-configurable settings like API keys and preferences.
 """
 
-from sqlalchemy import Boolean, Integer, String, Text
+from datetime import datetime
+
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base_class import Base
@@ -51,16 +53,30 @@ class AppSettings(Base):
     google_cloud_project_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     google_cloud_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
 
+    # --- Google Usage Cache (Fallback) ---
+    google_usage_total_chars: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    google_usage_month_chars: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    google_usage_last_updated: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # --- Setup State ---
     setup_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # --- Validation Status (cached after API validation) ---
     tmdb_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
+    tmdb_rate_limited: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     omdb_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
+    omdb_rate_limited: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     opensubtitles_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
     opensubtitles_key_valid: Mapped[bool | None] = mapped_column(
         Boolean, default=None, nullable=True
     )
+    # OpenSubtitles subscription info (from login response)
+    opensubtitles_level: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    opensubtitles_vip: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    opensubtitles_allowed_downloads: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    opensubtitles_rate_limited: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     def __repr__(self) -> str:
         return f"<AppSettings(id={self.id}, setup_completed={self.setup_completed})>"

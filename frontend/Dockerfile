@@ -3,7 +3,7 @@ FROM node:20-alpine AS base
 WORKDIR /app
 COPY package*.json ./
 # Install dependencies including devDependencies
-RUN npm ci
+RUN apk add --no-cache curl && npm ci
 
 # Development stage
 FROM base AS development
@@ -18,15 +18,18 @@ COPY . .
 # Accept build args for Vite environment variables
 ARG VITE_API_BASE_URL
 ARG VITE_WS_BASE_URL
+ARG VITE_SETUP_TOKEN
 
 # Set as environment variables for the build process
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ENV VITE_WS_BASE_URL=${VITE_WS_BASE_URL}
+ENV VITE_SETUP_TOKEN=${VITE_SETUP_TOKEN}
 
 RUN npm run build
 
 # Production stage
 FROM nginx:stable-alpine AS production
+RUN apk add --no-cache curl
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 

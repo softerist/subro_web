@@ -2,6 +2,7 @@
 {
 	# In production, remove debug if not needed, but keep for initial troubleshooting if desired.
 	# email your-email@example.com # Optional: for Let's Encrypt notifications
+	email {$ACME_EMAIL}
 }
 
 (common_security_headers) {
@@ -30,14 +31,13 @@
 		# style-src 'self' 'unsafe-inline': Allow local styles and inline styles (required for CSS-in-JS/Tailwind)
 		# img-src 'self' data:: Allow local images and data URIs (base64)
 		# connect-src 'self' wss:: Allow XHR/Fetch to same origin and WebSockets to secure protocols
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:;"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:;"
 	}
 }
 
 # Match requests for your domain (or catch-all for single-tenant VPS)
-localhost {
-	# TLS is automatic with Caddy
-	tls internal # Use this for local/testing if no domain, otherwise remove for real Let's Encrypt
+{$DOMAIN_NAME} {
+	# TLS is automatic with Caddy for valid public domains.
 
 	import common_security_headers
 

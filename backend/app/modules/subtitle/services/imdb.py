@@ -1,21 +1,36 @@
+import importlib.util
 import logging
+import pkgutil
 import re
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 
-import imdb
-from rapidfuzz import fuzz
 
-from app.core.config import settings
-from app.modules.subtitle.core.constants import (  # Import specific items to avoid long prefixes
+def _patch_pkgutil_find_loader() -> None:
+    """Shim deprecated pkgutil.find_loader for imdbpy on newer Python versions."""
+    if not hasattr(pkgutil, "find_loader"):
+        return
+
+    def _find_loader(name: str):
+        return importlib.util.find_spec(name)
+
+    pkgutil.find_loader = _find_loader  # type: ignore[assignment]
+
+
+_patch_pkgutil_find_loader()
+
+import imdb  # noqa: E402
+from rapidfuzz import fuzz  # noqa: E402
+
+from app.core.config import settings  # noqa: E402
+from app.modules.subtitle.core.constants import (  # noqa: E402
     FUZZY_MATCH_THRESHOLD,
     TYPE_MAP,
 )
-from app.modules.subtitle.utils.network_utils import create_session_with_retries, make_request
-
-OMDB_API_KEY = getattr(settings, "OMDB_API_KEY", None)
-TMDB_API_KEY = getattr(settings, "TMDB_API_KEY", None)
-# FUZZY_MATCH_THRESHOLD is imported from constants
+from app.modules.subtitle.utils.network_utils import (  # noqa: E402
+    create_session_with_retries,
+    make_request,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +47,6 @@ network_session = create_session_with_retries(
     backoff_factor=getattr(settings, "NETWORK_BACKOFF_FACTOR", 1),
 )
 
-logger = logging.getLogger(__name__)  # Get logger instance
-
 
 # --- Helper Function ---
 def _fuzzy_match(title, candidate, threshold=FUZZY_MATCH_THRESHOLD):
@@ -45,22 +58,64 @@ def _fuzzy_match(title, candidate, threshold=FUZZY_MATCH_THRESHOLD):
     return similarity >= threshold
 
 
+# Helper for dynamic key retrieval
+def _get_dynamic_api_key(db_field, env_var_name=None):
+    """
+    Fetches API key synchronously from DB, falling back to Environment/Settings.
+    """
+    # 1. Try Database
+    try:
+        from sqlalchemy import select
+
+        from app.core.security import decrypt_value
+        from app.db.models.app_settings import AppSettings
+        from app.db.session import SyncSessionLocal
+
+        if SyncSessionLocal:
+            with SyncSessionLocal() as session:
+                settings_row = session.scalar(select(AppSettings).where(AppSettings.id == 1))
+                if settings_row:
+                    val = getattr(settings_row, db_field, None)
+                    if val is not None:
+                        if val == "":
+                            return None  # Explicitly disabled in DB
+                        return decrypt_value(val)
+    except Exception as e:
+        # Avoid spamming logs for every key check, debug only
+        logging.debug(f"Failed to fetch {db_field} from DB: {e}")
+
+    # 2. Fallback to Environment (Module-level settings object)
+    if env_var_name:
+        return getattr(settings, env_var_name, None)
+    return None
+
+
 # --- OMDb Functions ---
 def _search_omdb_api(params):
     """Internal helper to query the OMDb API."""
-    if not OMDB_API_KEY:
+    api_key = _get_dynamic_api_key("omdb_api_key", "OMDB_API_KEY")
+
+    if not api_key:
         # Log only once or less frequently? For now, log per call.
         logging.error("OMDb API key is not configured.")
         return None
 
     base_url = "http://www.omdbapi.com/"
-    params["apikey"] = OMDB_API_KEY
+    params["apikey"] = api_key
     params["r"] = "json"  # Ensure response is JSON
 
     response = make_request(network_session, "GET", base_url, params=params)
 
-    if response:
+    if response is not None:
         try:
+            # Handle non-200 status codes (make_request returns response even on 4xx/5xx if raise_for_status=True)
+            if response.status_code == 401:
+                logging.warning("OMDb API: Unauthorized (Invalid API Key or Daily Limit reached).")
+                return None
+            if response.status_code == 429:
+                logging.warning("OMDb API Error: Rate limited.")
+                return None
+
             data = response.json()
             if data.get("Response") == "True":
                 return data
@@ -68,17 +123,17 @@ def _search_omdb_api(params):
                 error_msg = data.get("Error", "Unknown error")
                 if "not found" in error_msg.lower():
                     logging.debug(f"OMDb API Info: {error_msg} for params: {params}")
-                elif "invalid api key" in error_msg.lower():
-                    logging.error("OMDb API Error: Invalid API Key provided.")
+                elif "invalid api key" in error_msg.lower() or "limit reached" in error_msg.lower():
+                    logging.warning(f"OMDb API: {error_msg}")
                 else:
                     logging.warning(f"OMDb API Error: {error_msg} for params: {params}")
                 return None
-        except ValueError:
+        except (ValueError, Exception) as e:
             logging.error(
-                f"Failed to decode OMDb JSON response for params: {params}. Response text: {response.text[:200]}"
+                f"Failed to process OMDb response for params: {params}. Error: {e}. Status: {response.status_code}"
             )
             return None
-    # make_request handles logging for network errors
+    # make_request handles logging for network errors (None return)
     return None
 
 
@@ -113,21 +168,30 @@ def search_omdb_by_query(query, year=None, content_type=None):
 # --- TMDb Functions ---
 def _search_tmdb_api(endpoint, query_params):
     """Internal helper to query the TMDb API."""
-    if not TMDB_API_KEY:
+    api_key = _get_dynamic_api_key("tmdb_api_key", "TMDB_API_KEY")
+
+    if not api_key:
         logging.error("TMDb API key is not configured.")
         return None
 
     base_url = f"https://api.themoviedb.org/3/{endpoint}"
-    query_params["api_key"] = TMDB_API_KEY
+    query_params["api_key"] = api_key
 
     response = make_request(network_session, "GET", base_url, params=query_params)
 
-    if response:
+    if response is not None:
         try:
+            if response.status_code == 401:
+                logging.error("TMDb API Error: Unauthorized (Invalid API Key).")
+                return None
+            if response.status_code == 429:
+                logging.warning("TMDb API Error: Rate limited.")
+                return None
+
             return response.json()
-        except ValueError:
+        except (ValueError, Exception) as e:
             logging.error(
-                f"Failed to decode TMDb JSON response for endpoint {endpoint}. Response text: {response.text[:200]}"
+                f"Failed to process TMDb response for endpoint {endpoint}. Error: {e}. Status: {response.status_code}"
             )
             return None
     # make_request handles logging
@@ -717,6 +781,10 @@ def extract_tv_show_details(filename):  # noqa: C901
         # Clean up title (remove potential trailing separators)
         if show_title:
             show_title = re.sub(r"[\s\._-]+$", "", show_title).strip()
+            # replace dots and underscores with spaces for better search results
+            show_title = show_title.replace(".", " ").replace("_", " ")
+            # Remove extra spaces if any
+            show_title = re.sub(r"\s+", " ", show_title).strip()
 
         # Format season/episode with zero-padding if found
         if season:
@@ -738,10 +806,10 @@ def extract_tv_show_details(filename):  # noqa: C901
         # --- Validation: Ensure essential parts are present ---
         if show_title and season and episode:
             # Optionally clean title further if year was part of it initially
-            if year and show_title.endswith(f" ({year})"):  # Basic check
-                show_title = show_title[: -len(f" ({year})")].strip()
-            elif year and show_title.endswith(f" {year}"):
-                show_title = show_title[: -len(f" {year}")].strip()
+            if year and show_title.lower().endswith(f"({year})"):
+                show_title = show_title[: -len(f"({year})")].strip()
+            elif year and show_title.lower().endswith(str(year)):
+                show_title = show_title[: -len(str(year))].strip()
 
             logging.info(
                 f"Successfully extracted TV details: Show='{show_title}', Season={season}, Episode={episode}, Year={year} from '{filename}'"

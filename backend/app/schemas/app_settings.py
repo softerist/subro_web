@@ -3,7 +3,7 @@
 Pydantic schemas for application settings.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SetupStatus(BaseModel):
@@ -77,23 +77,29 @@ class SettingsRead(SettingsBase):
     # Validation Status (set by backend after validating credentials)
     # None = Not Validated / Connection Error
     # True = Valid
+    # True = Valid
     # False = Invalid
-    tmdb_valid: bool | None = None
-    omdb_valid: bool | None = None
+    tmdb_valid: str | None = None  # "valid", "invalid", "limit_reached", or None
+    omdb_valid: str | None = None  # "valid", "invalid", "limit_reached", or None
     opensubtitles_valid: bool | None = None  # Login/Credentials status
     opensubtitles_key_valid: bool | None = None  # API Key status
+    # OpenSubtitles subscription info
+    opensubtitles_level: str | None = None  # e.g. "VIP Member", "Standard"
+    opensubtitles_vip: bool | None = None
+    opensubtitles_allowed_downloads: int | None = None
+    opensubtitles_rate_limited: bool | None = None
 
     # Google Cloud (read-only display fields)
     google_cloud_configured: bool = False
     google_cloud_project_id: str | None = None
     google_cloud_valid: bool | None = None
     google_cloud_error: str | None = None
+    google_usage: dict | None = None  # Only populated when Cloud Monitoring API is available
 
     # State
     setup_completed: bool = False
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SetupComplete(BaseModel):

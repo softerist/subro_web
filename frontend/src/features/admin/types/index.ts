@@ -22,4 +22,6 @@ export interface UserUpdate {
   role?: "admin" | "standard";
   is_superuser?: boolean;
   is_active?: boolean;
+  mfa_enabled?: boolean;
+  force_password_change?: boolean;
 }

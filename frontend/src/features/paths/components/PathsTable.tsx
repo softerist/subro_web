@@ -75,14 +75,22 @@ export function PathsTable() {
 
   return (
     <>
-      <Card className="soft-hover overflow-hidden border-slate-700/50">
+      <Card className="soft-hover overflow-hidden border-border">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Path</TableHead>
-              <TableHead>Label</TableHead>
-              <TableHead>Added At</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+            <TableRow className="hover:bg-transparent border-b border-border/40">
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                Path
+              </TableHead>
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden sm:table-cell">
+                Label
+              </TableHead>
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden md:table-cell">
+                Added At
+              </TableHead>
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground text-right">
+                Actions
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -95,14 +103,16 @@ export function PathsTable() {
             ) : (
               paths.map((path) => (
                 <TableRow key={path.id}>
-                  <TableCell className="font-medium font-mono">
+                  <TableCell className="py-2 font-medium font-mono text-sm">
                     {path.path}
                   </TableCell>
-                  <TableCell>{path.label || "-"}</TableCell>
-                  <TableCell>
+                  <TableCell className="py-2 text-sm hidden sm:table-cell">
+                    {path.label || "-"}
+                  </TableCell>
+                  <TableCell className="py-2 text-sm text-muted-foreground hidden md:table-cell">
                     {format(new Date(path.created_at), "MMM d, yyyy")}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="py-2 text-right">
                     <Button
                       variant="ghost"
                       size="icon"
@@ -112,6 +122,7 @@ export function PathsTable() {
                         confirmState.path?.id === path.id
                       }
                       title="Remove Path"
+                      aria-label="Remove path"
                     >
                       {deleteMutation.isPending &&
                       confirmState.path?.id === path.id ? (
@@ -137,7 +148,7 @@ export function PathsTable() {
             <>
               Are you sure you want to remove this path?
               <br />
-              <span className="font-mono text-white">
+              <span className="font-mono text-foreground">
                 {confirmState.path.path}
               </span>
             </>

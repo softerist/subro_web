@@ -6,16 +6,19 @@ from fastapi import status
 from httpx import AsyncClient  # Import ASGITransport is not needed here, but in conftest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.models.user import User
 
 from ..factories.user_factory import UserFactory  # Relative import
+
+API_PREFIX = settings.API_V1_STR
 
 
 # FIX: Modify login_user to set cookies on the client and return only headers
 async def login_user(client: AsyncClient, email: str, password: str) -> dict:  # Return only headers
     """Logs in a user, sets cookies on the client, and returns auth headers."""
     login_data = {"username": email, "password": password}
-    response = await client.post("/api/auth/login", data=login_data)
+    response = await client.post(f"{API_PREFIX}/auth/login", data=login_data)
     assert response.status_code == status.HTTP_200_OK, f"Login failed for {email}: {response.text}"
     token = response.json()["access_token"]
 
@@ -46,7 +49,7 @@ async def test_list_users_as_admin(test_client: AsyncClient, db_session: AsyncSe
 
     # Act
     # FIX: Remove cookies parameter
-    response = await test_client.get("/api/admin/users", headers=headers)
+    response = await test_client.get(f"{API_PREFIX}/admin/users", headers=headers)
 
     # Assert
     assert response.status_code == status.HTTP_200_OK  # Expect 200 OK for list
@@ -72,7 +75,7 @@ async def test_list_users_as_standard_user(test_client: AsyncClient, db_session:
 
     # Act
     # FIX: Remove cookies parameter
-    response = await test_client.get("/api/admin/users", headers=headers)
+    response = await test_client.get(f"{API_PREFIX}/admin/users", headers=headers)
 
     # Assert
     # Check the error code provided by fastapi-users for forbidden access
@@ -82,7 +85,7 @@ async def test_list_users_as_standard_user(test_client: AsyncClient, db_session:
 @pytest.mark.asyncio
 async def test_list_users_unauthenticated(test_client: AsyncClient):
     """Test unauthenticated user cannot list users."""
-    response = await test_client.get("/api/admin/users")
+    response = await test_client.get(f"{API_PREFIX}/admin/users")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
@@ -101,7 +104,7 @@ async def test_get_specific_user_as_admin(test_client: AsyncClient, db_session: 
 
     # Act
     # FIX: Remove cookies parameter
-    response = await test_client.get(f"/api/admin/users/{target_user_id}", headers=headers)
+    response = await test_client.get(f"{API_PREFIX}/admin/users/{target_user_id}", headers=headers)
 
     # Assert
     assert response.status_code == status.HTTP_200_OK
@@ -126,7 +129,9 @@ async def test_get_specific_user_not_found_admin(
 
     # Act
     # FIX: Remove cookies parameter
-    response = await test_client.get(f"/api/admin/users/{non_existent_uuid}", headers=headers)
+    response = await test_client.get(
+        f"{API_PREFIX}/admin/users/{non_existent_uuid}", headers=headers
+    )
 
     # Assert
     assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -155,7 +160,7 @@ async def test_update_user_role_as_admin(test_client: AsyncClient, db_session: A
     # Act
     # FIX: Remove cookies parameter
     response = await test_client.patch(
-        f"/api/admin/users/{target_user_id}", json=update_payload, headers=headers
+        f"{API_PREFIX}/admin/users/{target_user_id}", json=update_payload, headers=headers
     )
 
     # Assert response
@@ -190,7 +195,7 @@ async def test_update_user_is_active_as_admin(test_client: AsyncClient, db_sessi
     # Act
     # FIX: Remove cookies parameter
     response = await test_client.patch(
-        f"/api/admin/users/{target_user_id}", json=update_payload, headers=headers
+        f"{API_PREFIX}/admin/users/{target_user_id}", json=update_payload, headers=headers
     )
 
     # Assert response
@@ -219,7 +224,7 @@ async def test_update_user_as_standard_user(test_client: AsyncClient, db_session
     # Act
     # FIX: Remove cookies parameter
     response = await test_client.patch(
-        f"/api/admin/users/{target_user_id}", json=update_payload, headers=headers
+        f"{API_PREFIX}/admin/users/{target_user_id}", json=update_payload, headers=headers
     )
 
     # Assert
@@ -240,7 +245,9 @@ async def test_delete_user_as_admin(test_client: AsyncClient, db_session: AsyncS
     headers = await login_user(test_client, admin.email, "password123")
 
     # Act
-    response = await test_client.delete(f"/api/admin/users/{target_user_id}", headers=headers)
+    response = await test_client.delete(
+        f"{API_PREFIX}/admin/users/{target_user_id}", headers=headers
+    )
 
     # Assert
     assert response.status_code == status.HTTP_204_NO_CONTENT  # Expect 204 No Content
@@ -269,7 +276,9 @@ async def test_delete_user_as_standard_user(test_client: AsyncClient, db_session
 
     # Act
     # FIX: Remove cookies parameter
-    response = await test_client.delete(f"/api/admin/users/{target_user_id}", headers=headers)
+    response = await test_client.delete(
+        f"{API_PREFIX}/admin/users/{target_user_id}", headers=headers
+    )
 
     # Assert
     assert response.status_code == status.HTTP_403_FORBIDDEN

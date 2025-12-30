@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 
@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -27,6 +26,7 @@ import {
 
 import { jobsApi } from "../api/jobs";
 import { LANGUAGES } from "../constants/languages";
+import { useAuthStore } from "@/store/authStore";
 
 // Validation Schema
 const formSchema = z.object({
@@ -45,12 +45,37 @@ const LOG_LEVELS = [
 ] as const;
 
 export function JobForm() {
-  const queryClient = useQueryClient();
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const jobErrorMessages: Record<string, string> = {
+    PATH_NOT_FOUND: "Folder not found on server. Check the path and try again.",
+    PATH_INVALID: "Folder path is invalid or cannot be resolved.",
+    PATH_NOT_ALLOWED:
+      "Folder is not in allowed media folders. Contact an admin to allow it.",
+    PATH_AUTO_ADD_FAILED:
+      "Server couldn't add this folder to allowed paths. Contact an admin.",
+  };
 
-  // Fetch Allowed Folders from API
+  const resolveJobErrorMessage = (
+    detail: string | { code?: string; message?: string } | undefined,
+    fallback: string,
+  ) => {
+    if (typeof detail === "string") {
+      return detail;
+    }
+    if (detail?.code && jobErrorMessages[detail.code]) {
+      return jobErrorMessages[detail.code];
+    }
+    return detail?.message || fallback;
+  };
+
+  // Fetch Allowed Folders from API (with error suppression since endpoint may not exist)
   const { data: allowedFolders, isLoading: isLoadingFolders } = useQuery({
     queryKey: ["allowed-folders"],
     queryFn: jobsApi.getAllowedFolders,
+    retry: false, // Don't retry on failure
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    refetchOnWindowFocus: false,
+    enabled: !!accessToken,
   });
 
   // Setup Form
@@ -69,12 +94,21 @@ export function JobForm() {
     onSuccess: () => {
       toast.success("Job started successfully");
       form.reset();
-      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      // queryClient.invalidateQueries({ queryKey: ["jobs"] });
     },
-    onError: (error: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(
-        `Failed to start job: ${error.response?.data?.detail || error.message}`,
-      );
+    onError: (
+      error: Error & {
+        response?: {
+          data?: { detail?: string | { message?: string; code?: string } };
+        };
+      },
+    ) => {
+      const detail = error.response?.data?.detail as
+        | string
+        | { message?: string; code?: string }
+        | undefined;
+      const message = resolveJobErrorMessage(detail, error.message);
+      toast.error(`Failed to start job: ${message}`);
     },
   });
 
@@ -84,22 +118,26 @@ export function JobForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
         <FormField
           control={form.control}
           name="folder_path"
           render={({ field }) => (
-            <FormItem>
+            <FormItem className="space-y-0.5">
               <FormLabel>Target Folder</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value}
+                name={field.name}
+              >
                 <FormControl>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-9">
                     <SelectValue placeholder="Select a folder..." />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
                   {isLoadingFolders ? (
-                    <div className="p-2 text-center text-sm text-slate-500">
+                    <div className="p-2 text-center text-sm text-muted-foreground">
                       Loading folders...
                     </div>
                   ) : (
@@ -114,24 +152,25 @@ export function JobForm() {
                   )}
                 </SelectContent>
               </Select>
-              <FormDescription>
-                The folder on the server where subtitles will be downloaded.
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        <div className="space-y-6">
+        <div className="space-y-2">
           <FormField
             control={form.control}
             name="language"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="space-y-1">
                 <FormLabel>Language</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  name={field.name}
+                >
                   <FormControl>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-9">
                       <SelectValue placeholder="Select language..." />
                     </SelectTrigger>
                   </FormControl>
@@ -152,11 +191,15 @@ export function JobForm() {
             control={form.control}
             name="log_level"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="space-y-1">
                 <FormLabel>Log Level</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  name={field.name}
+                >
                   <FormControl>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-9">
                       <SelectValue placeholder="Select log level..." />
                     </SelectTrigger>
                   </FormControl>
@@ -168,9 +211,6 @@ export function JobForm() {
                     ))}
                   </SelectContent>
                 </Select>
-                <FormDescription>
-                  Controls verbosity of logs shown during processing.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -180,7 +220,7 @@ export function JobForm() {
         <Button
           type="submit"
           disabled={mutation.isPending}
-          className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 transition-all duration-300 border-0"
+          className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 transition-all duration-300 border-0 h-9 mt-1"
         >
           {mutation.isPending && (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -1052,7 +1052,10 @@ async def _handle_cancelled_gather_future(
     task_log_prefix: str,
 ):
     """Awaits a cancelled gather future to prevent 'Unretrieved _GatheringFuture exception'."""
-    if gather_future and gather_future.cancelled() and not gather_future.done():
+    if not gather_future:
+        return
+
+    if not gather_future.done():
         logger.debug(
             f"{task_log_prefix} Attempting to await cancelled gather future for PID {process_pid_str}."
         )
@@ -1067,6 +1070,19 @@ async def _handle_cancelled_gather_future(
                 f"{task_log_prefix} Unexpected error awaiting cancelled gather for PID {process_pid_str}: {e_gather_await}",
                 exc_info=settings.LOG_TRACEBACKS,
             )
+        return
+
+    try:
+        gather_future.result()
+    except asyncio.CancelledError:
+        logger.debug(
+            f"{task_log_prefix} Gather future for PID {process_pid_str} was cancelled as expected."
+        )
+    except Exception as e_gather_await:
+        logger.error(
+            f"{task_log_prefix} Unexpected error reading cancelled gather for PID {process_pid_str}: {e_gather_await}",
+            exc_info=settings.LOG_TRACEBACKS,
+        )
 
 
 async def _force_kill_process(

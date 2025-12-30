@@ -21,8 +21,10 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
     # Inherits id, email, is_active, is_superuser, is_verified
     # Add our custom fields that should be readable
     role: Literal["admin", "standard"]
+    api_key_preview: str | None = None
     created_at: datetime
     updated_at: datetime
+    force_password_change: bool
 
     # Example of hiding a field from the read schema if needed:
     # is_verified: bool = Field(..., exclude=True)
@@ -56,10 +58,13 @@ class AdminUserUpdate(BaseModel):
 
     # Define fields an admin IS allowed to change
     email: EmailStr | None = None
+    password: str | None = None
     role: Literal["admin", "standard"] | None = None
     is_active: bool | None = None
     is_superuser: bool | None = None  # Keep this aligned with 'role'
     is_verified: bool | None = None
+    mfa_enabled: bool | None = None  # Allow admin to disable MFA
+    force_password_change: bool | None = None  # Allow admin to force change
 
     # Note: We might need logic in the update endpoint to ensure
     # if role='admin', then is_superuser=True, and vice-versa.

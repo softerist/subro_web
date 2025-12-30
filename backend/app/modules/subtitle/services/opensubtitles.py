@@ -20,9 +20,6 @@ logger = logging.getLogger(__name__)
 VALID_FILTER_OPTIONS = {"include", "exclude", "only"}
 
 # --- Configuration ---
-API_KEY = getattr(settings, "OPENSUBTITLES_API_KEY", None)
-USERNAME = getattr(settings, "OPENSUBTITLES_USERNAME", None)
-PASSWORD = getattr(settings, "OPENSUBTITLES_PASSWORD", None)
 APP_NAME = getattr(settings, "USER_AGENT_APP_NAME", "SubtitleTool")
 APP_VERSION = getattr(settings, "USER_AGENT_APP_VERSION", "1.0")
 MIN_OPENSUBS_MATCH_SCORE = getattr(settings, "OPENSUBTITLES_MIN_MATCH_SCORE", 10)
@@ -39,6 +36,46 @@ network_session = create_session_with_retries()
 # --- Module-level State Management ---
 _current_opensubs_token = None
 _auth_failed_this_run = False  # Tracks if auth failed in the current script execution
+
+
+# Helper for dynamic setting retrieval
+def _get_dynamic_setting(db_field, env_var_name=None):
+    """
+    Fetches setting synchronously from DB, falling back to Environment/Settings.
+    """
+    # 1. Try Database
+    try:
+        from sqlalchemy import select
+
+        from app.core.security import decrypt_value
+        from app.db.models.app_settings import AppSettings
+        from app.db.session import SyncSessionLocal
+
+        if SyncSessionLocal:
+            with SyncSessionLocal() as session:
+                settings_row = session.scalar(select(AppSettings).where(AppSettings.id == 1))
+                if settings_row:
+                    val = getattr(settings_row, db_field, None)
+                    if val is not None:
+                        # Handle potentially unnecessary decryption check if field isn't encrypted?
+                        # Assuming these specific fields MIGHT be encrypted in DB model.
+                        # Based on AppSettings model, keys/passwords are usually encrypted.
+                        # We'll try decrypting, if it fails assume plain or handle error.
+                        # Actually for AppSettings, we should know if it matches the schema.
+                        # Just calling decrypt_value is safe if value is encrypted string.
+                        if val == "":
+                            return None
+                        try:
+                            return decrypt_value(val)
+                        except Exception:
+                            return val  # Return raw if decrypt fails (maybe not encrypted?)
+    except Exception:
+        pass  # Debug log only?
+
+    # 2. Fallback to Environment
+    if env_var_name:
+        return getattr(settings, env_var_name, None)
+    return None
 
 
 def set_token(token):
@@ -89,15 +126,19 @@ def authenticate():
         return False
 
     # 3. Credentials check
-    if not all([API_KEY, USERNAME, PASSWORD]):
+    api_key = _get_dynamic_setting("opensubtitles_api_key", "OPENSUBTITLES_API_KEY")
+    username = _get_dynamic_setting("opensubtitles_username", "OPENSUBTITLES_USERNAME")
+    password = _get_dynamic_setting("opensubtitles_password", "OPENSUBTITLES_PASSWORD")
+
+    if not all([api_key, username, password]):
         logger.error("OpenSubtitles Auth Error: Credentials/API Key missing in config.")
         _auth_failed_this_run = True  # Mark as failed
         return False
 
     # 4. Attempt API Login
-    payload = {"username": USERNAME, "password": PASSWORD}
+    payload = {"username": username, "password": password}
     headers = {
-        "Api-Key": API_KEY,
+        "Api-Key": api_key,
         "Content-Type": "application/json",
         "User-Agent": f"{APP_NAME} v{APP_VERSION}",
     }
@@ -156,12 +197,13 @@ def logout():
         logger.debug("OpenSubtitles Logout: Not currently logged in or no API key.")
         logout_success = True  # Consider it "successful" in terms of state being logged out
     else:
-        if not API_KEY:
+        api_key = _get_dynamic_setting("opensubtitles_api_key", "OPENSUBTITLES_API_KEY")
+        if not api_key:
             logger.error("OpenSubtitles Logout Error: API Key missing.")
             logout_success = False
         else:
             headers = {
-                "Api-Key": API_KEY,
+                "Api-Key": api_key,
                 "Authorization": f"Bearer {token}",
                 "User-Agent": f"{APP_NAME} v{APP_VERSION}",
             }
@@ -198,7 +240,8 @@ def _opensubs_api_request(method, url, needs_auth=True, retry_on_401=True, **kwa
     Handles token expiry (401 retry).
     """
     headers = kwargs.pop("headers", {})
-    headers["Api-Key"] = API_KEY
+    api_key = _get_dynamic_setting("opensubtitles_api_key", "OPENSUBTITLES_API_KEY")
+    headers["Api-Key"] = api_key
     headers["User-Agent"] = f"{APP_NAME} v{APP_VERSION}"
     if "Content-Type" not in headers and ("json" in kwargs or "data" in kwargs):
         headers["Content-Type"] = "application/json"

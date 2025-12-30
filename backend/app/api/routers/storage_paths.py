@@ -38,29 +38,44 @@ async def list_storage_paths(
 
 
 @router.post("/", response_model=StoragePathRead, status_code=status.HTTP_201_CREATED)
-async def create_storage_path(
+async def create_storage_path(  # noqa: C901
     path_in: StoragePathCreate,
     db: AsyncSession = Depends(get_async_session),
-    # Assuming only superusers can configure server paths for security
-    current_user=Depends(current_active_superuser),  # noqa: ARG001
+    current_user=Depends(current_active_user),
 ):
     """
-    Add a new storage path. Only accessible by superusers.
-    Validates that the path exists on the server.
+    Add a new storage path.
+    - Superusers: Can add any valid server path.
+    - Admins/Standard: Can ONLY add subdirectories of existing paths.
     """
     # 1. Check if path exists physically
     p = Path(path_in.path)
-    if not p.exists():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Path '{path_in.path}' does not exist on the server filesystem.",
-        )
 
-    if not p.is_dir():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Path '{path_in.path}' is not a directory.",
-        )
+    # Common host-style prefixes for providing tips
+    host_style_prefixes = ("/root", "/home", "/mnt", "/Users", "C:", "D:")
+    is_host_style = str(path_in.path).startswith(host_style_prefixes)
+    docker_tip = " TIP: You might be using a HOST path. Please use the path as it is MAPPED inside the container (e.g., '/downloads')."
+
+    try:
+        if not p.exists():
+            detail = f"Path '{path_in.path}' does not exist on the server filesystem."
+            if is_host_style:
+                detail += docker_tip
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+        if not p.is_dir():
+            detail = f"Path '{path_in.path}' is not a directory."
+            if is_host_style:
+                detail += docker_tip
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+    except PermissionError as e:
+        detail = f"Permission denied while accessing path '{path_in.path}'. Please ensure the backend has proper permissions for this folder."
+        if is_host_style:
+            detail += docker_tip
+
+        logger.error(f"PermissionError in create_storage_path: {e} | Path: {path_in.path}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from e
 
     # 2. Check for duplicates
     existing = await crud.storage_path.get_by_path(db, path=path_in.path)
@@ -69,6 +84,35 @@ async def create_storage_path(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Storage path already exists.",
         )
+
+    # 3. Enforce "Subdirectory Only" policy for Non-Superusers
+    if not current_user.is_superuser:
+        # Fetch all existing allowed paths
+        all_paths = await crud.storage_path.get_multi(db, limit=1000)
+        # Normalize requested path
+        requested_path = Path(path_in.path).resolve()
+
+        is_allowed = False
+        for allowed in all_paths:
+            allowed_path = Path(allowed.path).resolve()
+            # Check if requested path is relative to (inside) an existing allowed path
+            # AND is not the same path (duplicates already handled, but logic safety)
+            try:
+                if requested_path.is_relative_to(allowed_path) and requested_path != allowed_path:
+                    is_allowed = True
+                    break
+            except ValueError:
+                continue
+
+        if not is_allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Permission Denied: As a standard user/admin, you can only add "
+                    "subdirectories of existing root paths (e.g., add '/mnt/movies/action' "
+                    "if '/mnt/movies' exists)."
+                ),
+            )
 
     return await crud.storage_path.create(db, obj_in=path_in)
 

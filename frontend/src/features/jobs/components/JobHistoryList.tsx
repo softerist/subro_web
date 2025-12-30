@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Eye, Loader2, Trash2 } from "lucide-react";
+import { Eye, Loader2, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -24,27 +24,30 @@ import { Button } from "@/components/ui/button";
 import { jobsApi } from "../api/jobs";
 import { JobStatusBadge } from "./JobStatusBadge";
 import { Job } from "../types";
+import { PathCell } from "@/components/ui/path-cell";
 
 interface JobHistoryListProps {
+  jobs?: Job[];
   onSelectJob: (job: Job | null) => void;
   selectedJobId?: string;
+  visibleCount: number;
+  initialCount: number;
+  onLoadMore: () => void;
+  onShowLess: () => void;
 }
 
 export function JobHistoryList({
+  jobs,
   onSelectJob,
   selectedJobId,
+  visibleCount,
+  initialCount,
+  onLoadMore,
+  onShowLess,
 }: JobHistoryListProps) {
   const [jobToDelete, setJobToDelete] = useState<Job | null>(null);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const {
-    data: jobs,
-    isLoading,
-    error,
-  } = useQuery({
-    queryKey: ["jobs", { limit: 7 }],
-    queryFn: () => jobsApi.getAll({ limit: 7 }),
-    refetchInterval: 5000,
-  });
 
   const cancelMutation = useMutation({
     mutationFn: jobsApi.cancel,
@@ -73,28 +76,24 @@ export function JobHistoryList({
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex h-32 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return <div className="text-destructive">Failed to load jobs.</div>;
-  }
-
   return (
     <>
-      <div className="rounded-md border overflow-x-auto">
+      <div className="rounded-lg border border-border/60 overflow-hidden bg-card/50">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="min-w-[200px] h-8">Target Folder</TableHead>
-              <TableHead className="h-8">Status</TableHead>
-              <TableHead className="h-8">Created At</TableHead>
-              <TableHead className="text-right h-8">Actions</TableHead>
+            <TableRow className="hover:bg-transparent border-b border-border/40">
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                Folder
+              </TableHead>
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                Status
+              </TableHead>
+              <TableHead className="hidden sm:table-cell h-9 text-xs font-semibold text-muted-foreground">
+                Created
+              </TableHead>
+              <TableHead className="text-right h-9 text-xs font-semibold text-muted-foreground w-20">
+                Actions
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -105,61 +104,101 @@ export function JobHistoryList({
                 </TableCell>
               </TableRow>
             ) : (
-              jobs.map((job) => (
+              jobs.slice(0, visibleCount).map((job) => (
                 <TableRow
                   key={job.id}
-                  className={selectedJobId === job.id ? "bg-slate-800/60" : ""}
-                  onClick={() => onSelectJob(job)}
+                  className={`cursor-pointer transition-colors duration-200 ${selectedJobId === job.id ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-muted/40"}`}
+                  onClick={() => {
+                    setExpandedJobId(expandedJobId === job.id ? null : job.id);
+                    onSelectJob(job);
+                  }}
                 >
-                  <TableCell
-                    className="font-medium max-w-[200px] truncate py-2"
-                    title={job.folder_path}
-                  >
-                    {job.folder_path}
+                  <TableCell className="py-2">
+                    <PathCell
+                      path={job.folder_path}
+                      defaultMaxWidth="max-w-[140px] md:max-w-[260px]"
+                      isExpanded={expandedJobId === job.id}
+                      onToggle={() =>
+                        setExpandedJobId(
+                          expandedJobId === job.id ? null : job.id,
+                        )
+                      }
+                    />
                   </TableCell>
                   <TableCell className="py-2">
                     <JobStatusBadge status={job.status} />
                   </TableCell>
-                  <TableCell className="py-2">
+                  <TableCell className="py-2 hidden sm:table-cell">
                     {format(new Date(job.submitted_at), "MMM d, HH:mm")}
                   </TableCell>
-                  <TableCell className="text-right space-x-1 py-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectJob(job);
-                      }}
-                      title="View Logs"
-                    >
-                      <Eye className="h-4 w-4" />
-                      <span className="sr-only">View Logs</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => handleDeleteClick(e, job)}
-                      disabled={
-                        cancelMutation.isPending &&
-                        cancelMutation.variables === job.id
-                      }
-                      title="Remove Job"
-                    >
-                      {cancelMutation.isPending &&
-                      cancelMutation.variables === job.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      )}
-                      <span className="sr-only">Remove Job</span>
-                    </Button>
+                  <TableCell className="py-2">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedJobId(
+                            expandedJobId === job.id ? null : job.id,
+                          );
+                          onSelectJob(job);
+                        }}
+                        title="View Logs"
+                      >
+                        <Eye className="h-4 w-4" />
+                        <span className="sr-only">View Logs</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => handleDeleteClick(e, job)}
+                        disabled={
+                          cancelMutation.isPending &&
+                          cancelMutation.variables === job.id
+                        }
+                        title="Remove Job"
+                      >
+                        {cancelMutation.isPending &&
+                        cancelMutation.variables === job.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        )}
+                        <span className="sr-only">Remove Job</span>
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Show More/Less buttons */}
+      <div className="flex items-center justify-center gap-3 mt-4">
+        {visibleCount > initialCount && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onShowLess}
+            className="h-8 text-xs gap-1.5"
+          >
+            <ChevronUp className="h-3.5 w-3.5" />
+            Show Less
+          </Button>
+        )}
+        {jobs && jobs.length > visibleCount && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onLoadMore}
+            className="h-8 text-xs gap-1.5"
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+            Show More ({jobs.length - visibleCount})
+          </Button>
+        )}
       </div>
 
       <Dialog
