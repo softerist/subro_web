@@ -9,6 +9,9 @@ DB_HOST="${POSTGRES_SERVER:-db}"
 DB_USER="${POSTGRES_USER:-subapp_user}"
 DB_NAME="${POSTGRES_DB:-subappdb}"
 # Note: PGPASSWORD should be set in environment
+if [ -z "${PGPASSWORD:-}" ] && [ -n "${POSTGRES_PASSWORD:-}" ]; then
+    export PGPASSWORD="$POSTGRES_PASSWORD"
+fi
 
 echo "[$(date)] Starting backup job..."
 
