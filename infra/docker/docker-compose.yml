@@ -4,7 +4,9 @@
 
 services:
   caddy:
-    image: caddy:2-alpine
+    build:
+      context: .
+      dockerfile: Caddy.Dockerfile
     ports:
       - "8090:8090" # Expose Caddy's HTTP port on host 8090
       - "8444:8444" # Expose Caddy's HTTPS port on host 8444
