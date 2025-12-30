@@ -214,7 +214,7 @@ prod: ensure-dev-cleanup ## Deploy to production using blue-green deployment scr
 	@echo "Production stack deployed."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8080"
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
-	@echo "API Docs available at https://localhost:8443/api/v1/docs"
+	@echo "API Docs are MASKED for security. Access via your secret path defined in .env.prod"
 
 prod-skip-reencrypt: ensure-dev-cleanup ## Deploy to production skipping re-encryption (faster)
 	@echo "Deploying to production (skipping re-encryption)..."
@@ -222,7 +222,7 @@ prod-skip-reencrypt: ensure-dev-cleanup ## Deploy to production skipping re-encr
 	@echo "Production stack deployed (Fast)."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8080"
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
-	@echo "API Docs available at https://localhost:8443/api/v1/docs"
+	@echo "API Docs are MASKED for security. Access via your secret path defined in .env.prod"
 
 prod-hardened: ensure-dev-cleanup ## Deploy with security hardening (read-only fs, capability dropping)
 	@echo "Deploying hardened production stack..."
@@ -230,7 +230,7 @@ prod-hardened: ensure-dev-cleanup ## Deploy with security hardening (read-only f
 		--project-name subapp_prod up --build --detach
 	@echo "Hardened production stack deployed."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
-	@echo "API Docs available at http://localhost:8001/api/v1/docs"
+	@echo "API Docs are MASKED for security. Access via your secret path defined in .env.prod"
 
 reset-prod: rebuild-prod ## Alias for rebuild-prod
 
