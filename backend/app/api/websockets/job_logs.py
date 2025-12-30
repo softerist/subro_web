@@ -177,6 +177,9 @@ async def redis_pubsub_listener(redis_url: str, channel_name: str, job_id: UUID)
         await pubsub.subscribe(channel_name)
         logger.info(f"Subscribed to Redis channel '{channel_name}' for job {job_id}.")
         yield pubsub
+    except WebSocketDisconnect:
+        # Re-raise to be handled by the main WebSocket handler as a normal disconnect
+        raise
     except Exception as e:
         logger.error(
             f"Failed to setup or connect to Redis Pub/Sub for job {job_id}: {e}", exc_info=True

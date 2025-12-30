@@ -140,8 +140,8 @@ done
 echo "---"
 
 # --- Database Bootstrapping ---
-echo "Entrypoint: Running 'poetry run python app/initial_data.py' for bootstrapping..."
-if ! poetry run python app/initial_data.py; then
+echo "Entrypoint: Running 'poetry run python -m app.initial_data' for bootstrapping..."
+if ! poetry run python -m app.initial_data; then
   echo "Entrypoint: 'initial_data.py' failed. Setup may be incomplete." >&2
 else
   echo "Entrypoint: 'initial_data.py' finished successfully."

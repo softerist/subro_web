@@ -162,6 +162,7 @@ COPY --chown=appuser:appuser alembic ./alembic
 
 # Copy only the application code needed for runtime
 COPY --chown=appuser:appuser app ./app
+COPY --chown=appuser:appuser secrets ./secrets
 
 # Ensure scripts directory exists and copy all scripts from development stage
 RUN mkdir -p /app/scripts
@@ -178,6 +179,10 @@ ENV NLTK_DATA=/app/nltk_data
 
 EXPOSE 8000
 
+# Set the entrypoint script
+# This script waits for DB, runs migrations, then executes CMD
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
+
 # Use the venv Python via the updated PATH
 # Using uvicorn from PATH
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -185,7 +190,7 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # --- Production Stage (Worker) ---
 FROM production-api AS production-worker
-# Inherits everything from production-api (user, venv, code, WORKDIR, USER, PATH)
+# Inherits everything from production-api (user, venv, code, WORKDIR, USER, PATH, ENTRYPOINT)
 
 # Use the venv Python via the updated PATH
 CMD ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=INFO"]
