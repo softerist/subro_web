@@ -8,8 +8,10 @@ to avoid pytest-asyncio event loop conflicts.
 import asyncio
 import json
 import os
+import ssl
 import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -17,15 +19,31 @@ import httpx
 import pytest
 import websockets
 from redis.asyncio import Redis
+from sqlalchemy import select
 
 # Fix for websockets 15.0+ - correct exception
 from websockets.exceptions import InvalidStatus
 
+import app.db.session
 from app.core.config import settings
+from app.db.models.user import User
 
-# API base URL (running container)
-API_BASE_URL = "http://localhost:8000"
-WS_BASE_URL = "ws://localhost:8000"
+# API base URL - configurable via environment, defaults to Caddy proxy
+# Use TEST_API_BASE_URL/TEST_WS_BASE_URL for custom endpoints
+# For direct API access (dev): http://localhost:8001
+# For Caddy proxy (prod): https://localhost:8443
+API_BASE_URL = os.getenv("TEST_API_BASE_URL", "https://localhost:8443")
+WS_BASE_URL = os.getenv("TEST_WS_BASE_URL", "wss://localhost:8443")
+
+# SSL context for self-signed certificates in local testing
+_ssl_context = ssl.create_default_context()
+_ssl_context.check_hostname = False
+_ssl_context.verify_mode = ssl.CERT_NONE
+
+
+def _get_ws_ssl_context():
+    """Return SSL context for wss:// URLs, None for ws:// URLs."""
+    return _ssl_context if WS_BASE_URL.startswith("wss://") else None
 
 
 class TestWebSocketLogStreaming:
@@ -91,24 +109,82 @@ class TestWebSocketLogStreaming:
             "Ensure /tmp is mounted in docker-compose.yml"
         )
 
+    async def _ensure_admin_user(self, email, _password):
+        """Ensure the admin user exists in the database."""
+        # Initialize DB resources if not already done
+        if app.db.session.FastAPISessionLocal is None:
+            print("   ⚠️  Initializing FastAPISessionLocal in test process...")
+            app.db.session._initialize_fastapi_db_resources_sync()
+
+        async with app.db.session.FastAPISessionLocal() as db:
+            result = await db.execute(select(User).where(User.email == email))
+            user = result.scalar_one_or_none()
+
+            if not user:
+                print(f"   ⚠️  Admin user {email} missing. Creating it...")
+                # Use hardcoded hash for "SecurePassword123" to avoid runtime issues with password_helper
+                # Hash generated via app.core.users.password_helper.hash("SecurePassword123") in container
+                known_hash = "$argon2id$v=19$m=65536,t=3,p=4$4zwCKFTChp7LMllUB1/S2w$pYm832HP4FEsvcJqOVZqPGcPTOr2BY3e6vJIc6L67NY"
+
+                new_admin = User(
+                    id=uuid.uuid4(),
+                    email=email,
+                    hashed_password=known_hash,
+                    is_active=True,
+                    is_superuser=True,
+                    is_verified=True,
+                    role="admin",
+                    mfa_enabled=False,
+                    force_password_change=False,
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
+                )
+                db.add(new_admin)
+                await db.commit()
+                print(f"   ✅ Admin user {email} created.")
+            else:
+                # Ensure password matches if user exists (in case of wrong password in DB)
+                print(f"   ✅ Admin user {email} exists.")
+                # We could update password here if needed, but assuming it's correct for now
+
     async def _register_and_login(self, client, email, password):
-        """Helper to register and login a user."""
-        # Step 1: Register
-        print(f"1. Registering test user: {email}")
+        """Helper to register and login a user. Falls back to admin if registration is disabled."""
+        # Step 1: Try to Register
+        print(f"1. Attempting to register test user: {email}")
         register_response = await client.post(
             "/api/v1/auth/register",
             json={"email": email, "password": password},
         )
 
-        if register_response.status_code not in [200, 201]:
+        if register_response.status_code in [200, 201]:
+            user_id = register_response.json()["id"]
+            print(f"   ✅ User registered: {user_id}")
+            login_email, login_password = email, password
+        elif register_response.status_code == 404:
+            # Registration disabled (OPEN_SIGNUP=False), use admin credentials
+            print("   ⚠️  Registration disabled, falling back to admin credentials")
+            admin_email = settings.FIRST_SUPERUSER_EMAIL
+            admin_password = settings.FIRST_SUPERUSER_PASSWORD
+            if not admin_email or not admin_password:
+                pytest.skip("Registration disabled and no admin credentials configured")
+
+            # Ensure admin exists (to handle cases where DB was wiped by fixtures)
+            try:
+                await self._ensure_admin_user(admin_email, admin_password)
+            except Exception as e:
+                import traceback
+
+                traceback.print_exc()
+                print(f"   ⚠️  Failed to ensure admin user: {e}")
+                # Continue and hope for the best (or let login fail naturaly)
+
+            login_email, login_password = admin_email, admin_password
+        else:
             pytest.fail(f"Failed to register user: {register_response.text}")
 
-        user_id = register_response.json()["id"]
-        print(f"   ✅ User registered: {user_id}")
-
         # Step 2: Login
-        print("2. Logging in to get JWT token")
-        login_response = await self._login_with_retry(client, email, password)
+        print(f"2. Logging in as {login_email}")
+        login_response = await self._login_with_retry(client, login_email, login_password)
 
         if login_response.status_code != 200:
             pytest.fail(f"Failed to login: {login_response.text}")
@@ -257,7 +333,9 @@ class TestWebSocketLogStreaming:
         # API Cleanup
         if job_id and token:
             try:
-                async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=5.0) as client:
+                async with httpx.AsyncClient(
+                    base_url=API_BASE_URL, timeout=5.0, verify=False
+                ) as client:
                     headers = {"Authorization": f"Bearer {token}"}
                     await client.delete(f"/api/v1/jobs/{job_id}", headers=headers)
                     print(f"   ✅ Deleted job: {job_id}")
@@ -291,7 +369,9 @@ class TestWebSocketLogStreaming:
         user_token = None
 
         try:
-            async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=10.0) as client:
+            async with httpx.AsyncClient(
+                base_url=API_BASE_URL, timeout=10.0, verify=False
+            ) as client:
                 # Step 1 & 2: Register and Login
                 user_token = await self._register_and_login(client, test_email, test_password)
 
@@ -305,7 +385,7 @@ class TestWebSocketLogStreaming:
             publisher_task = asyncio.create_task(self._publish_test_logs(job_id))
 
             # Step 5: Connect and Verify
-            async with websockets.connect(ws_url) as websocket:
+            async with websockets.connect(ws_url, ssl=_get_ws_ssl_context()) as websocket:
                 print("   ✅ WebSocket connected")
 
                 # Receive system message
@@ -352,9 +432,25 @@ class TestWebSocketLogStreaming:
         job_id = uuid.uuid4()
         ws_url = f"{WS_BASE_URL}/api/v1/ws/jobs/{job_id}/logs?token=INVALID_TOKEN"
 
-        with pytest.raises(InvalidStatus) as exc_info:
-            async with websockets.connect(ws_url):
-                pass
-
-        assert exc_info.value.response.status_code in [500, 403, 401]
-        print(f"✅ Auth failure test passed (status: {exc_info.value.response.status_code})")
+        try:
+            async with websockets.connect(ws_url, ssl=_get_ws_ssl_context()) as websocket:
+                # Connection may succeed initially, but should receive close frame
+                try:
+                    await asyncio.wait_for(websocket.recv(), timeout=5)
+                except websockets.exceptions.ConnectionClosedError as e:
+                    # Expected: connection closed with policy violation (1008)
+                    # Use rcvd.code to avoid deprecation warning (websockets 15.0+)
+                    close_code = e.rcvd.code if e.rcvd else 1000
+                    assert close_code in [
+                        1008,
+                        1003,
+                        4001,
+                        4003,
+                    ], f"Unexpected close code: {close_code}"
+                    print(f"✅ Auth failure test passed (close code: {close_code})")
+                    return
+                pytest.fail("Expected WebSocket to close with auth error")
+        except InvalidStatus as exc_info:
+            # Also accept HTTP-level rejection
+            assert exc_info.response.status_code in [500, 403, 401]
+            print(f"✅ Auth failure test passed (HTTP status: {exc_info.response.status_code})")
