@@ -4,12 +4,15 @@ CRUD operations for AppSettings.
 Implements singleton pattern - there is only ever one row in app_settings table.
 """
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decrypt_value, encrypt_value, mask_sensitive_value
@@ -22,6 +25,10 @@ logger = logging.getLogger(__name__)
 _DEEPL_REVALIDATION_COOLDOWN = timedelta(seconds=30)
 _deepl_revalidation_requested: dict[str, datetime] = {}
 
+_OS_REVALIDATION_COOLDOWN = timedelta(minutes=1)
+_os_revalidation_last_requested: datetime | None = None
+_background_tasks: set[asyncio.Task] = set()
+
 
 def _should_schedule_deepl_revalidation(key_hash: str, now: datetime) -> bool:
     last_requested = _deepl_revalidation_requested.get(key_hash)
@@ -33,6 +40,17 @@ def _should_schedule_deepl_revalidation(key_hash: str, now: datetime) -> bool:
         for existing_key, timestamp in list(_deepl_revalidation_requested.items()):
             if timestamp < cutoff:
                 del _deepl_revalidation_requested[existing_key]
+    return True
+
+
+def _should_schedule_os_revalidation(now: datetime) -> bool:
+    global _os_revalidation_last_requested
+    if (
+        _os_revalidation_last_requested
+        and now - _os_revalidation_last_requested < _OS_REVALIDATION_COOLDOWN
+    ):
+        return False
+    _os_revalidation_last_requested = now
     return True
 
 
@@ -70,10 +88,18 @@ class CRUDAppSettings:
 
         if settings is None:
             logger.info("AppSettings row not found. Creating with defaults.")
-            settings = AppSettings(id=1, setup_completed=False)
-            db.add(settings)
-            await db.commit()
-            await db.refresh(settings)
+            try:
+                await db.execute(
+                    insert(AppSettings)
+                    .values(id=1, setup_completed=False)
+                    .on_conflict_do_nothing(index_elements=[AppSettings.id])
+                )
+                await db.commit()
+            except IntegrityError:
+                # Another process created the singleton row first.
+                await db.rollback()
+            result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
+            settings = result.scalar_one()
 
         return settings
 
@@ -351,6 +377,9 @@ class CRUDAppSettings:
             else:
                 active_deepl_keys.append(mask_sensitive_value(key, visible_chars=8))
 
+        # Check for OpenSubtitles re-validation if rate limited
+        await self._check_and_trigger_os_revalidation(db_settings)
+
         return SettingsRead(
             tmdb_api_key=self._get_effective_and_mask(db_settings, env_settings, "tmdb_api_key"),
             omdb_api_key=self._get_effective_and_mask(db_settings, env_settings, "omdb_api_key"),
@@ -396,8 +425,6 @@ class CRUDAppSettings:
             opensubtitles_vip=db_settings.opensubtitles_vip,
             opensubtitles_allowed_downloads=db_settings.opensubtitles_allowed_downloads,
             opensubtitles_rate_limited=db_settings.opensubtitles_rate_limited,
-            # Google Cloud status - check DB first, then env path
-            # Logic: If DB has value (even empty string), use it. If DB is None, check Env.
             google_cloud_configured=bool(
                 db_settings.google_cloud_credentials
                 if db_settings.google_cloud_credentials is not None
@@ -425,6 +452,30 @@ class CRUDAppSettings:
             ),
             google_usage=await self._get_google_usage_stats(db),
         )
+
+    async def _check_and_trigger_os_revalidation(self, db_settings: AppSettings) -> None:
+        """Trigger background OpenSubtitles validation if rate limited and cooldown passed."""
+        if not db_settings.opensubtitles_rate_limited:
+            return
+
+        now = datetime.now(UTC)
+        if _should_schedule_os_revalidation(now):
+            try:
+                import asyncio
+
+                from app.db.session import FastAPISessionLocal
+                from app.services.api_validation import validate_all_settings
+
+                async def _background_task(factory):
+                    async with factory() as session:
+                        await validate_all_settings(session)
+
+                if FastAPISessionLocal:
+                    task = asyncio.create_task(_background_task(FastAPISessionLocal))
+                    _background_tasks.add(task)
+                    task.add_done_callback(_background_tasks.discard)
+            except Exception as e:
+                logger.error(f"Failed to trigger background OpenSubtitles validation: {e}")
 
     def _get_db_to_env_map(self) -> dict[str, str]:
         return {

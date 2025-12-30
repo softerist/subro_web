@@ -48,6 +48,8 @@
 	# 1. Handle API requests (including WebSockets at /api/v1/ws/...)
 	route @api {
 		reverse_proxy blue-api-1:8000 {
+			lb_try_duration 5s
+			lb_try_interval 250ms
 			header_up Host {http.request.host}
 			header_up X-Real-IP {http.request.remote}
 		}
@@ -56,6 +58,8 @@
 	# 2. Handle WebSocket requests
 	route @websockets {
 		reverse_proxy blue-api-1:8000 {
+			lb_try_duration 5s
+			lb_try_interval 250ms
 			header_up Host {http.request.host}
 			header_up X-Real-IP {http.request.remote}
 			header_up Connection {http.request.header.Connection}

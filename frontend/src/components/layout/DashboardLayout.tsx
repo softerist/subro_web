@@ -22,6 +22,7 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { useAuthStore } from "@/store/authStore";
 import { authApi } from "@/features/auth/api/auth";
 import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import packageJson from "../../../package.json";
 import { MfaWarningBanner } from "@/components/common/MfaWarningBanner";
 
@@ -38,9 +39,11 @@ export default function DashboardLayout() {
   const [menuTranslate, setMenuTranslate] = useState(0);
   const touchStartXRef = useRef<number | null>(null);
   const menuWidthRef = useRef(288);
+  const queryClient = useQueryClient();
 
   const handleLogout = async () => {
     await authApi.logout();
+    queryClient.clear();
     navigate("/login");
   };
 
@@ -89,12 +92,8 @@ export default function DashboardLayout() {
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Paths", href: "/paths", icon: Folder },
     { name: "Statistics", href: "/statistics", icon: BarChart3 },
-    ...(isAdmin
-      ? [
-          { name: "Users", href: "/admin/users", icon: Users },
-          { name: "Settings", href: "/settings", icon: Settings },
-        ]
-      : []),
+    { name: "Settings", href: "/settings", icon: Settings },
+    ...(isAdmin ? [{ name: "Users", href: "/admin/users", icon: Users }] : []),
   ];
 
   return (

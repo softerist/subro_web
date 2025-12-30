@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
       target: production-api
     restart: always
+    # ports:
+    #   - "8000:8000" # Only for debugging/external testing if needed # For integration tests
     expose:
       - "8000"
     volumes:

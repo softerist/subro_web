@@ -7,44 +7,65 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ShieldAlert, X } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { mfaApi } from "@/features/auth/api/mfa";
+import { usersApi } from "@/features/users/api/users";
+import { useAuthStore } from "@/store/authStore";
 
 export function MfaWarningBanner() {
   const navigate = useNavigate();
-  const [show, setShow] = useState(false);
-  const [isDismissed, setIsDismissed] = useState(false);
+  const user = useAuthStore((state) => state.user);
+  const setUser = useAuthStore((state) => state.setUser);
 
-  // Check if MFA setup is required from localStorage
+  // Local state for immediate UI feedback or if user not loaded yet
+  const [localDismissed, setLocalDismissed] = useState(false);
+  const userId = user?.id;
+
   useEffect(() => {
-    const required = localStorage.getItem("mfa_setup_required");
-    const dismissed = localStorage.getItem("mfa_banner_dismissed");
-    setShow(required === "true");
-    setIsDismissed(dismissed === "true");
-  }, []);
+    setLocalDismissed(false);
+  }, [userId]);
 
-  // Check MFA status - if enabled, clear the warning
+  // Check MFA status only if we might need to show the banner
   const { data: mfaStatus } = useQuery({
-    queryKey: ["mfa-status"],
+    queryKey: ["mfa-status", userId],
     queryFn: mfaApi.getStatus,
-    enabled: show && !isDismissed,
-    refetchInterval: 5000, // Check every 5 seconds
+    enabled: !!user && !localDismissed,
+    refetchInterval: 60000, // Check every minute
   });
 
-  useEffect(() => {
-    if (mfaStatus?.mfa_enabled) {
-      localStorage.removeItem("mfa_setup_required");
-      localStorage.removeItem("mfa_banner_dismissed");
-      setShow(false);
-    }
-  }, [mfaStatus]);
+  const dismissMutation = useMutation({
+    mutationFn: () => {
+      const currentPrefs = user?.preferences || {};
+      return usersApi.updateMe({
+        preferences: { ...currentPrefs, mfa_banner_dismissed: true },
+      });
+    },
+    onSuccess: (updatedUser) => {
+      // Update local store with new user data (containing preferences)
+      // Note: We need to cast or ensure updatedUser matches store User type
+      if (user) {
+        setUser({ ...user, ...updatedUser });
+      }
+    },
+  });
 
   const handleDismiss = () => {
-    localStorage.setItem("mfa_banner_dismissed", "true");
-    setIsDismissed(true);
+    setLocalDismissed(true);
+    if (user) {
+      dismissMutation.mutate();
+    }
   };
 
-  if (!show || isDismissed) return null;
+  // Logic to determine visibility
+  // 1. Must be logged in
+  if (!user) return null;
+
+  // 2. Must NOT have dismissed it (preferences take precedence)
+  const isDismissed = user.preferences?.mfa_banner_dismissed || localDismissed;
+  if (isDismissed) return null;
+
+  // 3. MFA must NOT be enabled
+  if (!mfaStatus || mfaStatus.mfa_enabled) return null;
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 bg-amber-500/95 text-black px-4 py-3 shadow-lg">
@@ -54,7 +75,7 @@ export function MfaWarningBanner() {
           <div>
             <span className="font-semibold">Security Notice:</span>{" "}
             <span>
-              Administrator accounts require Two-Factor Authentication.
+              Enable Two-Factor Authentication to protect your account.
             </span>
           </div>
         </div>

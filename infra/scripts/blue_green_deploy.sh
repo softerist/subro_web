@@ -16,6 +16,26 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
+# Ensure Redis and QUIC sysctls are set on host (persistent)
+SYSCTL_REDIS_CONF="/etc/sysctl.d/99-redis.conf"
+SYSCTL_CADDY_CONF="/etc/sysctl.d/99-caddy.conf"
+if [ -w "/etc" ]; then
+    if [ ! -f "$SYSCTL_REDIS_CONF" ] || ! grep -q "^vm.overcommit_memory=1$" "$SYSCTL_REDIS_CONF"; then
+        echo "Applying vm.overcommit_memory=1 to $SYSCTL_REDIS_CONF"
+        echo "vm.overcommit_memory=1" > "$SYSCTL_REDIS_CONF"
+    fi
+    if [ ! -f "$SYSCTL_CADDY_CONF" ] \
+        || ! grep -q "^net.core.rmem_max=7500000$" "$SYSCTL_CADDY_CONF" \
+        || ! grep -q "^net.core.wmem_max=7500000$" "$SYSCTL_CADDY_CONF"; then
+        echo "Applying QUIC UDP buffer sysctls to $SYSCTL_CADDY_CONF"
+        printf "%s\n" "net.core.rmem_max=7500000" "net.core.wmem_max=7500000" > "$SYSCTL_CADDY_CONF"
+    fi
+    sysctl --system >/dev/null 2>&1 || true
+else
+    echo "Warning: Cannot write to /etc/sysctl.d (insufficient permissions)."
+    echo "Please set vm.overcommit_memory=1, net.core.rmem_max=7500000, net.core.wmem_max=7500000 on the host."
+fi
+
 # 0. Clean up potential conflicting manual networks (optional, for safety)
 # docker network rm infra_internal_net infra_caddy_net 2>/dev/null || true
 # We rely on compose to create them correctly.

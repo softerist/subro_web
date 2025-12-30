@@ -52,6 +52,8 @@ help: ## Show help for Makefile targets
 	@echo "  coverage           - Run backend tests and generate coverage report."
 	@echo "  coverage-py        - Run backend tests and generate coverage report (alias for coverage)."
 	@echo "  coverage-ts        - Run frontend tests and generate coverage report."
+	@echo "  test-integration   - Run integration tests inside dev container."
+	@echo "  test-integration-prod - Run integration tests inside prod container."
 	@echo ""
 	@echo "Build & Clean Targets:"
 	@echo "  build              - Build production Docker images."
@@ -188,7 +190,7 @@ db-migrate-and-apply: db-makemigrations db-apply-migration ## Generate migration
 
 
 .PHONY: dev ensure-migrations stop-prod prod reset-prod add-test-statistics reset-prod-with-stats reset-dev reset-dev-db add-test-statistics-dev reset-dev-with-stats rebuild-prod rebuild-dev-with-stats rebuild-prod-with-stats
-dev: stop-prod ensure-migrations compose-up ## Start the full stack (generates initial migration if needed, uses existing volumes)
+dev: stop-prod ensure-migrations compose-up db-migrate ## Start the full stack (generates initial migration if needed, uses existing volumes)
 	@echo "Development stack is up."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8444"
@@ -206,7 +208,6 @@ ensure-migrations:
 	else \
 		echo "Migration files found. Skipping generation."; \
 	fi
-	@echo "Running database migrations..."
 
 prod: ensure-dev-cleanup ## Deploy to production using blue-green deployment script
 	@echo "Deploying to production..."
@@ -226,7 +227,7 @@ prod-skip-reencrypt: ensure-dev-cleanup ## Deploy to production skipping re-encr
 
 prod-hardened: ensure-dev-cleanup ## Deploy with security hardening (read-only fs, capability dropping)
 	@echo "Deploying hardened production stack..."
-	docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.prod.yml \
+	docker compose --env-file infra/.env.prod -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.prod.yml \
 		--project-name subapp_prod up --build --detach
 	@echo "Hardened production stack deployed."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
@@ -245,8 +246,12 @@ rebuild-prod: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
 	@echo "Restarting infrastructure..."
 	@docker compose -f infra/docker/compose.data.yml -f infra/docker/compose.gateway.yml -p infra up -d
 	@echo "Redeploying application..."
-	@make prod
+	@# Explicitly set --env-file to ensure build args like VITE_SETUP_TOKEN are picked up
+	@docker compose --env-file infra/.env.prod -p blue -f infra/docker/compose.prod.yml up -d --build
 	@echo "Database reset complete. Please visit the Setup page."
+	@echo "Gateway (Caddy HTTP)  available at http://localhost:8080"
+	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
+	@echo "Setup Page:           https://localhost:8443/setup"
 
 add-test-statistics: ## Populate translation_log and deepl_usage tables from logs/translation_log.json
 	@echo "Copying and running population script..."
@@ -302,7 +307,7 @@ format-ts: ## Run TypeScript/JS formatter (Prettier)
 # ==============================================================================
 # Testing & Coverage (Run inside Docker)
 # ==============================================================================
-.PHONY: test test-py test-ts coverage coverage-py coverage-ts
+.PHONY: test test-py test-ts test-integration test-integration-prod coverage coverage-py coverage-ts
 test: test-py ## Run backend Python tests
 
 test-py: ## Run backend Python tests
@@ -322,6 +327,25 @@ coverage-py: ## Run backend tests and generate coverage report
 coverage-ts: ## Run frontend tests and generate coverage report
 	@echo "Running frontend tests with coverage..."
 	docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) exec -T frontend npm run coverage
+
+test-integration: ## Run integration tests inside dev container (requires dev stack running)
+	@echo "Running integration tests inside dev container..."
+	docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) exec -T \
+		-e TEST_API_BASE_URL=http://localhost:8000 \
+		-e TEST_WS_BASE_URL=ws://localhost:8000 \
+		api poetry run pytest tests/integration/ -v --tb=short
+
+test-integration-prod: ## Run integration tests inside prod container (requires prod stack running)
+	@echo "Copying tests to prod container..."
+	@docker exec blue-api-1 rm -rf /app/tests 2>/dev/null || true
+	@docker cp backend/tests blue-api-1:/app/
+	@docker cp backend/pyproject.toml blue-api-1:/app/
+	@echo "Installing test dependencies..."
+	@docker exec blue-api-1 pip install pytest pytest-asyncio pytest-dotenv websockets redis --quiet
+	@echo "Running integration tests inside prod container..."
+	docker exec -e TEST_API_BASE_URL=http://localhost:8000 \
+		-e TEST_WS_BASE_URL=ws://localhost:8000 \
+		blue-api-1 python -m pytest /app/tests/integration/ -v --tb=short -o "addopts="
 
 
 # ==============================================================================

@@ -167,22 +167,6 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   return children;
 };
 
-// Admin Route Wrapper
-const AdminRoute = ({ children }: { children: JSX.Element }) => {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const user = useAuthStore((state) => state.user);
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (!user?.is_superuser && user?.role !== "admin") {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return children;
-};
-
 // Public Route Wrapper (redirects to dashboard if already logged in)
 const PublicRoute = ({ children }: { children: JSX.Element }) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -257,9 +241,9 @@ function AppRoutes() {
             <Route
               path="/settings"
               element={
-                <AdminRoute>
+                <ProtectedRoute>
                   <SettingsPage />
-                </AdminRoute>
+                </ProtectedRoute>
               }
             />
           </Route>

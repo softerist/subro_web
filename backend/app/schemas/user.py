@@ -25,6 +25,7 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
     created_at: datetime
     updated_at: datetime
     force_password_change: bool
+    preferences: dict | None = None
 
     # Example of hiding a field from the read schema if needed:
     # is_verified: bool = Field(..., exclude=True)
@@ -47,6 +48,7 @@ class UserUpdate(schemas.BaseUserUpdate):
     is_active: bool | None = None
     is_superuser: bool | None = None
     is_verified: bool | None = None
+    preferences: dict | None = None
     # Do NOT allow role update via this standard schema
 
 

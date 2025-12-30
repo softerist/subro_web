@@ -2,6 +2,7 @@ import { api } from "@/lib/apiClient";
 import { useAuthStore } from "@/store/authStore";
 
 import { RegisterPayload, ResetPasswordPayload } from "../types";
+import { UserPreferences } from "@/features/admin/types";
 
 export interface LoginCredentials {
   username: string; // OAuth2PasswordRequestForm expects username
@@ -17,6 +18,7 @@ export interface UserResponse {
   is_superuser?: boolean;
   is_verified?: boolean;
   force_password_change?: boolean;
+  preferences?: UserPreferences;
 }
 
 export interface SessionStatus {

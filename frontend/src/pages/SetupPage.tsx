@@ -35,7 +35,8 @@ export default function SetupPage() {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const setupToken = import.meta.env.VITE_SETUP_TOKEN || "";
+  const setupTokenFromEnv = import.meta.env.VITE_SETUP_TOKEN || "";
+  const [setupTokenInput, setSetupTokenInput] = useState(setupTokenFromEnv);
 
   // Settings form state
   const [settings, setSettings] = useState<SettingsUpdate>({
@@ -123,7 +124,8 @@ export default function SetupPage() {
             : undefined,
       };
 
-      await completeSetup(data, setupToken || undefined);
+      const effectiveSetupToken = setupTokenInput.trim() || undefined;
+      await completeSetup(data, effectiveSetupToken);
       setSetupCompleted(true);
       navigate("/login");
     } catch (err) {
@@ -139,10 +141,11 @@ export default function SetupPage() {
 
     try {
       // Skip but still create admin if provided
+      const effectiveSetupToken = setupTokenInput.trim() || undefined;
       if (adminEmail && adminPassword) {
-        await skipSetup(adminEmail, adminPassword, setupToken || undefined);
+        await skipSetup(adminEmail, adminPassword, effectiveSetupToken);
       } else {
-        await skipSetup(undefined, undefined, setupToken || undefined);
+        await skipSetup(undefined, undefined, effectiveSetupToken);
       }
       setSetupCompleted(true);
       navigate("/login");
@@ -208,6 +211,11 @@ export default function SetupPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
                 <div className="text-center text-muted-foreground text-sm">
                   <p>You&apos;ll configure:</p>
                   <ul className="mt-2 space-y-1">
@@ -216,6 +224,25 @@ export default function SetupPage() {
                     <li>✓ Google Cloud Translation credentials (optional)</li>
                     <li>✓ qBittorrent integration (optional)</li>
                   </ul>
+                </div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="setup-token"
+                    className="text-muted-foreground"
+                  >
+                    Setup Token (production only)
+                  </Label>
+                  <Input
+                    id="setup-token"
+                    type="password"
+                    value={setupTokenInput}
+                    onChange={(e) => setSetupTokenInput(e.target.value)}
+                    placeholder="Leave blank if not required"
+                    className="bg-background border-input text-foreground"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Required when `SETUP_TOKEN` is configured on the server.
+                  </p>
                 </div>
                 <div className="flex justify-between pt-4">
                   <Button
