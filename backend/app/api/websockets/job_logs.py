@@ -81,7 +81,7 @@ class RedisConnectionError(WebSocketFlowException):
 # --- Dependency for WebSocket Authentication ---
 async def get_current_user_ws(
     token: str = Query(...), user_manager: UserManager = Depends(get_user_manager)
-) -> User:
+) -> User | None:
     credentials_exception = WebSocketDisconnect(
         code=status.WS_1008_POLICY_VIOLATION, reason="Invalid authentication credentials"
     )
@@ -111,26 +111,31 @@ async def get_current_user_ws(
         user_id = UUID(user_id_str)
 
     except JWTError as e:
-        logger.warning(f"JWTError during WebSocket token decoding: {e}", exc_info=settings.DEBUG)
-        raise credentials_exception from e
-    except ValueError as e:
+        # Suppress noisy traceback for common segments error or expired tokens
+        is_malformed = "Not enough segments" in str(e)
+        logger.warning(
+            f"JWTError during WebSocket token decoding: {e}",
+            exc_info=settings.DEBUG and not is_malformed,
+        )
+        return None
+    except ValueError:
         logger.warning(
             "ValueError during WebSocket token decoding (user_id not UUID): "
             f"{user_id_str if 'user_id_str' in locals() else 'UNKNOWN'}",
             exc_info=settings.DEBUG,
         )
-        raise credentials_exception from e
+        return None
     except Exception as e:
         logger.error(f"Unexpected error during WebSocket token decoding: {e}", exc_info=True)
-        raise credentials_exception from e
+        return None
 
     user = await user_manager.get(user_id)
     if user is None:
         logger.warning(f"User not found for ID from WebSocket token: {user_id}")
-        raise credentials_exception
+        return None
     if not user.is_active:
         logger.warning(f"Inactive user attempted WebSocket connection: {user.id}")
-        raise WebSocketDisconnect(code=status.WS_1008_POLICY_VIOLATION, reason="Inactive user")
+        return None
 
     logger.info(f"WebSocket authenticated user: {user.email} (ID: {user.id})")
     return user
@@ -383,9 +388,18 @@ async def _run_streaming_session(  # noqa: C901
 async def websocket_job_log_stream(
     websocket: WebSocket,
     job_id: UUID,
-    current_user: User = Depends(get_current_user_ws),
+    current_user: User | None = Depends(get_current_user_ws),
     db: AsyncSession = Depends(get_async_session),
 ):
+    # Handle authentication failure outside the dependency to avoid ASGI exception noise
+    if current_user is None:
+        logger.info(f"Rejecting WebSocket connection for job {job_id}: Authentication failed.")
+        # We must accept and then close to be standard-compliant for some clients,
+        # or just close if the client supports it before accept.
+        await websocket.accept()
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication failed")
+        return
+
     logger.info(
         f"User {current_user.email} attempting WebSocket connection for job_id: {job_id} from {websocket.client}"
     )
