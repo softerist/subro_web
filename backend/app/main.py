@@ -223,6 +223,19 @@ app = FastAPI(
 
 # --- Rate Limiting Setup ---
 app.state.limiter = limiter
+
+# --- Root Redirect ---
+if settings.ENVIRONMENT == "development":
+    from fastapi.responses import RedirectResponse
+
+    @app.get("/", include_in_schema=False)
+    async def root_redirect():
+        """Redirect root to API documentation in development."""
+        if settings.DOCS_URL:
+            return RedirectResponse(url=settings.DOCS_URL)
+        return {"status": "running", "environment": "development"}
+
+
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
