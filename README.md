@@ -82,14 +82,22 @@ The backend utilizes a **FastAPI** application for HTTP endpoints and a **Celery
 3. **Setup Environment:**
 
    - Copy the environment template: `cp .env.example .env`
-   - Review and update `.env` with necessary secrets (e.g., `JWT_SECRET_KEY`) and configurations. **Do not commit `.env`!**
+   - Review and update `.env`. To automate building the first superuser, ensure these are set:
+
+     ```bash
+     FIRST_SUPERUSER_EMAIL=admin@example.com
+     FIRST_SUPERUSER_PASSWORD=SecurePassword123 # Must have Upper, Lower, and Number
+     ```
+
+   - **Important:** When adding DeepL keys, use proper JSON array format: `DEEPL_API_KEYS=["key1:fx", "key2:fx"]` (no wrapping single quotes).
    - (Recommended) If using `mkcert` for local HTTPS:
 
      ```bash
      mkcert -install
      mkcert localhost 127.0.0.1 ::1
-     # Ensure cert/key paths in Caddyfile/docker-compose match
      ```
+
+     (Ensure cert/key paths in Caddyfile/docker-compose match)
 
 4. **Install Tool Versions (if using ASDF):**
 
@@ -111,12 +119,22 @@ The backend utilizes a **FastAPI** application for HTTP endpoints and a **Celery
      docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml up --build -d
      ```
 
-6. **Access the application:**
+6. **Initial Setup & Admin Access:**
 
-   - Frontend: `https://localhost` (or your configured Caddy host)
-   - API Docs: `https://localhost/api/docs`
+   There are two ways to initialize the system:
 
-7. **Stop Services:**
+   - **Automated (Recommended):** Set the `FIRST_SUPERUSER_` variables in your `.env` (dev) or `.env.prod` (production) file BEFORE starting the containers. The system will detect these and bootstrap the admin account automatically.
+   - **Setup Wizard:** If no environment variables are detected, visit `https://localhost/setup` on your first visit to create the initial superuser and configure API keys via the web interface.
+
+   > [!IMPORTANT]
+   > All passwords must meet complexity requirements: Minimum 8 characters, including at least one uppercase letter, one lowercase letter, and one number.
+
+7. **Access the Application:**
+
+   - Frontend: `https://localhost`
+   - API Docs: `https://localhost/api/v1/docs`
+
+8. **Stop Services:**
    - Using Make: `make compose-down`
    - Or directly: `docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.override.yml down`
 
