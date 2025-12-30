@@ -23,17 +23,6 @@ export const jobsApi = {
   },
 
   getAllowedFolders: async () => {
-    // We need an endpoint for this.
-    // Based on the backend code I've seen previously, typical pattern is usually GET /jobs/config/allowed-folders or similar if implemented.
-    // However, I recall `ALLOWED_MEDIA_FOLDERS` in settings.
-    // Let's assume for now we might need to add this endpoint or it might exist.
-    // Checking backend routes would be prudent if this fails.
-    // For now, let's assume /v1/jobs/allowed-folders or similar.
-    // Wait, I saw the backend files. Let me check `backend/app/api/routers/jobs.py` quickly to be sure.
-    // I will assume it exists or I might Mock it if not found yet.
-    // Actually, let's stick to what we know. The dashboard needs to know what folders are available.
-    // If the backend doesn't have it, we might need to add it or hardcode for now.
-    // Let's use a placeholder request for now.
     const response = await api.get<string[]>("/v1/jobs/allowed-folders");
     return response.data;
   },

@@ -105,7 +105,14 @@ const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
     return () => {
       isMounted = false;
     };
-  }, [accessToken, isAuthenticated, login, logout, setAccessToken]);
+  }, [
+    accessToken,
+    isAuthenticated,
+    login,
+    logout,
+    setAccessToken,
+    setupCompleted,
+  ]);
 
   if (!isReady) {
     return <LoadingSpinner />;

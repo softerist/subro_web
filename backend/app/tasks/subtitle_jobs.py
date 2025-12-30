@@ -99,7 +99,7 @@ async def _publish_to_redis_pubsub_async(
                 f"{task_log_prefix} Published INFO to Redis Pub/Sub channel '{channel}': {payload.get('message', 'N/A')}"
             )
 
-        if settings.DEBUG:  # Assuming settings.DEBUG exists
+        if settings.DEBUG:
             logger.debug(f"{task_log_prefix} Pub/Sub message data: {json_message}")
     except aioredis.RedisError as e_redis:
         logger.error(

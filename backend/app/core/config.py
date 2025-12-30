@@ -1,5 +1,3 @@
-# /backend/app/core/config.py
-
 import json
 import logging
 import os

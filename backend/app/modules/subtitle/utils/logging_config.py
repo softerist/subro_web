@@ -1,5 +1,3 @@
-# src/utils/logging_config.py
-
 import logging
 import sys
 from logging.handlers import RotatingFileHandler

@@ -1,4 +1,3 @@
-# src/core/strategies/embed_scanner.py
 import logging
 from pathlib import Path
 
@@ -105,7 +104,6 @@ class EmbedScanner(ProcessingStrategy):
             self.logger.exception("Error during RO subtitle check/extraction.", exc_info=True)
             # Decide if this error should halt the pipeline step.
             # Let's allow EN check to proceed for robustness, but log the error.
-            # return False # <-- uncomment this to make RO check failure halt this strategy
 
         # --- Detect EN Embedded (Only if RO goal not met yet) ---
         if not context.found_final_ro:

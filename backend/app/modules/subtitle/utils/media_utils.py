@@ -1,5 +1,3 @@
-# src/utils/media_utils.py
-
 import json
 import logging
 import os

@@ -1,8 +1,9 @@
+import argparse
 import asyncio
 import json
 import logging
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # Add backend to sys.path to allow imports from app
@@ -21,11 +22,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Detect environment and set log path
-if Path("/app/logs/translation_log.json").exists():
-    JSON_LOG_PATH = Path("/app/logs/translation_log.json")
+container_log_path = Path("/app/logs/translation_log.json")
+local_app_logs = backend_path / "app" / "logs" / "translation_log.json"
+
+if container_log_path.exists():
+    JSON_LOG_PATH = container_log_path
+elif local_app_logs.exists():
+    JSON_LOG_PATH = local_app_logs
 else:
-    # Host path for fallback (not used inside container if volume is mounted)
-    JSON_LOG_PATH = Path("/home/user/subro_web/logs/translation_log.json")
+    # Default fallback: check current directory (matches translator.py behavior)
+    JSON_LOG_PATH = Path("translation_log.json")
 
 
 def parse_isoformat(dt_str):
@@ -38,7 +44,7 @@ def parse_isoformat(dt_str):
         return None
 
 
-async def populate_db(data):
+async def populate_db(data, refresh_timestamps=False):
     logger.info(f"Populating database with {len(data.get('jobs', []))} jobs...")
 
     db_session._initialize_fastapi_db_resources_sync()
@@ -109,8 +115,21 @@ async def populate_db(data):
             )
             status = "success" if overall_status != "failed" else "failed"
 
+            # If timestamp is very old (e.g. from a different year or many months ago),
+            # it might not show up in 'last 30 days' stats.
+            # We check if it's older than 30 days and optionally use now() if desired,
+            # but for a migration we usually want to keep history.
+            # However, if the user "cannot see them", it's likely due to the 30-day filter.
+            now = datetime.now(UTC)
+            if refresh_timestamps:
+                timestamp = now
+            elif timestamp and timestamp < now - timedelta(days=60):
+                logger.warning(
+                    f"Job {file_name} has old timestamp {timestamp}. Keeping it as is, but it won't show in 30-day stats."
+                )
+
             new_log = TranslationLog(
-                timestamp=timestamp,
+                timestamp=timestamp or now,
                 file_name=file_name,
                 target_language="unknown",  # Not explicitly in JSON jobs list, but required in model
                 service_used=service_used,
@@ -130,15 +149,29 @@ async def populate_db(data):
 
 
 if __name__ == "__main__":
-    logger.info(f"Loading data from {JSON_LOG_PATH}")
-    if not JSON_LOG_PATH.exists():
-        logger.error(f"File not found: {JSON_LOG_PATH}")
+    parser = argparse.ArgumentParser(description="Populate database from translation_log.json")
+    parser.add_argument(
+        "--json-path",
+        type=Path,
+        default=JSON_LOG_PATH,
+        help=f"Path to translation_log.json (default: {JSON_LOG_PATH})",
+    )
+    parser.add_argument(
+        "--refresh-timestamps",
+        action="store_true",
+        help="Use current time for all imported jobs (useful for visible stats)",
+    )
+    args = parser.parse_args()
+
+    logger.info(f"Loading data from {args.json_path}")
+    if not args.json_path.exists():
+        logger.error(f"File not found: {args.json_path}")
         sys.exit(1)
 
     try:
-        with JSON_LOG_PATH.open() as f:
+        with args.json_path.open() as f:
             data = json.load(f)
-        asyncio.run(populate_db(data))
+        asyncio.run(populate_db(data, refresh_timestamps=args.refresh_timestamps))
     except Exception as e:
         logger.error(f"Failed to populate database: {e}")
         sys.exit(1)

@@ -1,4 +1,3 @@
-# backend/app/db/session.py
 import asyncio
 import contextlib
 import logging
@@ -19,8 +18,6 @@ from sqlalchemy.orm import Session as SyncSessionORM
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
-
-# Import the base exception class. The specific subclasses will be handled by `isinstance`.
 from app.exceptions import TaskSetupError
 
 if TYPE_CHECKING:
@@ -275,7 +272,6 @@ async def get_worker_db_session() -> AsyncGenerator[AsyncSession, None]:
             # Successful block exit: commit any changes made.
             await session.commit()
         except Exception as e:
-            # --- THIS IS THE INTEGRATED LOGIC ---
             # Check if the exception is an "expected" control-flow exception
             if isinstance(e, TaskSetupError):
                 session_logger.info(
@@ -296,8 +292,6 @@ async def get_worker_db_session() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-# --- FastAPI Lifespan Event Handler Integration ---
-# (This part is unchanged)
 async def lifespan_db_manager(_app_instance, event_type: str):
     lifespan_logger = logging.getLogger("app.db.lifespan")
 

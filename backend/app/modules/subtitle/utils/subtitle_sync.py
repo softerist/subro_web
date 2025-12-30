@@ -1,5 +1,3 @@
-# src/utils/subtitle_sync.py
-
 import logging
 import os
 import re

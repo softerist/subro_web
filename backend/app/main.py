@@ -1,14 +1,11 @@
-# backend/app/main.py
 import logging
 from contextlib import asynccontextmanager
 
-# --- Project Specific Imports ---
 from app.core.config import settings
 
 # Import all models to ensure they are registered in the registry
 from app.db import base  # noqa: F401
 
-# Celery import (your existing fallback logic is good)
 try:
     from app.tasks.celery_app import celery_app  # type: ignore
 except ImportError:
@@ -56,7 +53,6 @@ from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Import Routers
 from app.api.routers.admin import admin_router
 from app.api.routers.auth import auth_router as custom_auth_router
 from app.api.routers.dashboard import router as dashboard_router
@@ -64,21 +60,13 @@ from app.api.routers.files import router as files_router
 from app.api.routers.jobs import router as jobs_router
 from app.api.routers.mfa import router as mfa_router
 from app.api.routers.settings import router as settings_router
-
-# *** NEW IMPORTS FOR SETUP AND SETTINGS ROUTERS ***
 from app.api.routers.setup import router as setup_router
 from app.api.routers.storage_paths import router as storage_paths_router
 from app.api.routers.translation_stats import router as translation_stats_router
 from app.api.routers.users import router as users_router
-
-# *** NEW IMPORT FOR WEBSOCKET ROUTER ***
 from app.api.websockets.job_logs import router as job_logs_websocket_router
 from app.core.rate_limit import limiter  # Import the limiter instance
-
-# --- Imports for initial superuser creation & DB management ---
 from app.core.users import UserManager
-
-# Import the session module itself to access its members after initialization
 from app.db import session as db_session_module
 from app.db.models.user import User as UserModel
 from app.db.session import (
@@ -87,7 +75,6 @@ from app.db.session import (
 )
 from app.schemas.user import UserCreate
 
-# Configure basic logging (ensure this is done early)
 logging.basicConfig(
     level=settings.LOG_LEVEL.upper(),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -181,8 +168,6 @@ async def lifespan(_app_instance: FastAPI):
         logger.error(f"LIFESPAN_HOOK: Error during database resource disposal: {e}", exc_info=True)
 
 
-# --- FastAPI App Initialization ---
-# (Your existing app init logic for advertised_host, server_protocol, etc., looks fine)
 advertised_host = "localhost" if settings.SERVER_HOST == "0.0.0.0" else settings.SERVER_HOST
 server_protocol = "https" if settings.USE_HTTPS else "http"
 advertised_server_url_base = f"{server_protocol}://{advertised_host}:{settings.SERVER_PORT}"
@@ -239,8 +224,6 @@ if settings.ENVIRONMENT == "development":
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-# --- Middleware ---
-# (Your existing CORS middleware logic looks fine)
 if settings.BACKEND_CORS_ORIGINS:
     origins = [
         str(origin).strip("/") for origin in settings.BACKEND_CORS_ORIGINS if str(origin).strip("/")
@@ -268,8 +251,6 @@ else:
     logger.info("CORS disabled (BACKEND_CORS_ORIGINS not configured).")
 
 
-# --- Exception Handlers ---
-# (Your existing exception handlers look fine)
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     error_details = exc.errors()
@@ -344,19 +325,6 @@ api_v1_router.include_router(
 # File download - requires admin auth
 api_v1_router.include_router(files_router)  # prefix is already "/files" in router
 
-# *** INCLUDE THE WEBSOCKET ROUTER HERE ***
-# Note: WebSocket routers are typically included directly on the `app` instance
-# or under a specific WebSocket prefix if you have many.
-# For consistency with your /api/v1 pattern for HTTP, you could also create a
-# separate WebSocket root router if you plan many different WebSocket types.
-# For a single job log streamer, attaching it to api_v1_router is fine,
-# or directly to `app` if you prefer a cleaner /ws root.
-
-# Option 1: Attach to the existing api_v1_router (will be /api/v1/ws/jobs/... )
-# This seems most consistent with your current structure.
-# We define the WebSocket path *within* job_logs.py as "/jobs/{job_id}/logs"
-# So if we prefix api_v1_router with /ws, the full path will be /api/v1/ws/jobs/{job_id}/logs
-# Let's create a sub-router for WebSockets under api_v1_router for clarity
 ws_api_v1_router = APIRouter()
 ws_api_v1_router.include_router(
     job_logs_websocket_router,

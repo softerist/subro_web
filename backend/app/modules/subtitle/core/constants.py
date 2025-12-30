@@ -1,5 +1,3 @@
-# src/core/constants.py
-
 """
 Central storage for large, relatively static data structures like
 subtitle matching criteria, language codes, etc.

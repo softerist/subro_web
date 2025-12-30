@@ -1,14 +1,11 @@
-# backend/app/schemas/job.py
 import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, constr
 
-# Import JobStatus Enum directly from the model for consistency
 from app.db.models.job import JobStatus
 
 
-# Common base for Job schemas to avoid repetition
 class JobBase(BaseModel):
     folder_path: str = Field(
         min_length=1, max_length=1024, description="Absolute path to the media folder"

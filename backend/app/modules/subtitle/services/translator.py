@@ -1,7 +1,4 @@
-# src/services/translator.py
-
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+"""Translation manager for subtitle files using DeepL and Google Translate APIs."""
 
 import html  # Added for unescaping entities
 import json
@@ -14,7 +11,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.error import URLError
 
-# --- External Libraries ---
 try:
     import requests
 except ImportError:
@@ -47,16 +43,6 @@ except ImportError:
     google_translate = None
     google_exceptions = None
 
-# ------------------------------------------------------------------
-#  Configuration Loader & Utility References (Adapt as needed)
-# ------------------------------------------------------------------
-"""
-This script assumes configuration (API keys, project ID, etc.) is loaded
-into the global variables DEEPL_KEYS, GOOGLE_PROJECT_ID_CONFIG, etc.
-before the TranslationManager is instantiated. This typically happens
-via an external loader (like Pydantic settings) or within the
-`if __name__ == "__main__":` block for standalone testing.
-"""
 try:
     # Example: Using a hypothetical settings object
     from app.core.config import settings
@@ -76,24 +62,12 @@ except ImportError:
     DATABASE_AVAILABLE = False
     # In a real application, handle missing config loader more robustly.
 
-try:
-    from app.modules.subtitle.utils.file_utils import find_project_root
 
-    PROJECT_ROOT_FUNC_AVAILABLE = True
-except ImportError:
-    PROJECT_ROOT_FUNC_AVAILABLE = False
-
-# ------------------------------------------------------------------
-#  Global Settings (Placeholders - Initialized by Loader/Main)
-# ------------------------------------------------------------------
 DEEPL_KEYS = []
 GOOGLE_PROJECT_ID_CONFIG = None
 GOOGLE_CREDENTIALS_PATH = None
 DEEPL_QUOTA_PER_KEY = 500000  # Default DeepL monthly free tier limit (chars)
 
-# ------------------------------------------------------------------
-#  Constants for API Limits
-# ------------------------------------------------------------------
 # DeepL limits (adjust if using Pro API with different limits)
 DEEPL_MAX_CHUNK_SIZE_FREE = 4800  # Stay slightly under 5k char limit for safety
 DEEPL_MAX_STRINGS_PER_REQUEST = 50  # Max texts in a list translation request
@@ -103,16 +77,10 @@ GOOGLE_MAX_CHUNK_SIZE_BYTES = 29000  # Stay under 30k byte limit per string
 GOOGLE_MAX_STRINGS_PER_REQUEST = 1000  # Max texts in a list translation request (higher than DeepL)
 GOOGLE_MAX_TOTAL_BYTES_PER_REQUEST = 100000  # Approximate total byte limit per request
 
-# ------------------------------------------------------------------
-#  Logging Setup
-# ------------------------------------------------------------------
 
 logger = logging.getLogger(__name__)  # Logger for this module
 
 
-# ------------------------------------------------------------------
-#  NLTK Tokenizer Check/Download
-# ------------------------------------------------------------------
 def download_nltk_data_if_needed(resource_name, resource_subdir):
     """Downloads NLTK data if not found."""
     if not nltk:
@@ -127,7 +95,6 @@ def download_nltk_data_if_needed(resource_name, resource_subdir):
         try:
             nltk.download(resource_name, quiet=True)
             logger.info(f"Successfully downloaded NLTK resource '{resource_name}'.")
-            # Verify download
             try:
                 nltk.data.find(f"{resource_subdir}/{resource_name}")
                 return True
@@ -151,9 +118,6 @@ def download_nltk_data_if_needed(resource_name, resource_subdir):
         return False
 
 
-# ------------------------------------------------------------------
-#  Initialization Logic (Lazy)
-# ------------------------------------------------------------------
 _is_module_initialized = False
 NLTK_PUNKT_AVAILABLE = False
 TRANSLATION_LOG_FILE = "translation_log.json"  # Default
@@ -168,29 +132,31 @@ def _ensure_initialized():
     if _is_module_initialized:
         return
 
-    # --- NLTK Check ---
     if nltk:
         NLTK_PUNKT_AVAILABLE = download_nltk_data_if_needed("punkt", "tokenizers")
     else:
         NLTK_PUNKT_AVAILABLE = False
 
-    # --- Translation Log File ---
-    try:
-        if PROJECT_ROOT_FUNC_AVAILABLE:
-            _project_root = find_project_root(Path(__file__).resolve().parent)
-            TRANSLATION_LOG_FILE = str(Path(_project_root) / "logs" / "translation_log.json")
-            logger.info(f"Translation log file path target: {TRANSLATION_LOG_FILE}")
-        else:
-            logger.warning(
-                "Project root finding function unavailable. Using default log file name in CWD."
-            )
-            TRANSLATION_LOG_FILE = str(Path.cwd() / "translation_log.json")
-    except Exception as e:
-        logger.error(
-            f"Could not determine project root for log file: {e}. Using default 'translation_log.json' in current directory.",
-            exc_info=True,
-        )
-        TRANSLATION_LOG_FILE = str(Path.cwd() / "translation_log.json")
+    # Preferred: Docker container path
+    container_log_path = Path("/app/logs/translation_log.json")
+
+    if container_log_path.parent.exists():
+        # We are likely in the container or have the structure set up
+        TRANSLATION_LOG_FILE = str(container_log_path)
+    else:
+        # Fallback: resolve app/logs relative to this file, independent of CWD.
+        try:
+            local_app_logs = Path(__file__).resolve().parents[3] / "logs" / "translation_log.json"
+            if local_app_logs.parent.exists():
+                TRANSLATION_LOG_FILE = str(local_app_logs)
+            else:
+                # Last resort: absolute fallback or CWD
+                TRANSLATION_LOG_FILE = "translation_log.json"
+        except Exception as e:
+            logger.warning(f"Could not resolve optimal log path: {e}. Using default.")
+            TRANSLATION_LOG_FILE = "translation_log.json"
+
+    logger.info(f"Translation log file path set to: {TRANSLATION_LOG_FILE}")
 
     _is_module_initialized = True
 
@@ -199,9 +165,6 @@ def _ensure_initialized():
 # later within the '_log_usage' method before writing the file.
 
 
-# ------------------------------------------------------------------
-#  Dataclasses
-# ------------------------------------------------------------------
 @dataclass
 class TranslationJob:
     input_file: str
@@ -216,11 +179,6 @@ class TranslationResult:
     translated_content: str
     characters_translated: int  # Total chars *billed* by APIs
     service_used: str  # e.g., "deepl", "google", "mixed", "failed", "partial_failure"
-
-
-# ------------------------------------------------------------------
-#  Subtitle/Utility Functions
-# ------------------------------------------------------------------
 
 
 def ensure_correct_timestamp_format(content: str) -> str:
@@ -314,7 +272,6 @@ def chunk_text_for_translation(text: str, max_length: int) -> list[str]:  # noqa
                 "NLTK available but 'punkt' data missing/failed. Using line splitting for single text block chunking."
             )
 
-    # --- Chunking logic ---
     current_chunk_parts = []
     current_chunk_len = 0
     for element in elements:
@@ -451,11 +408,6 @@ def chunk_text_list_for_translation(  # noqa: C901
     return batches
 
 
-# ------------------------------------------------------------------
-#  SRT Parsing and Rebuilding
-# ------------------------------------------------------------------
-
-
 def parse_srt_into_segments(srt_content: str) -> list[tuple[str, str, str]]:  # noqa: C901
     """
     Parses SRT content into a list of (index_line, timestamp_line, subtitle_text).
@@ -558,7 +510,6 @@ def rebuild_srt_from_segments(segments: list[tuple[str, str, str]]) -> str:
 
     srt_blocks = []
     for i, (idx_line, ts_line, text_content) in enumerate(segments):
-        # Basic validation
         idx_str = str(idx_line).strip() if idx_line is not None else ""
         ts_str = str(ts_line).strip() if ts_line is not None else ""
         txt_str = str(text_content) if text_content is not None else ""  # Allow empty text
@@ -587,9 +538,6 @@ def rebuild_srt_from_segments(segments: list[tuple[str, str, str]]) -> str:
     return result
 
 
-# ------------------------------------------------------------------
-#  DeepL Usage Check
-# ------------------------------------------------------------------
 def get_deepl_usage(api_key: str) -> dict | None:  # noqa: C901
     """Gets usage info for a single DeepL API key (Free or Pro)."""
     if not deepl or not requests:
@@ -666,9 +614,6 @@ def get_deepl_usage(api_key: str) -> dict | None:  # noqa: C901
         return None
 
 
-# ------------------------------------------------------------------
-#  Translation Manager Class
-# ------------------------------------------------------------------
 class TranslationManager:
     """
     Manages translation using DeepL (with key switching/quota management)
@@ -698,22 +643,17 @@ class TranslationManager:
             # Attempt conversion, might still fail later
             content = str(content)
 
-        # --- DEFINE file_basename and file_lower HERE ---
-        # Ensure 'os' module is imported at the top of the file
         file_basename = Path(input_file).name if input_file else "Unknown File"
         file_lower = file_basename.lower()
-        # --- END DEFINE ---
 
-        # --- SRT Handling ---
         if file_lower.endswith(".srt"):
             logger.debug(f"Processing '{file_basename}' as SRT file ({len(content)} chars)")
             try:
-                # Use 'self' to call the other method
-                result = self.batched_srt_translate(  # <-- Use self
+                result = self.batched_srt_translate(
                     input_file=input_file,
                     srt_content=content,
-                    source_lang=source_lang,  # Pass along
-                    target_lang=target_lang,  # Pass along
+                    source_lang=source_lang,
+                    target_lang=target_lang,
                 )
                 return result
             except Exception as e:
@@ -723,16 +663,13 @@ class TranslationManager:
                 )
                 return TranslationResult(input_file, content, 0, "failed_srt_exception")
 
-        # --- Plain Text / Other Formats Handling ---
         else:
             logger.debug(
                 f"Processing '{file_basename}' as generic text file ({len(content)} chars)"
             )
-            # Create the Job object, including the languages
             job = TranslationJob(input_file, content, source_lang, target_lang)
             try:
-                # Use 'self' to call the other method
-                result = self.translate_generic_text(job)  # <-- Use self
+                result = self.translate_generic_text(job)
                 return result
             except Exception as e:
                 logger.error(
@@ -742,7 +679,6 @@ class TranslationManager:
                 return TranslationResult(input_file, content, 0, "failed_generic_exception")
 
     def __init__(self):  # noqa: C901
-        # --- Load Configured Settings ---
         # These globals should be populated by an external mechanism before instantiation
         global DEEPL_KEYS, GOOGLE_PROJECT_ID_CONFIG, GOOGLE_CREDENTIALS_PATH, DEEPL_QUOTA_PER_KEY
         self.deepl_keys = [key for key in DEEPL_KEYS if key]  # Filter out empty keys
@@ -750,16 +686,13 @@ class TranslationManager:
         self.google_project_id_config = GOOGLE_PROJECT_ID_CONFIG
         self.google_credentials_path = GOOGLE_CREDENTIALS_PATH
 
-        # --- INSERTED DEBUG LINES ---
         logger.debug(
             f"Inside TranslationManager init - self.google_project_id_config: {self.google_project_id_config}"
         )
         logger.debug(
             f"Inside TranslationManager init - self.google_credentials_path: {self.google_credentials_path}"
         )
-        # --- END INSERTED DEBUG LINES ---
 
-        # --- Initialize State Variables ---
         self.google_client = None
         self.google_parent = None
         self.google_project_id_num = None  # Stores the validated project ID string
@@ -767,7 +700,6 @@ class TranslationManager:
         self.deepl_usage_cache = {}  # { key_index: {"count": int, "limit": int, "valid": bool} }
         self.google_used_session = 0  # Track chars translated by Google in this run
 
-        # --- Validate DeepL Setup ---
         if not self.deepl_keys:
             logger.warning(
                 "No valid DeepL API keys found in configuration. DeepL translation will be unavailable."
@@ -776,7 +708,6 @@ class TranslationManager:
             logger.error("'deepl' library is not available. DeepL translation disabled.")
             self.deepl_keys = []  # Clear keys if library is missing
 
-        # --- Validate and Initialize Google Client ---
         google_fully_configured = self.google_project_id_config and self.google_credentials_path
         google_partially_configured = self.google_project_id_config or self.google_credentials_path
 
@@ -863,7 +794,6 @@ class TranslationManager:
             logger.info("Google Translate not configured. Google Translate disabled.")
             self._reset_google_state()
 
-        # --- Initialize DeepL Usage Cache ---
         if self.deepl_keys:
             self.update_deepl_usage_cache()  # Fetch initial usage
 
@@ -1019,8 +949,6 @@ class TranslationManager:
         # Consider re-checking usage here if desired, but could be slow
         # self.update_deepl_usage_cache()
         return False
-
-    # --- DeepL Translation Methods ---
 
     def _translate_deepl_chunk(  # noqa: C901
         self, text: str, target_language: str, source_language: str | None = None
@@ -1272,8 +1200,6 @@ class TranslationManager:
                 f"Unexpected error during DeepL list translation: {e}"
             ) from e
 
-    # --- Google Translation Methods ---
-
     def _translate_google_chunk(  # noqa: C901
         self, text: str, target_language: str, source_language: str | None = None
     ) -> tuple[str | None, int]:
@@ -1442,8 +1368,6 @@ class TranslationManager:
             logger.error(f"Unexpected Google error during list translation: {e}", exc_info=True)
             return None, 0
 
-    # --- Main Translation Logic ---
-
     def batched_srt_translate(  # noqa: C901
         self, input_file: str, srt_content: str, source_lang: str, target_lang: str
     ) -> TranslationResult:
@@ -1463,7 +1387,6 @@ class TranslationManager:
 
         texts_to_translate = [seg[2] for seg in original_segments]  # List of text blocks
 
-        # --- Batching Strategy for DeepL ---
         # Use DeepL limits first as it's preferred.
         deepl_batches = chunk_text_list_for_translation(
             texts=texts_to_translate,
@@ -1482,7 +1405,6 @@ class TranslationManager:
 
         original_text_index = 0  # Track progress through texts_to_translate
 
-        # --- Process Batches ---
         for i, deepl_batch in enumerate(deepl_batches):
             batch_start_time = time.monotonic()
             batch_idx = i + 1
@@ -1514,7 +1436,6 @@ class TranslationManager:
             service_used_for_batch = "failed"
             last_exception_batch = None
 
-            # --- Try DeepL for the batch ---
             if self.deepl_keys:  # Only attempt if DeepL keys are configured
                 should_retry_deepl = True
                 while should_retry_deepl:
@@ -1578,7 +1499,6 @@ class TranslationManager:
                 logger.info(f"Batch {batch_idx}: DeepL not configured. Skipping DeepL attempt.")
                 translated_batch_texts = None  # Proceed directly to Google fallback
 
-            # --- Fallback to Google for the batch if DeepL failed or wasn't used ---
             if translated_batch_texts is None:
                 if self.google_client:  # Check if Google is available
                     # Build a user-friendly reason for the fallback
@@ -1677,7 +1597,6 @@ class TranslationManager:
                     service_used_for_batch = "failed_no_fallback"
                     translated_batch_texts = None  # Ensure failure state persists
 
-            # --- Process Batch Result ---
             if translated_batch_texts is not None and len(translated_batch_texts) == batch_size:
                 # Success (either DeepL or full Google fallback)
                 all_translated_texts.extend(translated_batch_texts)
@@ -1718,7 +1637,6 @@ class TranslationManager:
             batch_duration = time.monotonic() - batch_start_time
             logger.debug(f"Batch {batch_idx} processing took {batch_duration:.2f} seconds.")
 
-        # --- Final Checks and Reconstruction ---
         if len(all_translated_texts) != len(original_segments):
             logger.critical(
                 f"CRITICAL MISMATCH after processing all batches: "
@@ -1817,7 +1735,6 @@ class TranslationManager:
             chunk_service = "failed"
             last_exception_chunk = None
 
-            # --- Try DeepL First ---
             if self.deepl_keys:
                 should_retry_deepl_chunk = True
                 while should_retry_deepl_chunk:
@@ -1879,7 +1796,6 @@ class TranslationManager:
                 logger.debug(f"Chunk {chunk_idx}: DeepL not configured.")
                 translated_chunk_text = None
 
-            # --- Fallback to Google if DeepL failed ---
             if translated_chunk_text is None:
                 if self.google_client:
                     # Build a user-friendly reason for the fallback
@@ -1920,7 +1836,6 @@ class TranslationManager:
                     chunk_service = "failed_no_fallback"
                     translated_chunk_text = None
 
-            # --- Process Chunk Result ---
             if translated_chunk_text is not None:
                 # Apply general text corrections (like unescaping)
                 corrected_chunk = correct_text_after_translation(translated_chunk_text)
@@ -2097,7 +2012,6 @@ class TranslationManager:
 
                         db.commit()
 
-                    # --- NEW: Log the translation job itself ---
                     if TranslationLog:
                         # Determine overall status
                         overall_status = self._summarize_service_status(service_details)
@@ -2135,7 +2049,7 @@ class TranslationManager:
                 try:
                     with Path(TRANSLATION_LOG_FILE).open(encoding="utf-8") as f:
                         log_data = json.load(f)
-                    # Basic validation/migration for older format
+                    # Migrate older log formats
                     if "total_chars" in log_data and "cumulative_totals" not in log_data:
                         log_data["cumulative_totals"] = log_data.pop("total_chars")
                         log_data["cumulative_totals"]["last_updated"] = None
@@ -2227,10 +2141,6 @@ class TranslationManager:
             logger.error(f"Unexpected error updating translation log: {e}", exc_info=True)
 
 
-# ------------------------------------------------------------------
-#  Public Convenience Functions / Singleton Access
-# ------------------------------------------------------------------
-
 _translation_manager_instance = None
 
 
@@ -2241,26 +2151,22 @@ def get_translation_manager():  # noqa: C901
     """
     global _translation_manager_instance
     if _translation_manager_instance is None:
-        # --- Perform Module Initialization First (Lazy) ---
         _ensure_initialized()
 
         logger.info("Initializing TranslationManager instance...")
         try:
-            # --- Ensure Global Config Vars are Set ---
             global \
                 DEEPL_KEYS, \
                 GOOGLE_PROJECT_ID_CONFIG, \
                 GOOGLE_CREDENTIALS_PATH, \
                 DEEPL_QUOTA_PER_KEY
 
-            # --- 1. Load Defaults from Environment (via settings) ---
             if CONFIG_LOADER_AVAILABLE and settings:
                 DEEPL_KEYS = [k for k in (getattr(settings, "DEEPL_API_KEYS", None) or []) if k]
                 GOOGLE_PROJECT_ID_CONFIG = getattr(settings, "GOOGLE_PROJECT_ID", None)
                 GOOGLE_CREDENTIALS_PATH = getattr(settings, "GOOGLE_CREDENTIALS_PATH", None)
                 DEEPL_QUOTA_PER_KEY = getattr(settings, "DEEPL_CHARACTER_QUOTA", 500000)
 
-            # --- 2. Attempt Direct DB Override (Sync) ---
             # This ensures that changes made in the UI (saved to DB) take precedence
             # over static environment variables.
             if DATABASE_AVAILABLE and SyncSessionLocal:
@@ -2277,7 +2183,6 @@ def get_translation_manager():  # noqa: C901
                         db_settings = result.scalar_one_or_none()
 
                         if db_settings:
-                            # --- DeepL Keys ---
                             # If deepl_api_keys is set in DB (even empty string), it overrides Env
                             if db_settings.deepl_api_keys is not None:
                                 raw_keys = db_settings.deepl_api_keys
@@ -2307,7 +2212,6 @@ def get_translation_manager():  # noqa: C901
                                             db_key_err,
                                         )
 
-                            # --- Google Credentials ---
                             # Logic: If DB has credential blob, use that.
                             # Since we can't easily write a temp file here safely in all contexts,
                             # we might rely on the Env path if DB is empty, OR we need to handle blob usage.
@@ -2349,9 +2253,6 @@ def get_translation_manager():  # noqa: C901
     return _translation_manager_instance
 
 
-# ------------------------------------------------------------------
-#  Explicit Exports & Standalone Test
-# ------------------------------------------------------------------
 __all__ = [
     "TranslationJob",
     "TranslationManager",

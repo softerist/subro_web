@@ -1,4 +1,4 @@
-# src/tasks/torrent_postprocess.py
+"""Torrent post-processing: renames subtitle files based on language detection."""
 
 import logging
 import os
@@ -7,20 +7,10 @@ from datetime import datetime
 from pathlib import Path
 
 from app.modules.subtitle.core.constants import SUBTITLE_EXTENSIONS_LOWER_TUPLE
-
-# --- Import Services ---
-# Need ServiceContainer to get the client instance for this task
 from app.modules.subtitle.core.di import ServiceContainer
-
-# Need the torrent client service module itself for its functions
 from app.modules.subtitle.services import torrent_client
-
-# --- Import Utilities ---
 from app.modules.subtitle.utils import file_utils, subtitle_parser
 
-# --- Import Constants ---
-# Assuming SUBTITLE_EXTENSIONS_LOWER_TUPLE is moved to constants
-# If not, it might need to be imported from processor or passed as an argument
 try:
     from app.modules.subtitle.core.constants import SUBTITLE_EXTENSIONS_LOWER_TUPLE
 except ImportError:
@@ -30,10 +20,7 @@ except ImportError:
     )
     SUBTITLE_EXTENSIONS_LOWER_TUPLE = (".srt", ".sub", ".ass")
 
-# --- Optional Imports (handled locally) ---
-# langdetect is imported within the function where needed
 
-# --- Setup Logger ---
 logger = logging.getLogger(__name__)
 
 
@@ -54,11 +41,8 @@ def post_process_completed_torrents(target_directory):  # noqa: C901
         f"Starting optional post-processing for torrent associated with directory: {norm_target_dir}"
     )
 
-    # --- Get qBittorrent client via DI container ---
-    # Create a temporary container just for this task, as it might run separately.
     temp_di_container = ServiceContainer()
-    client = temp_di_container.qbittorrent  # This attempts login via the DI property
-    # ---------------------------------------------
+    client = temp_di_container.qbittorrent
 
     if not client:
         logger.error(
@@ -139,7 +123,6 @@ def post_process_completed_torrents(target_directory):  # noqa: C901
             f"Processing torrent: '{torrent_name}' (Hash: {torrent_hash}, Completed: {completion_dt_str}, Save Path: {save_path})"
         )
 
-        # --- Step 2: Collect subtitle files ---
         subtitle_files_to_process = []
         logger.debug(f"Scanning for subtitle files within: {processing_base_path}")
         if not save_path:
@@ -197,7 +180,6 @@ def post_process_completed_torrents(target_directory):  # noqa: C901
             )
             return
 
-        # --- Step 3: Process subtitles ---
         logger.info(
             f"Found {len(subtitle_files_to_process)} subtitle file(s) to check in torrent '{torrent_name}'."
         )
@@ -428,7 +410,6 @@ def post_process_completed_torrents(target_directory):  # noqa: C901
                     exc_info=True,
                 )
 
-        # --- End of subtitle processing loop ---
         if not ro_found_and_processed and detect:  # Check if langdetect was available
             logger.info(
                 f"Finished torrent post-processing check/rename pass for '{torrent_name}'. No RO subtitle was finalized."
@@ -452,7 +433,6 @@ def post_process_completed_torrents(target_directory):  # noqa: C901
         temp_di_container.shutdown()
 
 
-# --- Explicit Exports ---
 __all__ = [
     "post_process_completed_torrents",
 ]

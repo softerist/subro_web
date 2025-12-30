@@ -1,4 +1,3 @@
-# src/core/strategies/__init__.py
 """Makes strategy classes easily importable."""
 
 from .base import ProcessingContext, ProcessingStrategy

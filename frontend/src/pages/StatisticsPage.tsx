@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronUp } from "lucide-react";
 import {
   getTranslationStats,
   TranslationStatsResponse,
@@ -23,13 +23,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PathCell } from "@/components/ui/path-cell";
+import { Button } from "@/components/ui/button";
 
 export default function StatisticsPage() {
   const [stats, setStats] = useState<TranslationStatsResponse | null>(null);
   const [history, setHistory] = useState<TranslationLogEntry[]>([]);
+  const [totalHistory, setTotalHistory] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedEntryId, setExpandedEntryId] = useState<number | null>(null);
+
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     const loadData = async () => {
@@ -38,10 +44,12 @@ export default function StatisticsPage() {
       try {
         const [statsData, historyData] = await Promise.all([
           getTranslationStats(),
-          getTranslationHistory(1, 10),
+          getTranslationHistory(1, PAGE_SIZE),
         ]);
         setStats(statsData);
         setHistory(historyData.items);
+        setTotalHistory(historyData.total);
+        setCurrentPage(1);
       } catch (err) {
         console.error("Failed to load statistics:", err);
         setError("Failed to load translation statistics");
@@ -51,6 +59,29 @@ export default function StatisticsPage() {
     };
     loadData();
   }, []);
+
+  const handleLoadMore = async () => {
+    if (isFetchingMore || history.length >= totalHistory) return;
+
+    setIsFetchingMore(true);
+    try {
+      const nextPage = currentPage + 1;
+      const historyData = await getTranslationHistory(nextPage, PAGE_SIZE);
+      setHistory((prev) => [...prev, ...historyData.items]);
+      setCurrentPage(nextPage);
+      setTotalHistory(historyData.total);
+    } catch (err) {
+      console.error("Failed to load more history:", err);
+    } finally {
+      setIsFetchingMore(false);
+    }
+  };
+
+  const handleShowLess = () => {
+    // Keep only first page of already-loaded items
+    setHistory((prev) => prev.slice(0, PAGE_SIZE));
+    setCurrentPage(1);
+  };
 
   if (isLoading) {
     return (
@@ -184,19 +215,19 @@ export default function StatisticsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b border-border/40">
-                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                  <TableHead className="h-9 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-muted-foreground">
                     File
                   </TableHead>
-                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden sm:table-cell">
+                  <TableHead className="h-9 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-muted-foreground">
                     Service
                   </TableHead>
-                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
-                    Characters
+                  <TableHead className="h-9 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-muted-foreground">
+                    Chars
                   </TableHead>
-                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                  <TableHead className="h-9 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-muted-foreground">
                     Status
                   </TableHead>
-                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden md:table-cell">
+                  <TableHead className="h-9 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-muted-foreground">
                     Date
                   </TableHead>
                 </TableRow>
@@ -212,10 +243,11 @@ export default function StatisticsPage() {
                       )
                     }
                   >
-                    <TableCell className="py-2">
+                    <TableCell className="py-2 px-1 sm:px-4">
                       <PathCell
                         path={entry.file_name}
-                        className="text-foreground font-mono text-sm"
+                        className="text-foreground font-mono text-[10px] sm:text-sm"
+                        defaultMaxWidth="max-w-[100px] sm:max-w-[200px] md:max-w-xl lg:max-w-3xl"
                         isExpanded={expandedEntryId === entry.id}
                         onToggle={() =>
                           setExpandedEntryId(
@@ -224,9 +256,9 @@ export default function StatisticsPage() {
                         }
                       />
                     </TableCell>
-                    <TableCell className="py-2 hidden sm:table-cell">
+                    <TableCell className="py-2 px-1 sm:px-4">
                       <span
-                        className={`px-2 py-0.5 text-xs rounded-full ${
+                        className={`px-1.5 py-0.5 text-[10px] sm:text-xs rounded-full ${
                           entry.service_used.includes("deepl")
                             ? "bg-violet-500/20 text-violet-400"
                             : entry.service_used.includes("google")
@@ -237,12 +269,12 @@ export default function StatisticsPage() {
                         {entry.service_used}
                       </span>
                     </TableCell>
-                    <TableCell className="py-2 text-foreground text-sm">
+                    <TableCell className="py-2 px-1 sm:px-4 text-foreground text-[10px] sm:text-sm">
                       {formatNumber(entry.characters_billed)}
                     </TableCell>
-                    <TableCell className="py-2">
+                    <TableCell className="py-2 px-1 sm:px-4">
                       <span
-                        className={`px-2 py-0.5 text-xs rounded-full ${
+                        className={`px-1.5 py-0.5 text-[10px] sm:text-xs rounded-full ${
                           entry.status === "success"
                             ? "bg-emerald-500/20 text-emerald-400"
                             : "bg-red-500/20 text-red-400"
@@ -251,13 +283,62 @@ export default function StatisticsPage() {
                         {entry.status}
                       </span>
                     </TableCell>
-                    <TableCell className="py-2 text-muted-foreground text-sm hidden md:table-cell">
-                      {new Date(entry.timestamp).toLocaleDateString()}
+                    <TableCell className="py-2 px-1 sm:px-4 text-muted-foreground text-[10px] sm:text-sm">
+                      {new Date(entry.timestamp).toLocaleDateString(undefined, {
+                        month: "numeric",
+                        day: "numeric",
+                      })}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+          )}
+
+          {/* Show More/Less buttons */}
+          {history.length > 0 && (
+            <div className="flex flex-col items-center gap-3 mt-6">
+              <div className="flex items-center justify-center gap-3">
+                {currentPage > 1 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleShowLess}
+                    className="h-8 text-xs gap-1.5"
+                    disabled={isFetchingMore}
+                  >
+                    <ChevronUp className="h-3.5 w-3.5" />
+                    Show Less
+                  </Button>
+                )}
+                {history.length < totalHistory && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleLoadMore}
+                    className="h-8 text-xs gap-1.5"
+                    disabled={isFetchingMore}
+                  >
+                    {isFetchingMore ? (
+                      <>
+                        <span className="h-3 w-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-3.5 w-3.5" />
+                        Show More ({totalHistory - history.length} remaining)
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+              {history.length >= totalHistory && totalHistory > PAGE_SIZE && (
+                <p className="text-[10px] text-muted-foreground italic">
+                  Showing all {totalHistory} records
+                </p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>

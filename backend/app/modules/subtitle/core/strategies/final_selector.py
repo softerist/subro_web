@@ -1,4 +1,3 @@
-# src/core/strategies/final_selector.py
 import logging
 import tempfile
 from pathlib import Path
