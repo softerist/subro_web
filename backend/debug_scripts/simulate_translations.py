@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Script to simulate translation jobs and insert test records into the database.
 Run this inside the API container: docker exec -it subapp_dev-api-1 python /app/simulate_translations.py
