@@ -10,8 +10,8 @@ packages = [{include = "app"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"
-fastapi = { version = "^0.109.0", extras = ["all"] } # Some versions of fastapi[all] might pull in an older uvicorn
-uvicorn = { version = ">=0.29.0,<0.30.0", extras = ["standard"] } # An older explicit requirement?
+fastapi = { version = "^0.115.0", extras = ["all"] }
+uvicorn = { version = "^0.32.0", extras = ["standard"] }
 pydantic = {extras = ["email", "dotenv"], version = "^2.7.1"} # For settings management and email validation
 redis = {extras = ["hiredis"], version = "^5.0.4"} # For Celery broker/backend and PubSub
 celery = {extras = ["redis"], version = "^5.4.0"}
