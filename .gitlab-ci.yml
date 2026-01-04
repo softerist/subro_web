@@ -127,13 +127,13 @@ test:
     - docker network create testnet || true
 
     # Start dependencies
-    - docker run -d --name postgres --network testnet -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=$POSTGRES_DB postgres:15-alpine
+    - docker run -d --name db_test --network testnet -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=$POSTGRES_DB postgres:15-alpine
     - docker run -d --name redis --network testnet redis:7-alpine
 
     # Wait for postgres to be ready
     - |
       for i in $(seq 1 30); do
-        if docker run --rm --network testnet postgres:15-alpine pg_isready -h postgres -U $POSTGRES_USER; then
+        if docker run --rm --network testnet postgres:15-alpine pg_isready -h db_test -U $POSTGRES_USER; then
           echo "Postgres ready!"
           break
         fi
@@ -144,13 +144,16 @@ test:
     - |
       docker run -d --name api --network testnet \
         --env-file backend/.env.test \
-        -e DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}" \
-        -e DB_HOST="postgres" \
-        -e POSTGRES_SERVER="postgres" \
+        -e DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db_test:5432/${POSTGRES_DB}" \
+        -e DB_HOST="db_test" \
+        -e POSTGRES_SERVER="db_test" \
         -e REDIS_HOST="redis" \
         -e CELERY_BROKER_URL="redis://redis:6379/0" \
         -e CELERY_RESULT_BACKEND="redis://redis:6379/1" \
         -e REDIS_PUBSUB_URL="redis://redis:6379/2" \
+        -e TEST_API_BASE_URL="http://localhost:8000" \
+        -e TEST_WS_BASE_URL="ws://localhost:8000" \
+        -v "$(pwd)/backend/tests:/app/tests" \
         "$IMAGE_API"
 
     # Wait for API to be healthy
@@ -162,11 +165,13 @@ test:
         fi
         echo "Waiting for API ($i/30)..." && sleep 2
       done
-    - docker logs api 2>&1 | tail -100 || true
-    - docker run --rm --network testnet curlimages/curl:8.7.1 -fsS http://api:8000/health | grep -q "healthy"
+
+    # Install test dependencies and run tests
+    - docker exec api poetry install --with dev
+    - docker exec api poetry run pytest -p no:cacheprovider tests/
   after_script:
     - docker logs api 2>&1 | tail -50 || true
-    - docker rm -f api postgres redis || true
+    - docker rm -f api db_test redis || true
 
 # ============ SCAN STAGE ============
 scan_image_vulns:
