@@ -72,6 +72,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy dependency definition files FIRST, ensuring correct ownership
 COPY --chown=appuser:appuser pyproject.toml poetry.lock ./
 
+# CACHE-BUST: Force fresh install for Redis >=5.3.0 compatibility (2026-01-04)
 # Install ALL dependencies including main
 RUN poetry install --no-root --sync --no-cache
 
