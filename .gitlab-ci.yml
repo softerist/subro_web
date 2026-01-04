@@ -117,9 +117,10 @@ test:
   needs: [build_api, build_frontend]
   variables:
     # Database config for test container
-    POSTGRES_USER: testuser
+    POSTGRES_USER: admin
     POSTGRES_PASSWORD: "Pa44w0rd"
     POSTGRES_DB: subappdb
+    POSTGRES_DB_TEST: subappdb_pytest
   script:
     - set -euo pipefail
     - docker pull "$IMAGE_API"
@@ -128,7 +129,7 @@ test:
 
     # Start dependencies (Production-like setup)
     - docker run -d --name db --network testnet -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=$POSTGRES_DB postgres:16-alpine
-    - docker run -d --name db_test --network testnet -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=$POSTGRES_DB postgres:16-alpine
+    - docker run -d --name db_test --network testnet -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=$POSTGRES_DB_TEST postgres:16-alpine
     - docker run -d --name redis --network testnet redis:7-alpine
 
     # Wait for databases to be ready
