@@ -58,6 +58,7 @@ The backend utilizes a **FastAPI** application for HTTP endpoints and a **Celery
 - **Frontend:** React (Vite), TypeScript, Tailwind CSS, Nginx (serving)
 - **Reverse Proxy:** Caddy
 - **Database:** PostgreSQL 16
+- **Base Image:** Ubuntu 24.04 (Noble Numbat)
 - **Orchestration:** Docker Compose
 - **Development:** VS Code Devcontainers, Pre-commit, Ruff, ESLint, Pytest, Vitest
 
@@ -138,7 +139,7 @@ The backend utilizes a **FastAPI** application for HTTP endpoints and a **Celery
 Run the test suites in Docker:
 
 ```bash
-make test
+make test  # Runs backend tests + Security Scans (Trivy, Semgrep)
 make test-ts
 ```
 

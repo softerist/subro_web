@@ -196,6 +196,9 @@ class Settings(BaseSettings):
     TIMEZONE: str = Field(default="UTC", validation_alias="CELERY_TIMEZONE")
     CELERY_ACKS_LATE: bool = Field(default=True, validation_alias="CELERY_ACKS_LATE")
     CELERY_RESULT_EXPIRES: int = Field(default=3600, validation_alias="CELERY_RESULT_EXPIRES")
+    CELERY_TASK_CREATE_MISSING_QUEUE_TYPE: bool = Field(
+        default=True, validation_alias="CELERY_TASK_CREATE_MISSING_QUEUE_TYPE"
+    )
 
     # --- Job Runner Settings ---
     PYTHON_EXECUTABLE_PATH: str = Field(

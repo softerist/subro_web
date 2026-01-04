@@ -40,3 +40,22 @@ make test-ts
   stack must be up.
 - If you run pytest locally (outside Docker), ensure Postgres is reachable on
   `localhost:5433` or update `backend/.env.test`.
+
+## Security Scanning
+
+The project includes an extensive security suite that runs both locally and in CI/CD:
+
+- **Vulnerability Scanning (Trivy):** Scans Docker images for OS and dependency vulnerabilities.
+  - Critical CVEs result in a build failure.
+  - Base image: `ubuntu:24.04` (rolling release).
+- **Secret Scanning (Trivy):** Scans the filesystem for committed credentials or keys.
+- **SAST (Semgrep):** Scans Python and JavaScript code for security flaws (e.g., SQLi, XSS).
+
+### Running Scans Locally
+
+```bash
+make scan-all      # Run all scans
+make scan-vulns    # Only scan Docker image vulnerabilities
+make scan-secrets  # Only scan for secrets
+make scan-sast     # Only run static code analysis
+```

@@ -118,8 +118,8 @@ test:
   variables:
     # Database config for test container
     POSTGRES_USER: testuser
-    POSTGRES_PASSWORD: testpass
-    POSTGRES_DB: testdb
+    POSTGRES_PASSWORD: "Pa44w0rd"
+    POSTGRES_DB: subappdb
   script:
     - set -euo pipefail
     - docker pull "$IMAGE_API"
