@@ -71,8 +71,8 @@ WORKDIR ${APP_HOME}
 # Install curl (needed for docker-compose healthcheck)
 # And netcat-openbsd (needed for the entrypoint script's DB check)
 # And any dev-specific system dependencies (like git if needed by poetry plugins)
-# Also install cargo for alass-cli
-RUN apt-get update && apt-get install -y curl netcat-openbsd build-essential ffmpeg unrar-free cargo --no-install-recommends && \
+# Note: alass-cli now uses pre-built binary (no cargo needed)
+RUN apt-get update && apt-get install -y curl netcat-openbsd build-essential ffmpeg unrar-free xz-utils --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy Poetry files, ensuring correct ownership
@@ -93,9 +93,14 @@ RUN mkdir -p /app/nltk_data && \
 # Set NLTK data path for runtime
 ENV NLTK_DATA=/app/nltk_data
 
-# Install alass-cli for subtitle synchronization (via cargo)
-RUN cargo install alass-cli && \
-    ln -sf /root/.cargo/bin/alass-cli /usr/local/bin/alass-cli
+# Install alass-cli for subtitle synchronization (pre-built binary)
+# Using pre-built binary instead of cargo install due to Rust toolchain compatibility
+RUN curl -fsSL https://github.com/kaegi/alass/releases/download/v2.0.0/alass-linux64.tar.xz -o /tmp/alass.tar.xz && \
+    mkdir -p /tmp/alass && \
+    tar -xf /tmp/alass.tar.xz -C /tmp/alass && \
+    mv /tmp/alass/alass /usr/local/bin/alass-cli && \
+    chmod +x /usr/local/bin/alass-cli && \
+    rm -rf /tmp/alass /tmp/alass.tar.xz
 
 # Copy application code (less critical now due to volume mount, but good practice)
 COPY --chown=appuser:appuser . .
@@ -169,8 +174,8 @@ RUN mkdir -p /app/scripts
 COPY --chown=appuser:appuser --from=development /app/scripts /app/scripts
 RUN chmod +x /app/scripts/*.sh /app/scripts/*.py 2>/dev/null || true
 
-# Copy alass-cli binary from development (built via cargo)
-COPY --from=development /root/.cargo/bin/alass-cli /usr/local/bin/alass-cli
+# Copy alass-cli binary from development (pre-built)
+COPY --from=development /usr/local/bin/alass-cli /usr/local/bin/alass-cli
 RUN chmod +x /usr/local/bin/alass-cli
 
 # Copy NLTK data from development (downloaded at build time)
