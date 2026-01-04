@@ -278,6 +278,9 @@ deploy_prod:
       set -euo pipefail
       ssh -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
         set -euo pipefail
+
+        # Ensure deploy directory exists (first-time setup)
+        mkdir -p /opt/subro_web
         cd /opt/subro_web
 
         # Decode .env.prod
