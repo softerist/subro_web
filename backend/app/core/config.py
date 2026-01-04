@@ -432,11 +432,6 @@ class Settings(BaseSettings):
     def BACKEND_CORS_ORIGINS(self) -> list[str]:
         return self._parsed_backend_cors_origins
 
-    @property
-    def task_create_missing_queue_type(self) -> bool:
-        """Celery looks for this lowercase attribute directly on the conf object."""
-        return self.CELERY_TASK_CREATE_MISSING_QUEUE_TYPE
-
     def _build_postgres_dsn(self, base_dsn: PostgresDsn | None, use_async: bool) -> PostgresDsn:
         driver_prefix = "postgresql+asyncpg://" if use_async else "postgresql://"
         alt_driver_prefix = (
