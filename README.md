@@ -64,7 +64,6 @@ The backend utilizes a **FastAPI** application for HTTP endpoints and a **Celery
 ## Quick Start (Development)
 
 1. **Prerequisites:**
-
    - Docker & Docker Compose (v2+)
    - Git
    - Make (optional, for convenience)
@@ -80,7 +79,6 @@ The backend utilizes a **FastAPI** application for HTTP endpoints and a **Celery
    ```
 
 3. **Setup Environment:**
-
    - Copy the environment template: `cp .env.example .env`
    - Review and update `.env`. To automate building the first superuser, ensure these are set:
 
@@ -106,7 +104,6 @@ The backend utilizes a **FastAPI** application for HTTP endpoints and a **Celery
    ```
 
 5. **Build and Start Services:**
-
    - Using Make:
 
      ```bash
@@ -122,7 +119,6 @@ The backend utilizes a **FastAPI** application for HTTP endpoints and a **Celery
 6. **Initial Setup & Admin Access:**
 
    There are two ways to initialize the system:
-
    - **Automated (Recommended):** Set the `FIRST_SUPERUSER_` variables in your `.env` (dev) or `.env.prod` (production) file BEFORE starting the containers. The system will detect these and bootstrap the admin account automatically.
    - **Setup Wizard:** If no environment variables are detected, visit `https://localhost/setup` on your first visit to create the initial superuser and configure API keys via the web interface.
 
@@ -130,7 +126,6 @@ The backend utilizes a **FastAPI** application for HTTP endpoints and a **Celery
    > All passwords must meet complexity requirements: Minimum 8 characters, including at least one uppercase letter, one lowercase letter, and one number.
 
 7. **Access the Application:**
-
    - Frontend: `https://localhost`
    - API Docs: `https://localhost/api/v1/docs`
 

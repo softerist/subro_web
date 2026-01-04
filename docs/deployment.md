@@ -110,12 +110,10 @@ To deploy a new version of the code:
    ```
 
    **shortcuts:**
-
    - `make prod`: Runs the script with default settings (re-encrypts data).
    - `make prod-skip-reencrypt`: Runs with `REENCRYPT_ON_DEPLOY=0` (skips re-encryption, faster).
 
    The script automatically:
-
    - Identifies the _active_ color (e.g., Blue).
    - Builds and starts the _inactive_ color (e.g., Green).
    - Verifies health of the new stack.
@@ -307,7 +305,6 @@ When you trigger `deploy_prod`:
 All database schema changes **must** follow this pattern:
 
 1. **Expand Phase** (Release N):
-
    - Add new columns/tables with defaults or nullable
    - Deploy new code that works with both old and new schema
    - Old code still works during migration period
