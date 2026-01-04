@@ -162,7 +162,7 @@ COPY --chown=appuser:appuser alembic ./alembic
 
 # Copy only the application code needed for runtime
 COPY --chown=appuser:appuser app ./app
-COPY --chown=appuser:appuser secrets ./secrets
+# Note: Secrets are now managed via env vars or runtime-mounted volumes, not baked into image
 
 # Ensure scripts directory exists and copy all scripts from development stage
 RUN mkdir -p /app/scripts
