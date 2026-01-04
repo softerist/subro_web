@@ -95,12 +95,8 @@ ENV NLTK_DATA=/app/nltk_data
 
 # Install alass-cli for subtitle synchronization (pre-built binary)
 # Using pre-built binary instead of cargo install due to Rust toolchain compatibility
-RUN curl -fsSL https://github.com/kaegi/alass/releases/download/v2.0.0/alass-linux64.tar.xz -o /tmp/alass.tar.xz && \
-    mkdir -p /tmp/alass && \
-    tar -xf /tmp/alass.tar.xz -C /tmp/alass && \
-    mv /tmp/alass/alass /usr/local/bin/alass-cli && \
-    chmod +x /usr/local/bin/alass-cli && \
-    rm -rf /tmp/alass /tmp/alass.tar.xz
+RUN curl -fsSL https://github.com/kaegi/alass/releases/download/v2.0.0/alass-linux64 -o /usr/local/bin/alass-cli && \
+    chmod +x /usr/local/bin/alass-cli
 
 # Copy application code (less critical now due to volume mount, but good practice)
 COPY --chown=appuser:appuser . .
