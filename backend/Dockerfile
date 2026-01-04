@@ -57,9 +57,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 # Copy dependency definition files FIRST, ensuring correct ownership
 COPY --chown=appuser:appuser pyproject.toml poetry.lock ./
 
-# Install ONLY runtime dependencies using Poetry
-# We use --only main. If issues arise, we might switch to full install or use dev stage.
-RUN poetry install --only main --no-root --sync --no-cache
+# Install ALL dependencies (temporarily removing --only main to debug missing httpx/grouping issue)
+# This also invalidates the build cache for this layer.
+RUN poetry install --no-root --sync --no-cache
 
 # --- Development Stage ---
 # Optimized for local development with hot-reloading
