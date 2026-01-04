@@ -9,6 +9,7 @@ RUN apk add --no-cache curl && npm ci
 FROM base AS development
 # Copy source code (though usually mounted via volume in dev)
 COPY . .
+USER node
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
 # Build stage

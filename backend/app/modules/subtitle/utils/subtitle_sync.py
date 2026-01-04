@@ -240,6 +240,7 @@ def _run_sync_tool(command, tool_name, timeout_seconds):  # noqa: C901
     """Helper to run a synchronization command, log output, handle timeout."""
     try:
         logging.debug(f"Running command: {' '.join(command)}")
+        # nosemgrep: python.lang.compatibility.python36.python36-compatibility-Popen1, python.lang.compatibility.python36.python36-compatibility-Popen2
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,

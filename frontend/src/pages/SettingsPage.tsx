@@ -1178,7 +1178,7 @@ export default function SettingsPage() {
                             id="google-cloud-config"
                             name="google_cloud_credentials"
                             className="w-full h-32 bg-background border border-input rounded-md p-3 text-foreground placeholder:text-muted-foreground font-mono text-xs resize-none transition-colors hover:border-ring/40 hover:bg-accent/30 focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            placeholder='{"type": "service_account", "project_id": "...", ...}'
+                            placeholder="Paste your Google Cloud service account JSON here..."
                             onChange={(e) => {
                               updateField(
                                 "google_cloud_credentials",

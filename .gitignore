@@ -121,3 +121,8 @@ punkt.zip
 heuristic-mcp
 heuristic-mcp-repo
 .smart-coding-cache/
+
+# --- Secrets Directory (GCP keys, etc.) ---
+backend/secrets/*.json
+backend/secrets/*.pem
+backend/secrets/*.key

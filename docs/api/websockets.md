@@ -13,7 +13,7 @@ This endpoint provides real-time streaming of job logs, status updates, and exec
 Since WebSockets do not support custom headers during the initial handshake in standard browser APIs, authentication is handled via a query parameter.
 
 **URL Format:**
-`ws://<host>/api/v1/ws/jobs/{job_id}/logs?token=<ACCESS_TOKEN>`
+`wss://<host>/api/v1/ws/jobs/{job_id}/logs?token=<ACCESS_TOKEN>`
 
 - **job_id**: The UUID of the job to monitor.
 - **token**: A valid JWT Access Token.

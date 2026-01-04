@@ -21,4 +21,8 @@ RUN apk add --no-cache \
 COPY infra/scripts/backup.sh /usr/local/bin/backup.sh
 RUN chmod +x /usr/local/bin/backup.sh
 
+# Create and use non-root user for security
+RUN adduser -D -u 1000 backup
+USER backup
+
 CMD ["sleep", "infinity"]
