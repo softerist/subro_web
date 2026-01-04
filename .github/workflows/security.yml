@@ -20,7 +20,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install Security Tools
-        run: pip install bandit safety poetry
+        run: |
+          pip install bandit safety poetry
+          poetry self add poetry-plugin-export
 
       - name: Run Bandit (SAST)
         run: bandit -r backend/app -ll # Scan app code, low severity threshold (or specific config)
