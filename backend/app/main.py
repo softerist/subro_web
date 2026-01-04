@@ -168,7 +168,7 @@ async def lifespan(_app_instance: FastAPI):
         logger.error(f"LIFESPAN_HOOK: Error during database resource disposal: {e}", exc_info=True)
 
 
-advertised_host = "localhost" if settings.SERVER_HOST == "0.0.0.0" else settings.SERVER_HOST
+advertised_host = "localhost" if settings.SERVER_HOST == "0.0.0.0" else settings.SERVER_HOST  # nosec B104
 server_protocol = "https" if settings.USE_HTTPS else "http"
 advertised_server_url_base = f"{server_protocol}://{advertised_host}:{settings.SERVER_PORT}"
 

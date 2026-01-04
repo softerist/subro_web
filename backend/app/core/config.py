@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     )
 
     # --- Server Configuration ---
-    SERVER_HOST: str = Field(default="0.0.0.0", validation_alias="SERVER_HOST")
+    SERVER_HOST: str = Field(default="0.0.0.0", validation_alias="SERVER_HOST")  # nosec B104 - intentional for Docker
     SERVER_PORT: int = Field(default=8000, validation_alias="SERVER_PORT")
     ROOT_PATH: str = Field(
         default="", description="Root path for the application if served under a subpath."
