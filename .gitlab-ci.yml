@@ -296,7 +296,7 @@ deploy_prod:
 
         # Clone repo if first deploy (infra scripts needed)
         if [ ! -d .git ]; then
-          git clone --depth 1 https://oauth2:$CI_JOB_TOKEN@$CI_SERVER_HOST/$CI_PROJECT_PATH.git .
+          git clone --depth 1 git@$CI_SERVER_HOST:$CI_PROJECT_PATH.git .
         else
           git fetch --depth 1 origin $CI_COMMIT_SHA
           git checkout $CI_COMMIT_SHA
