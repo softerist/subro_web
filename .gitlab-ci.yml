@@ -190,7 +190,7 @@ scan_image_vulns:
         echo "Scanning $img..."
         trivy image --cache-dir .trivycache --exit-code 1 \
           --severity "$TRIVY_SEVERITY" --timeout 10m --no-progress \
-          --ignorefile .trivyignore "$img"
+          --skip-files "/app/secrets/google-api-config.json" "$img"
       done
   allow_failure: false
   retry: 1
