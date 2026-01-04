@@ -316,6 +316,9 @@ deploy_prod:
         export DOCKER_IMAGE_FRONTEND='$IMAGE_FRONTEND'
         export USE_PREBUILT_IMAGES=1
 
+        # Ensure scripts are executable
+        chmod +x ./infra/scripts/*.sh
+
         # Deploy
         ./infra/scripts/blue_green_deploy.sh
 
