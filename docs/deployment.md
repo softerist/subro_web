@@ -126,7 +126,6 @@ To deploy a new version of the code:
    > [!NOTE]
    > Re-encryption runs automatically when `DATA_ENCRYPTION_KEYS` includes multiple entries (new key first, old keys after).
    > You can skip it with `REENCRYPT_ON_DEPLOY=0` or force it with `REENCRYPT_FORCE=1` when running the deploy script.
-
    > [!NOTE]
    > Zero downtime is achieved as Caddy waits for the new backend to be healthy before switching.
 
