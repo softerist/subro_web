@@ -283,7 +283,16 @@ deploy_prod:
         mkdir -p /opt/subro_web
         cd /opt/subro_web
 
-        # Decode .env.prod
+        # Clone repo if first deploy (infra scripts needed)
+        if [ ! -d .git ]; then
+          git clone --depth 1 https://oauth2:$CI_JOB_TOKEN@$CI_SERVER_HOST/$CI_PROJECT_PATH.git .
+        else
+          git fetch --depth 1 origin $CI_COMMIT_SHA
+          git checkout $CI_COMMIT_SHA
+        fi
+
+        # Ensure infra directory exists and decode .env.prod
+        mkdir -p infra
         echo '$PROD_ENV_FILE' | base64 -d > infra/.env.prod
         chmod 600 infra/.env.prod
 

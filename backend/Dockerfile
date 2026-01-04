@@ -5,8 +5,8 @@
 # Define the Poetry version as a build argument
 ARG POETRY_VERSION=2.1.2
 
-# Use the official Python image.
-FROM python:3.12-slim AS base
+# Use Python on Debian 11 (Bullseye) - has fix for CVE-2025-13601
+FROM python:3.12-slim-bullseye AS base
 
 # Re-declare ARG within the stage so ENV can use it
 ARG POETRY_VERSION
