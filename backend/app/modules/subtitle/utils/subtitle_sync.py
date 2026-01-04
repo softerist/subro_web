@@ -57,22 +57,19 @@ ALASS_TIMEOUT = getattr(settings, "ALASS_TIMEOUT", 300)  # Default 300s for full
 FFSUBSYNC_CHECK_TIMEOUT = getattr(settings, "FFSUBSYNC_CHECK_TIMEOUT", 90)  # Default 90s for check
 
 # --- Helper: Check Tool Availability ---
-_ffsubsync_available = None
-_alass_available = None
-_ffmpeg_for_sync_available = None  # Cache ffmpeg check relevant for sync tools
+# Module-level cache dictionary for tool availability (replaces globals() usage)
+_tool_cache: dict[str, bool | None] = {}
 
 
 def _is_tool_available(tool_path, tool_name):
     """Checks if an external tool exists and is executable (cached)."""
-    global _ffsubsync_available, _alass_available, _ffmpeg_for_sync_available
-    is_available = None
-    cache_attr = f"_{tool_name.replace('-', '_')}_available"  # e.g., _ffsubsync_available
+    cache_key = f"{tool_name}|{tool_path}"  # Unique key per tool name and path
 
     # Check cache first
-    cached_status = globals().get(cache_attr)
-    if cached_status is not None:
-        return cached_status
+    if cache_key in _tool_cache:
+        return _tool_cache[cache_key] or False
 
+    is_available = False  # Default if not found
     resolved_path = shutil.which(tool_path)
     if resolved_path:
         try:
@@ -109,7 +106,7 @@ def _is_tool_available(tool_path, tool_name):
             logging.debug(f"Tool '{tool_name}' ({tool_path}) not found. (Using default path).")
 
     # Update cache
-    globals()[cache_attr] = is_available
+    _tool_cache[cache_key] = is_available
     return is_available
 
 
@@ -339,10 +336,10 @@ def _run_sync_tool(command, tool_name, timeout_seconds):  # noqa: C901
         logging.error(
             f"'{command[0]}' command not found for {tool_name}. Ensure it's installed and configured."
         )
-        # Update cache if this was the first check
-        cache_attr = f"_{tool_name.replace('-', '_')}_available"
-        if globals().get(cache_attr) is None:
-            globals()[cache_attr] = False
+        # Update cache to mark tool as unavailable
+        cache_key = f"{tool_name}|{command[0]}"
+        if cache_key not in _tool_cache:
+            _tool_cache[cache_key] = False
         return False
     except subprocess.TimeoutExpired:
         return False  # Already logged

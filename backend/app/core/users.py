@@ -40,15 +40,6 @@ _background_tasks = set()
 password_helper = PasswordHelper()
 
 
-def _token_for_log(token: str) -> str:
-    if settings.DEBUG or settings.ENVIRONMENT == "development":
-        return token
-    if not token:
-        return ""
-    suffix = token[-4:] if len(token) >= 4 else token
-    return f"*****{suffix}"
-
-
 # User Manager
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = settings.SECRET_KEY
@@ -63,12 +54,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token: str,
         _request: Request | None = None,
     ):
-        logger.info(
-            "User %s (%s) requested a password reset. Token: %s",
-            user.id,
-            user.email,
-            _token_for_log(token),
-        )
+        logger.info("User %s (%s) requested a password reset.", user.id, user.email)
         # Send password reset email
         import asyncio
 
@@ -79,14 +65,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         task.add_done_callback(_background_tasks.discard)
 
     async def on_after_request_verify(
-        self, user: User, token: str, _request: Request | None = None
+        self, user: User, _token: str, _request: Request | None = None
     ):
-        logger.info(
-            "Verification requested for user %s (%s). Token: %s",
-            user.id,
-            user.email,
-            _token_for_log(token),
-        )
+        logger.info("Verification requested for user %s (%s).", user.id, user.email)
         # Implement actual email sending logic here.
 
     async def on_after_verify(self, user: User, _token: str, _request: Request | None = None):
