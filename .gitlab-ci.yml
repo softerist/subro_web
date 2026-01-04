@@ -145,6 +145,7 @@ test:
       docker run -d --name api --network testnet \
         --env-file backend/.env.test \
         -e DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}" \
+        -e DB_HOST="postgres" \
         -e POSTGRES_SERVER="postgres" \
         -e REDIS_HOST="redis" \
         -e CELERY_BROKER_URL="redis://redis:6379/0" \
