@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
+from pathlib import Path
 
 # Ensure we can import from 'app'
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 sys.path.append("/app")  # Fallback for Docker environment
 
 from app.core.config import settings

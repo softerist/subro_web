@@ -37,11 +37,11 @@ async def download_file(
     file_path = Path(path)
     try:
         resolved_file_path = file_path.resolve(strict=True)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found",
-        )
+        ) from e
     except RuntimeError as e:  # e.g. symlink loop
         logger.warning(f"Path resolution failed for download '{path}': {e}")
         raise HTTPException(
