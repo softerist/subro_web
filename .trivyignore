@@ -1,3 +1,0 @@
-# Intentional secrets that are required at runtime
-# These are mounted/copied by design
-google-api-config.json

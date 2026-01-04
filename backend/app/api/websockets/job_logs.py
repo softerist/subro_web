@@ -4,8 +4,9 @@ import logging
 from contextlib import asynccontextmanager
 from uuid import UUID
 
+import jwt
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
-from jose import JWTError, jwt
+from jwt.exceptions import PyJWTError as JWTError
 from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.websockets import WebSocketState
