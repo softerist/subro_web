@@ -22,7 +22,7 @@ ENV APP_HOME=/app \
     POETRY_VIRTUALENVS_IN_PROJECT=true \
     POETRY_NO_INTERACTION=1 \
     # Path settings - Add venv bin and poetry bin to PATH
-    PATH="/app/.venv/bin:$POETRY_HOME/bin:/usr/local/bin:$PATH"
+    PATH="/app/.venv/bin:/opt/poetry/bin:/usr/local/bin:$PATH"
 
 # Set working directory
 WORKDIR ${APP_HOME} # Use the ENV variable
