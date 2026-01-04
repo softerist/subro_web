@@ -1,10 +1,21 @@
 # backend/pyproject.toml
-[tool.poetry]
+
+# PEP 621 project metadata
+[project]
 name = "subtitle-downloader-backend"
 version = "0.1.0"
 description = "Backend API and Worker for the Subtitle Downloader Web Application"
-authors = ["Your Name <you@example.com>"] # Replace with actual author info
+authors = [{name = "Your Name", email = "you@example.com"}] # Replace with actual author info
+requires-python = ">=3.12"
+dynamic = ["dependencies", "version"]
 # readme = "README.md"
+
+# Console scripts (formerly in tool.poetry.scripts)
+[project.scripts]
+init-data = "app.initial_data:main_cli_runner_function"
+
+[tool.poetry]
+# package-mode must stay in tool.poetry
 package-mode = false
 packages = [{include = "app"}]
 
@@ -159,5 +170,4 @@ version_files = [
 tag_format = "v$version"
 bump_message = "chore(release): bump version to $new_version"
 
-[tool.poetry.scripts]
-init-data = "app.initial_data:main_cli_runner_function" # You'd need to wrap asyncio.run(main())
+# Scripts moved to [project.scripts] section above
