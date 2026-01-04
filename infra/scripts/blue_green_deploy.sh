@@ -8,6 +8,7 @@ CADDYFILE_PROD="$DOCK_DIR/Caddyfile.prod"
 COMPOSE_APP="$DOCK_DIR/compose.prod.yml"
 COMPOSE_DATA="$DOCK_DIR/compose.data.yml"
 COMPOSE_GATEWAY="$DOCK_DIR/compose.gateway.yml"
+COMPOSE_IMAGES="$DOCK_DIR/compose.prod.images.yml"
 ENV_FILE="$INFRA_DIR/.env.prod"
 
 # Ensure .env.prod exists
@@ -64,8 +65,19 @@ echo "Deploying New Color: $NEW_COLOR"
 
 # 2. Deploy New Color
 echo "--- Starting $NEW_COLOR Stack ---"
-# We define project name as the color
-docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" up --build -d
+if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
+    echo "--- Using pre-built images from registry ---"
+    # Pull images explicitly (using overlay)
+    docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" \
+        -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" pull
+
+    # Start WITHOUT --build (using overlay)
+    docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" \
+        -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" up -d
+else
+    # Build locally
+    docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" up --build -d
+fi
 
 # 3. Wait for Health
 echo "--- Waiting for Health Checks ($NEW_COLOR) ---"
@@ -93,18 +105,32 @@ if [ "$HEALTHY" = false ]; then
     echo "Logs:"
     docker logs --tail 50 "$API_CONTAINER"
     # Cleanup new deployment
-    docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" down
+    if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
+        docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" down
+    else
+        docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" down
+    fi
     exit 1
 fi
 
 echo "--- New Color ($NEW_COLOR) is Healthy ---"
+
+# 3.4 Stop OLD worker BEFORE traffic switch (prevent job duplication)
+if [ -n "$CURRENT_COLOR" ] && [ "$CURRENT_COLOR" != "$NEW_COLOR" ]; then
+    echo "--- Stopping old worker to prevent job duplication ---"
+    docker compose --env-file "$ENV_FILE" -p "$CURRENT_COLOR" -f "$COMPOSE_APP" stop worker || true
+fi
 
 # 3.5 Run Database Migrations
 echo "--- Running Database Migrations ---"
 # We run migration using the new API container
 if ! docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" exec -T api poetry run alembic upgrade head; then
     echo "Error: Database migration failed. Aborting."
-    docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" down
+    if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
+        docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" down
+    else
+        docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" down
+    fi
     exit 1
 fi
 echo "--- Migrations Completed ---"
@@ -118,7 +144,11 @@ if [ "${REENCRYPT_ON_DEPLOY:-1}" != "0" ]; then
     fi
     if ! docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" exec -T api python /app/scripts/reencrypt_encrypted_fields.py "${REENCRYPT_ARGS[@]}"; then
         echo "Error: Re-encryption failed. Aborting."
-        docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" down
+        if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
+            docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" down
+        else
+            docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" down
+        fi
         exit 1
     fi
     echo "--- Re-encryption Step Completed ---"
@@ -164,3 +194,8 @@ if [ -n "$CURRENT_COLOR" ]; then
 fi
 
 echo "--- Deployment Complete ($NEW_COLOR Active) ---"
+
+# 6. Conservative Pruning
+echo "--- Pruning old images (keeping recent for rollback) ---"
+# Remove dangling images only, preserve tagged images for rollback (older than 1 week)
+docker image prune -f --filter "until=168h" || true

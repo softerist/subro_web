@@ -1,0 +1,20 @@
+# Overlay for CI/CD with pre-built images
+# Usage: docker compose -f compose.prod.yml -f compose.prod.images.yml up -d
+#
+# When using pre-built images, this overlay:
+# 1. Sets the image to pull from the registry
+# 2. Forces pull_policy: always to get latest image
+# 3. The build context from compose.prod.yml is ignored when image is specified
+
+services:
+  api:
+    image: ${DOCKER_IMAGE_API:?DOCKER_IMAGE_API required}
+    pull_policy: always
+
+  worker:
+    image: ${DOCKER_IMAGE_WORKER:?DOCKER_IMAGE_WORKER required}
+    pull_policy: always
+
+  frontend:
+    image: ${DOCKER_IMAGE_FRONTEND:?DOCKER_IMAGE_FRONTEND required}
+    pull_policy: always

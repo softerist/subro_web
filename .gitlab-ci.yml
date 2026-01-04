@@ -1,0 +1,321 @@
+# ============================================================
+# subro_web GitLab CI/CD Pipeline
+# Based on hello-lseg patterns, adapted for blue-green deploy
+# ============================================================
+
+stages:
+  - pre
+  - build
+  - test
+  - scan
+  - deploy
+  - verify
+
+# -------- Global Variables --------
+variables:
+  IMAGE_API: $CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHORT_SHA
+  IMAGE_WORKER: $CI_REGISTRY_IMAGE/worker:$CI_COMMIT_SHORT_SHA
+  IMAGE_FRONTEND: $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHORT_SHA
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# -------- Docker-in-Docker Helper --------
+.default-docker:
+  image: docker:25
+  services:
+    - name: docker:25-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "/certs/client"
+  before_script:
+    - set -euo pipefail
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - docker context create dind-tls --docker "host=$DOCKER_HOST,ca=$DOCKER_CERT_PATH/ca.pem,cert=$DOCKER_CERT_PATH/cert.pem,key=$DOCKER_CERT_PATH/key.pem" || true
+
+# -------- DEBUG (optional) --------
+ci_debug_env:
+  stage: pre
+  image: alpine:3.20
+  rules:
+    - when: always
+  allow_failure: true
+  script:
+    - 'echo "Pipeline: $CI_PIPELINE_SOURCE | Branch: $CI_COMMIT_BRANCH | SHA: $CI_COMMIT_SHORT_SHA"'
+
+# ============ BUILD STAGE ============
+.build_template:
+  stage: build
+  extends: .default-docker
+  variables:
+    DOCKER_BUILDKIT: "1"
+  script:
+    - |
+      set -euo pipefail
+      docker buildx create --name builder --use dind-tls 2>/dev/null || docker buildx use builder
+      docker buildx inspect --bootstrap
+      docker buildx build \
+        --push \
+        -t "$IMAGE" \
+        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
+        --target "$TARGET" \
+        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
+        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
+        -f "$DOCKERFILE" \
+        "$CONTEXT"
+  rules:
+    - if: "$CI_COMMIT_BRANCH"
+  retry: 1
+
+build_api:
+  extends: .build_template
+  variables:
+    SERVICE: api
+    IMAGE: $IMAGE_API
+    TARGET: production-api
+    DOCKERFILE: backend/Dockerfile
+    CONTEXT: backend
+
+build_worker:
+  extends: .build_template
+  variables:
+    SERVICE: worker
+    IMAGE: $IMAGE_WORKER
+    TARGET: production-worker
+    DOCKERFILE: backend/Dockerfile
+    CONTEXT: backend
+
+build_frontend:
+  extends: .build_template
+  variables:
+    SERVICE: frontend
+    IMAGE: $IMAGE_FRONTEND
+    TARGET: production
+    DOCKERFILE: frontend/Dockerfile
+    CONTEXT: frontend
+  script:
+    - |
+      set -euo pipefail
+      docker buildx create --name builder --use dind-tls 2>/dev/null || docker buildx use builder
+      docker buildx inspect --bootstrap
+      docker buildx build \
+        --push \
+        -t "$IMAGE" \
+        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
+        --target "$TARGET" \
+        --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-/api/v1}" \
+        --build-arg VITE_WS_BASE_URL="${VITE_WS_BASE_URL:-/api/v1}" \
+        --build-arg VITE_SETUP_TOKEN="${VITE_SETUP_TOKEN:-}" \
+        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
+        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
+        -f "$DOCKERFILE" \
+        "$CONTEXT"
+
+# ============ TEST STAGE ============
+test:
+  stage: test
+  extends: .default-docker
+  needs: [build_api, build_frontend]
+  variables:
+    # Database config for test container
+    POSTGRES_USER: testuser
+    POSTGRES_PASSWORD: testpass
+    POSTGRES_DB: testdb
+  script:
+    - set -euo pipefail
+    - docker pull "$IMAGE_API"
+    - docker pull "$IMAGE_FRONTEND"
+    - docker network create testnet || true
+
+    # Start dependencies
+    - docker run -d --name postgres --network testnet -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=$POSTGRES_DB postgres:15-alpine
+    - docker run -d --name redis --network testnet redis:7-alpine
+
+    # Wait for postgres to be ready
+    - |
+      for i in $(seq 1 30); do
+        if docker run --rm --network testnet postgres:15-alpine pg_isready -h postgres -U $POSTGRES_USER; then
+          echo "Postgres ready!"
+          break
+        fi
+        echo "Waiting for Postgres ($i/30)..." && sleep 2
+      done
+
+    # Start API with required env vars
+    - |
+      docker run -d --name api --network testnet \
+        -e DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}" \
+        -e CELERY_BROKER_URL="redis://redis:6379/0" \
+        -e CELERY_RESULT_BACKEND="redis://redis:6379/0" \
+        -e REDIS_URL="redis://redis:6379/0" \
+        -e SECRET_KEY="test-secret-key-for-ci" \
+        -e ENVIRONMENT="testing" \
+        "$IMAGE_API"
+
+    # Wait for API to be healthy
+    - |
+      for i in $(seq 1 30); do
+        if docker run --rm --network testnet curlimages/curl:8.7.1 -fsS http://api:8000/health 2>/dev/null; then
+          echo "API healthy!"
+          break
+        fi
+        echo "Waiting for API ($i/30)..." && sleep 2
+      done
+    - docker run --rm --network testnet curlimages/curl:8.7.1 -fsS http://api:8000/health | grep -q "healthy"
+  after_script:
+    - docker rm -f api postgres redis || true
+
+# ============ SCAN STAGE ============
+scan_image_vulns:
+  stage: scan
+  image:
+    name: aquasec/trivy:0.53.0
+    entrypoint: [""]
+  needs: [build_api, build_worker, build_frontend]
+  variables:
+    TRIVY_SEVERITY: "HIGH,CRITICAL"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      variables:
+        TRIVY_SEVERITY: "CRITICAL"
+    - when: on_success
+  cache:
+    key: trivy-cache
+    paths: [.trivycache/]
+  script:
+    - |
+      set -euo pipefail
+      export TRIVY_USERNAME="$CI_REGISTRY_USER"
+      export TRIVY_PASSWORD="$CI_REGISTRY_PASSWORD"
+      for img in "$IMAGE_API" "$IMAGE_FRONTEND" "$IMAGE_WORKER"; do
+        echo "Scanning $img..."
+        trivy image --cache-dir .trivycache --exit-code 1 \
+          --severity "$TRIVY_SEVERITY" --timeout 10m --no-progress "$img"
+      done
+  allow_failure: false
+  retry: 1
+
+sast_scan:
+  stage: scan
+  image:
+    name: returntocorp/semgrep:latest
+    entrypoint: [""]
+  variables:
+    SAST_MIN_SEVERITY: "WARNING"
+    SAST_FAIL_ON_FINDINGS: "false"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      variables:
+        SAST_MIN_SEVERITY: "ERROR"
+        SAST_FAIL_ON_FINDINGS: "true"
+    - when: on_success
+  script:
+    - |
+      EXTRA_ARGS=""
+      if [ "$SAST_FAIL_ON_FINDINGS" == "true" ]; then
+        EXTRA_ARGS="--error"
+      fi
+      semgrep scan --config auto --sarif -o semgrep.sarif \
+        --severity "$SAST_MIN_SEVERITY" $EXTRA_ARGS "$CI_PROJECT_DIR"
+  artifacts:
+    reports:
+      sast: semgrep.sarif
+    when: always
+  allow_failure: false
+
+secret_scan:
+  stage: scan
+  image:
+    name: aquasec/trivy:0.53.0
+    entrypoint: [""]
+  script:
+    - |
+      trivy fs --scanners secret \
+        --skip-dirs ".git,__pycache__,.venv,venv,node_modules,.ruff_cache,.pytest_cache" \
+        --exit-code 1 --no-progress --timeout 5m .
+  allow_failure: false
+
+# ============ DEPLOY STAGE ============
+.deploy_template:
+  stage: deploy
+  image: alpine:3.20
+  resource_group: $CI_ENVIRONMENT_NAME # Serializes deploys per environment
+  needs:
+    - job: test
+    - job: scan_image_vulns
+    - job: sast_scan
+    - job: secret_scan
+  before_script:
+    - set -euo pipefail
+    - apk add --no-cache bash openssh-client
+    - eval "$(ssh-agent -s)"
+    - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
+    - chmod 600 /tmp/ssh_key
+    - ssh-add /tmp/ssh_key
+    - rm -f /tmp/ssh_key
+    - mkdir -p ~/.ssh
+    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+  retry: 1
+
+deploy_prod:
+  extends: .deploy_template
+  environment:
+    name: production
+    url: https://$SSH_HOST/
+    deployment_tier: production
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+      allow_failure: false
+    - when: never
+  script:
+    - |
+      set -euo pipefail
+      ssh -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+        set -euo pipefail
+        cd /opt/subro_web
+
+        # Decode .env.prod
+        echo '$PROD_ENV_FILE' | base64 -d > infra/.env.prod
+        chmod 600 infra/.env.prod
+
+        # Login to registry
+        echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY
+
+        # Set image tags
+        export DOCKER_IMAGE_API='$IMAGE_API'
+        export DOCKER_IMAGE_WORKER='$IMAGE_WORKER'
+        export DOCKER_IMAGE_FRONTEND='$IMAGE_FRONTEND'
+        export USE_PREBUILT_IMAGES=1
+
+        # Deploy
+        ./infra/scripts/blue_green_deploy.sh
+
+        # Cleanup
+        docker logout $CI_REGISTRY
+      "
+
+# ============ VERIFY STAGE ============
+verify_prod:
+  stage: verify
+  image: alpine:3.20
+  needs: [deploy_prod]
+  environment:
+    name: production
+    url: https://$SSH_HOST/
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+      allow_failure: false
+  script:
+    - apk add --no-cache curl
+    - |
+      echo "Verifying production deployment..."
+      for i in $(seq 1 10); do
+        if curl --fail --silent --max-time 10 "https://$SSH_HOST/health" | grep -q "healthy"; then
+          echo "Production is healthy!"
+          exit 0
+        fi
+        echo "Waiting for production ($i/10)..." && sleep 5
+      done
+      echo "Production health check failed!"
+      exit 1
