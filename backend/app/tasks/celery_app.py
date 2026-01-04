@@ -39,6 +39,7 @@ celery_app.conf.update(
     task_acks_late=settings.CELERY_ACKS_LATE,  # If you have this in settings
     result_expires=settings.CELERY_RESULT_EXPIRES,  # If you have this in settings
     task_create_missing_queue_type=settings.CELERY_TASK_CREATE_MISSING_QUEUE_TYPE,
+    task_create_missing_queue_exchange_type=settings.CELERY_TASK_CREATE_MISSING_QUEUE_EXCHANGE_TYPE,
 )
 
 
