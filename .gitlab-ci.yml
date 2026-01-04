@@ -126,31 +126,35 @@ test:
     - docker pull "$IMAGE_FRONTEND"
     - docker network create testnet || true
 
-    # Start dependencies
-    - docker run -d --name db_test --network testnet -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=$POSTGRES_DB postgres:15-alpine
+    # Start dependencies (Production-like setup)
+    - docker run -d --name db --network testnet -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=$POSTGRES_DB postgres:16-alpine
+    - docker run -d --name db_test --network testnet -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=$POSTGRES_DB postgres:16-alpine
     - docker run -d --name redis --network testnet redis:7-alpine
 
-    # Wait for postgres to be ready
+    # Wait for databases to be ready
     - |
       for i in $(seq 1 30); do
-        if docker run --rm --network testnet postgres:15-alpine pg_isready -h db_test -U $POSTGRES_USER; then
-          echo "Postgres ready!"
+        if docker run --rm --network testnet postgres:16-alpine pg_isready -h db -U $POSTGRES_USER && \
+           docker run --rm --network testnet postgres:16-alpine pg_isready -h db_test -U $POSTGRES_USER; then
+          echo "Databases ready!"
           break
         fi
-        echo "Waiting for Postgres ($i/30)..." && sleep 2
+        echo "Waiting for Databases ($i/30)..." && sleep 2
       done
 
     # Start API with env file from repo, override network-specific vars
     - |
       docker run -d --name api --network testnet \
         --env-file backend/.env.test \
-        -e DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db_test:5432/${POSTGRES_DB}" \
-        -e DB_HOST="db_test" \
-        -e POSTGRES_SERVER="db_test" \
+        -e DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
+        -e DB_HOST="db" \
+        -e POSTGRES_SERVER="db" \
         -e REDIS_HOST="redis" \
         -e CELERY_BROKER_URL="redis://redis:6379/0" \
         -e CELERY_RESULT_BACKEND="redis://redis:6379/1" \
         -e REDIS_PUBSUB_URL="redis://redis:6379/2" \
+        -e TEST_DATABASE_HOST="db_test" \
+        -e TEST_DATABASE_PORT="5432" \
         -e TEST_API_BASE_URL="http://localhost:8000" \
         -e TEST_WS_BASE_URL="ws://localhost:8000" \
         -v "$(pwd)/backend/tests:/app/tests" \
@@ -171,7 +175,7 @@ test:
     - docker exec api poetry run pytest -p no:cacheprovider tests/
   after_script:
     - docker logs api 2>&1 | tail -50 || true
-    - docker rm -f api db_test redis || true
+    - docker rm -f api db db_test redis || true
 
 # ============ SCAN STAGE ============
 scan_image_vulns:
@@ -200,7 +204,7 @@ scan_image_vulns:
         trivy image --cache-dir .trivycache --exit-code 1 \
           --severity "$TRIVY_SEVERITY" --timeout 10m --no-progress \
           --skip-files "/app/secrets/google-api-config.json" \
-          --ignorefile .trivyignore "$img"
+          "$img"
       done
   allow_failure: false
   retry: 1

@@ -60,6 +60,10 @@ help: ## Show help for Makefile targets
 	@echo "  clean              - Remove build artifacts (__pycache__, node_modules, dist, etc.)."
 	@echo "  prune              - Remove stopped containers, unused networks, and dangling images/volumes."
 	@echo "  permissions        - Fix potential file permission issues from Docker volumes (run as sudo)."
+	@echo "  scan-vulns         - Scan production images for vulnerabilities (Trivy)."
+	@echo "  scan-secrets       - Scan filesystem for secrets (Trivy)."
+	@echo "  scan-sast          - Scan code for security issues (Semgrep)."
+	@echo "  scan-all           - Run all local security scans."
 	@echo ""
 	@echo "Local Alembic Commands (run against DB defined by local .env, not Dockerized DB):"
 	@echo "  local-db-upgrade   - (DEPRECATED-STYLE) Run Alembic upgrade head locally."
@@ -308,7 +312,7 @@ format-ts: ## Run TypeScript/JS formatter (Prettier)
 # Testing & Coverage (Run inside Docker)
 # ==============================================================================
 .PHONY: test test-py test-ts test-integration test-integration-prod coverage coverage-py coverage-ts
-test: test-py ## Run backend Python tests
+test: test-py scan-all ## Run backend Python tests and all security scans
 
 test-py: ## Run backend Python tests
 	@echo "Running backend tests..."
@@ -379,6 +383,28 @@ permissions: ## Fix potential file permission issues from Docker volumes
 	@echo "Attempting to fix volume permissions (requires sudo)..."
 	sudo chown -R $(shell id -u):$(shell id -g) .
 	@echo "Permissions reset to current user."
+
+
+# ==============================================================================
+# Security Scanning (Local)
+# ==============================================================================
+.PHONY: scan-vulns scan-secrets scan-sast scan-all
+
+scan-vulns: ## Scan production target image for CRITICAL vulnerabilities using Trivy
+	@echo "Scanning production API image for CRITICAL vulnerabilities..."
+	@docker build -t subro-api:scan --target production-api ./backend
+	@trivy image --severity CRITICAL subro-api:scan
+
+scan-secrets: ## Scan filesystem for secrets using Trivy
+	@echo "Scanning filesystem for secrets..."
+	@trivy fs --scanners secret .
+
+scan-sast: ## Scan code for security issues using Semgrep
+	@echo "Running Semgrep SAST scan..."
+	@semgrep scan --config auto .
+
+scan-all: scan-vulns scan-secrets scan-sast ## Run all local security scans
+	@echo "All security scans completed."
 
 
 # ==============================================================================

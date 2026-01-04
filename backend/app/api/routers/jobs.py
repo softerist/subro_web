@@ -104,7 +104,7 @@ async def _validate_and_resolve_job_path(
             f"Path resolution failed for input '{folder_path_str}' by user {current_user.email}: {e}"
         )
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "PATH_INVALID",
                 "field": "folder_path",
@@ -119,7 +119,7 @@ async def _validate_and_resolve_job_path(
             f"Unexpected error during path resolution for input '{folder_path_str}' by user {current_user.email}: {e}"
         )
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "PATH_INVALID",
                 "field": "folder_path",
@@ -337,7 +337,7 @@ async def _enqueue_celery_task_and_handle_errors(
                 }
             },
         },
-        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
             "description": "Path invalid or cannot be resolved",
             "content": {
                 "application/json": {

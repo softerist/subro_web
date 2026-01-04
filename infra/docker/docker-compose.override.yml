@@ -10,6 +10,8 @@ services:
     volumes:
       # CORRECTED PATH: Mount project's backend code into /app for hot-reloading
       - ../../backend:/app
+      # Preserve the container's virtual environment even when mounting code
+      - /app/.venv
       # Mount qBittorrent download folder for subtitle processing
       # Mounted to /downloads to avoid container's /root permission issues
       - /root/Downloads:/downloads
@@ -27,6 +29,8 @@ services:
     volumes:
       # CORRECTED PATH: Mount project's backend code into /app
       - ../../backend:/app
+      # Preserve the container's virtual environment even when mounting code
+      - /app/.venv
       - /mnt/usb3/Media/Movies:/mnt/usb3/Media/Movies # Media folder mount
       # Mount qBittorrent download folder for subtitle processing
       - /root/Downloads:/downloads

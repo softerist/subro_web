@@ -24,7 +24,7 @@ sqlalchemy = "^2.0.29" # ORM
 psycopg = {extras = ["binary"], version = "^3.1.18"} # Postgres driver (psycopg3 for sync)
 asyncpg = "^0.30.0"
 alembic = "^1.13.1" # Database migrations
-fastapi-users = {extras = ["sqlalchemy"], version = "^14.0.1"} # User management
+fastapi-users = ">=15.0.2" # User management
 fastapi-users-db-sqlalchemy = "^7.0.0"
 argon2-cffi = "^23.1.0" # Password hashing (preferred)
 # bcrypt = "^4.1.2" # Alternative password hashing
