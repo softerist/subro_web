@@ -15,32 +15,18 @@ from app.db.session import dispose_worker_db_resources_sync, initialize_worker_d
 logger = logging.getLogger("app.tasks.celery_app")  # Or use celery.utils.log.get_task_logger
 
 celery_app = Celery(
-    "worker",  # Using "worker" as a descriptive name for the task execution process
+    "worker",
     broker=str(settings.CELERY_BROKER_URL),
     backend=str(settings.CELERY_RESULT_BACKEND),
-    # Explicitly list modules to import when the worker starts.
-    # This ensures tasks defined in these modules are registered.
-    # Add any other task modules you create here.
-    include=[
-        "app.tasks.subtitle_jobs"
-    ],  # "app.tasks.test_tasks"], # Assuming test_tasks might exist or for future use
+    include=["app.tasks.subtitle_jobs"],
 )
 
-celery_app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],  # Only accept json serialized tasks
-    result_serializer="json",
-    timezone=settings.TIMEZONE,  # Use TIMEZONE from your settings if defined, else "UTC"
-    enable_utc=True,  # Ensure Celery uses UTC internally if timezone is set
-    broker_connection_retry_on_startup=True,  # Good for Celery 5+ ensuring worker retries connection on startup
-    task_track_started=True,  # To report 'STARTED' state for tasks
-    # worker_concurrency=1, # You can set this, but often better to configure via CLI for flexibility
-    # Or leave it to Celery's default (number of CPU cores)
-    task_acks_late=settings.CELERY_ACKS_LATE,  # If you have this in settings
-    result_expires=settings.CELERY_RESULT_EXPIRES,  # If you have this in settings
-    task_create_missing_queue_type=settings.CELERY_TASK_CREATE_MISSING_QUEUE_TYPE,
-    task_create_missing_queue_exchange_type=settings.CELERY_TASK_CREATE_MISSING_QUEUE_EXCHANGE_TYPE,
-)
+# Robust configuration using pydantic settings object directly.
+# Using namespace="CELERY" means it looks for attributes starting with CELERY_
+celery_app.config_from_object(settings, namespace="CELERY")
+
+# Optional: keep timezone as it might be named differently in settings (TIMEZONE vs CELERY_TIMEZONE)
+celery_app.conf.timezone = settings.TIMEZONE
 
 
 # --- Worker Process Lifecycle Signal Handlers ---

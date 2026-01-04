@@ -196,11 +196,28 @@ class Settings(BaseSettings):
     TIMEZONE: str = Field(default="UTC", validation_alias="CELERY_TIMEZONE")
     CELERY_ACKS_LATE: bool = Field(default=True, validation_alias="CELERY_ACKS_LATE")
     CELERY_RESULT_EXPIRES: int = Field(default=3600, validation_alias="CELERY_RESULT_EXPIRES")
+    CELERY_TASK_CREATE_MISSING_QUEUES: bool = Field(
+        default=True, validation_alias="CELERY_TASK_CREATE_MISSING_QUEUES"
+    )
     CELERY_TASK_CREATE_MISSING_QUEUE_TYPE: bool = Field(
         default=True, validation_alias="CELERY_TASK_CREATE_MISSING_QUEUE_TYPE"
     )
     CELERY_TASK_CREATE_MISSING_QUEUE_EXCHANGE_TYPE: bool = Field(
         default=True, validation_alias="CELERY_TASK_CREATE_MISSING_QUEUE_EXCHANGE_TYPE"
+    )
+    CELERY_ENABLE_UTC: bool = Field(default=True, validation_alias="CELERY_ENABLE_UTC")
+    CELERY_TASK_SERIALIZER: str = Field(default="json", validation_alias="CELERY_TASK_SERIALIZER")
+    CELERY_ACCEPT_CONTENT: list[str] = Field(
+        default=["json"], validation_alias="CELERY_ACCEPT_CONTENT"
+    )
+    CELERY_RESULT_SERIALIZER: str = Field(
+        default="json", validation_alias="CELERY_RESULT_SERIALIZER"
+    )
+    CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP: bool = Field(
+        default=True, validation_alias="CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP"
+    )
+    CELERY_TASK_TRACK_STARTED: bool = Field(
+        default=True, validation_alias="CELERY_TASK_TRACK_STARTED"
     )
 
     # --- Job Runner Settings ---
