@@ -346,7 +346,7 @@ class TestWebSocketLogStreaming:
         if job_id and token:
             try:
                 async with httpx.AsyncClient(
-                    base_url=API_BASE_URL, timeout=5.0, verify=False
+                    base_url=API_BASE_URL, timeout=5.0, verify=False, trust_env=False
                 ) as client:
                     headers = {"Authorization": f"Bearer {token}"}
                     await client.delete(f"/api/v1/jobs/{job_id}", headers=headers)
@@ -382,7 +382,7 @@ class TestWebSocketLogStreaming:
 
         try:
             async with httpx.AsyncClient(
-                base_url=API_BASE_URL, timeout=10.0, verify=False
+                base_url=API_BASE_URL, timeout=10.0, verify=False, trust_env=False
             ) as client:
                 # Step 1 & 2: Register and Login
                 user_token = await self._register_and_login(client, test_email, test_password)
