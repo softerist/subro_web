@@ -300,7 +300,7 @@ deploy_staging:
 
         # Setup staging environment
         mkdir -p infra
-        echo \"\${STAGING_ENV_FILE:-\$PROD_ENV_FILE}\" | base64 -d > infra/.env.staging
+        echo '$PROD_ENV_FILE' | base64 -d > infra/.env.staging
         chmod 600 infra/.env.staging
 
         # Login to registry
