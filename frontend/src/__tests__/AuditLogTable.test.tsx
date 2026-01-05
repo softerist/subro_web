@@ -85,10 +85,10 @@ describe("AuditLogTable", () => {
   it("renders a list of audit logs", () => {
     render(<AuditLogTable {...defaultProps} />, { wrapper });
 
-    expect(screen.getByText("test@example.com")).toBeDefined();
-    expect(screen.getByText("auth.login")).toBeDefined();
-    expect(screen.getByText("auth.login_failed")).toBeDefined();
-    expect(screen.getByText("127.0.0.1")).toBeDefined();
+    expect(screen.getAllByText("test@example.com").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("auth.login").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("auth.login_failed").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("127.0.0.1").length).toBeGreaterThan(0);
   });
 
   it("shows empty state when no logs", () => {
@@ -96,7 +96,9 @@ describe("AuditLogTable", () => {
       wrapper,
     });
 
-    expect(screen.getByText(/no audit logs found/i)).toBeDefined();
+    expect(screen.getAllByText(/no audit logs found/i).length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("shows loading state", () => {

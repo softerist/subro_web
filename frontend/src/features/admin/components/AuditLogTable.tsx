@@ -83,69 +83,141 @@ export function AuditLogTable({
     <>
       <Card className="flex flex-col h-full soft-hover overflow-hidden border-border">
         <div className="flex-1 overflow-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent border-b border-border/40">
-                <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
-                  Timestamp
-                </TableHead>
-                <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
-                  Severity
-                </TableHead>
-                <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
-                  Action
-                </TableHead>
-                <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
-                  Actor
-                </TableHead>
-                <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden md:table-cell">
-                  IP Address
-                </TableHead>
-                <TableHead className="h-9 text-xs font-semibold text-muted-foreground text-right">
-                  Details
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {logs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
-                    No audit logs found.
-                  </TableCell>
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent border-b border-border/40">
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                    Timestamp
+                  </TableHead>
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                    Severity
+                  </TableHead>
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                    Action
+                  </TableHead>
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                    Actor
+                  </TableHead>
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden md:table-cell">
+                    IP Address
+                  </TableHead>
+                  <TableHead className="h-9 text-xs font-semibold text-muted-foreground text-right">
+                    Details
+                  </TableHead>
                 </TableRow>
-              ) : (
-                logs.map((log) => (
-                  <TableRow key={log.id} className="group">
-                    <TableCell className="py-2 text-xs text-muted-foreground">
-                      {format(new Date(log.timestamp), "MMM dd, HH:mm:ss")}
+              </TableHeader>
+              <TableBody>
+                {logs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center">
+                      No audit logs found.
                     </TableCell>
-                    <TableCell className="py-2">
-                      {getSeverityBadge(log.severity)}
-                    </TableCell>
-                    <TableCell className="py-2 font-mono text-xs">
-                      {log.action}
-                    </TableCell>
-                    <TableCell className="py-2 text-sm">
-                      <div className="flex flex-col">
-                        <span>{log.actor_email || "System"}</span>
-                        {log.impersonator_id && (
-                          <span className="text-[10px] text-yellow-500">
-                            Impersonated
-                          </span>
-                        )}
+                  </TableRow>
+                ) : (
+                  logs.map((log) => (
+                    <TableRow key={log.id} className="group">
+                      <TableCell className="py-2 text-xs text-muted-foreground">
+                        {format(new Date(log.timestamp), "MMM dd, HH:mm:ss")}
+                      </TableCell>
+                      <TableCell className="py-2">
+                        {getSeverityBadge(log.severity)}
+                      </TableCell>
+                      <TableCell className="py-2 font-mono text-xs">
+                        {log.action}
+                      </TableCell>
+                      <TableCell className="py-2 text-sm">
+                        <div className="flex flex-col">
+                          <span>{log.actor_email || "System"}</span>
+                          {log.impersonator_id && (
+                            <span className="text-[10px] text-yellow-500">
+                              Impersonated
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-2 text-xs text-muted-foreground hidden md:table-cell font-mono">
+                        {log.ip_address}
+                      </TableCell>
+                      <TableCell className="py-2">
+                        <div className="flex items-center justify-end gap-2">
+                          {log.details &&
+                          Object.keys(log.details).length > 0 ? (
+                            <span className="text-xs text-muted-foreground font-mono">
+                              {Object.keys(log.details).length}{" "}
+                              {Object.keys(log.details).length === 1
+                                ? "field"
+                                : "fields"}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              —
+                            </span>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => setSelectedLog(log)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="md:hidden">
+            {logs.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                No audit logs found.
+              </div>
+            ) : (
+              <div className="divide-y divide-border/40">
+                {logs.map((log) => {
+                  const detailsCount = log.details
+                    ? Object.keys(log.details).length
+                    : 0;
+                  return (
+                    <div key={log.id} className="p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 space-y-1">
+                          <p className="text-xs text-muted-foreground">
+                            {format(
+                              new Date(log.timestamp),
+                              "MMM dd, HH:mm:ss",
+                            )}
+                          </p>
+                          <p className="text-sm font-mono break-all">
+                            {log.action}
+                          </p>
+                        </div>
+                        {getSeverityBadge(log.severity)}
                       </div>
-                    </TableCell>
-                    <TableCell className="py-2 text-xs text-muted-foreground hidden md:table-cell font-mono">
-                      {log.ip_address}
-                    </TableCell>
-                    <TableCell className="py-2">
-                      <div className="flex items-center justify-end gap-2">
-                        {log.details && Object.keys(log.details).length > 0 ? (
+                      <div className="flex items-start justify-between gap-3 text-xs text-muted-foreground">
+                        <div className="min-w-0">
+                          <p className="truncate">
+                            {log.actor_email || "System"}
+                          </p>
+                          {log.impersonator_id && (
+                            <span className="text-[10px] text-yellow-500">
+                              Impersonated
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-mono">
+                          {log.ip_address || "—"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        {detailsCount > 0 ? (
                           <span className="text-xs text-muted-foreground font-mono">
-                            {Object.keys(log.details).length}{" "}
-                            {Object.keys(log.details).length === 1
-                              ? "field"
-                              : "fields"}
+                            {detailsCount}{" "}
+                            {detailsCount === 1 ? "field" : "fields"}
                           </span>
                         ) : (
                           <span className="text-xs text-muted-foreground">
@@ -161,12 +233,12 @@ export function AuditLogTable({
                           <Eye className="h-4 w-4" />
                         </Button>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Show More Button */}
@@ -198,7 +270,7 @@ export function AuditLogTable({
         open={!!selectedLog}
         onOpenChange={(open) => !open && setSelectedLog(null)}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="w-[calc(100%-2rem)] sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center space-x-2">
               <Info className="h-5 w-5 text-primary" />

@@ -62,14 +62,14 @@ export default function AuditLogPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4 h-[calc(100vh-4rem)] px-4 pt-3 pb-3 page-enter page-stagger">
+    <div className="flex flex-col gap-4 h-auto sm:h-[calc(100vh-4rem)] px-4 pt-3 pb-3 page-enter page-stagger">
       <PageHeader
         title="Audit Logs"
         description="Track administrative actions and security events across the system."
         icon={ClipboardList}
         iconClassName="from-sky-500 to-emerald-500 shadow-sky-500/20"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <VerifyIntegrityDialog />
             <ExportAuditLogDialog filters={filters} />
             <Button
@@ -103,7 +103,7 @@ export default function AuditLogPage() {
         </Alert>
       )}
 
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="sm:flex-1 sm:min-h-0 sm:overflow-hidden">
         <AuditLogTable
           logs={data?.items || []}
           isLoading={isLoading && !isPlaceholderData}
