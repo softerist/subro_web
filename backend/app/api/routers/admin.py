@@ -117,8 +117,14 @@ async def create_user_admin(
             detail="Only Superusers can create other Superusers.",
         )
 
+    # Ensure consistency between role and is_superuser
+    if user_create.role == "admin":
+        user_create.is_superuser = True
+    elif user_create.is_superuser:
+        user_create.role = "admin"
+
     try:
-        created_user = await user_manager.create(user_create, safe=True)
+        created_user = await user_manager.create(user_create, safe=False)
         return created_user
     except Exception as e:
         logger.error(f"Error creating user by admin: {e}", exc_info=True)
