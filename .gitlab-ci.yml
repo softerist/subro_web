@@ -343,18 +343,55 @@ verify_staging:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
   script:
-    - apk add --no-cache curl
-    - SERVER_IP=$(getent hosts "$SSH_HOST" | awk '{print $1}' | head -1) && echo "$SERVER_IP staging.$SSH_HOST" >> /etc/hosts
+    - apk add --no-cache curl bind-tools
     - |
-      echo "Verifying staging deployment..."
-      for i in $(seq 1 10); do
-        if curl -k --fail --silent --max-time 10 "https://staging.$SSH_HOST/health" | grep -q "healthy"; then
+      echo "========================================="
+      echo "=== COMPREHENSIVE DEBUG OUTPUT START ==="
+      echo "========================================="
+      echo ""
+      echo "=== 1. Environment Variables ==="
+      echo "SSH_HOST=$SSH_HOST"
+      echo "CI_COMMIT_SHA=$CI_COMMIT_SHA"
+      echo ""
+      echo "=== 2. DNS Resolution via getent ==="
+      getent hosts "$SSH_HOST" || echo "getent failed!"
+      echo ""
+      echo "=== 3. DNS Resolution via nslookup ==="
+      nslookup "$SSH_HOST" || echo "nslookup failed!"
+      echo ""
+      echo "=== 4. Extract IP and Add to /etc/hosts ==="
+      SERVER_IP=$(getent hosts "$SSH_HOST" | awk '{print $1}' | head -1)
+      echo "Extracted SERVER_IP: '$SERVER_IP'"
+      if [ -z "$SERVER_IP" ]; then
+        echo "ERROR: Could not resolve IP for $SSH_HOST"
+        exit 1
+      fi
+      echo "$SERVER_IP staging.$SSH_HOST" >> /etc/hosts
+      echo ""
+      echo "=== 5. Full /etc/hosts Content ==="
+      cat /etc/hosts
+      echo ""
+      echo "=== 6. Test DNS for staging subdomain ==="
+      getent hosts "staging.$SSH_HOST" || echo "getent for staging failed!"
+      echo ""
+      echo "=== 7. First curl attempt (verbose) ==="
+      curl -k -v --max-time 15 "https://staging.$SSH_HOST/health" 2>&1 || echo "curl failed with exit code $?"
+      echo ""
+      echo "=== 8. Starting health check loop ==="
+    - |
+      for i in $(seq 1 5); do
+        echo "--- Attempt $i/5 ---"
+        RESPONSE=$(curl -k --fail --silent --max-time 10 "https://staging.$SSH_HOST/health" 2>&1)
+        EXIT_CODE=$?
+        echo "Exit code: $EXIT_CODE"
+        echo "Response: '$RESPONSE'"
+        if echo "$RESPONSE" | grep -q "healthy"; then
           echo "Staging is healthy!"
           exit 0
         fi
-        echo "Waiting for staging ($i/10)..." && sleep 5
+        echo "Waiting 5 seconds..." && sleep 5
       done
-      echo "Staging health check failed!"
+      echo "Staging health check failed after all attempts!"
       exit 1
   environment:
     name: staging
