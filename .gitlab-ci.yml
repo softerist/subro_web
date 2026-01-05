@@ -347,7 +347,7 @@ verify_staging:
     - |
       echo "Verifying staging deployment..."
       for i in $(seq 1 10); do
-        if curl --fail --silent --max-time 10 "https://staging.$SSH_HOST/health" | grep -q "healthy"; then
+        if curl -k --fail --silent --max-time 10 "https://staging.$SSH_HOST/health" | grep -q "healthy"; then
           echo "Staging is healthy!"
           exit 0
         fi
