@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage, StateStorage } from "zustand/middleware";
 import { UserPreferences } from "@/features/admin/types";
 
-interface User {
+export interface User {
   id: string;
   email: string;
   role: string | null;
@@ -12,7 +12,7 @@ interface User {
   preferences?: UserPreferences;
 }
 
-interface AuthState {
+export interface AuthState {
   accessToken: string | null;
   user: User | null;
   isAuthenticated: boolean;

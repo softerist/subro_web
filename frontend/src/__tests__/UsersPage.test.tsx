@@ -4,20 +4,8 @@ import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { UsersPage } from "../features/admin/pages/UsersPage";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthStore, type AuthState } from "@/store/authStore";
 import { adminApi } from "../features/admin/api/admin";
-
-interface User {
-  id: string;
-  email: string;
-  role: string | null;
-  is_superuser: boolean;
-}
-
-interface AuthState {
-  item?: string;
-  user: User | null;
-}
 
 // Mock the components and API
 vi.mock("../features/admin/components/UsersTable", () => ({
@@ -85,7 +73,13 @@ describe("UsersPage", () => {
             role: "admin",
             is_superuser: true,
           },
-        }),
+          accessToken: "mock-token",
+          isAuthenticated: true,
+          setAccessToken: vi.fn(),
+          setUser: vi.fn(),
+          login: vi.fn(),
+          logout: vi.fn(),
+        } as AuthState),
     );
     vi.mocked(adminApi.getOpenSignup).mockResolvedValue(true);
 
@@ -123,7 +117,13 @@ describe("UsersPage", () => {
             role: "admin",
             is_superuser: false,
           },
-        }),
+          accessToken: "mock-token",
+          isAuthenticated: true,
+          setAccessToken: vi.fn(),
+          setUser: vi.fn(),
+          login: vi.fn(),
+          logout: vi.fn(),
+        } as AuthState),
     );
 
     // Act

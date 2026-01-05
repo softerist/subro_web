@@ -52,7 +52,7 @@ async def test_api_key_validation_audit():
         patch(
             "app.services.api_validation.validate_google_cloud", new_callable=AsyncMock
         ) as mock_gc,
-        patch("app.services.audit_service.log_event", new_callable=AsyncMock) as mock_log,
+        patch("app.services.audit_service.log_event", autospec=True) as mock_log,
     ):
         mock_crud.get = AsyncMock(return_value=settings_row)
 
