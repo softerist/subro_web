@@ -12,7 +12,7 @@ COMPOSE_IMAGES="$DOCK_DIR/compose.prod.images.yml"
 ENV_FILE="$INFRA_DIR/.env.prod"
 
 # Export variables for compose file expansion
-export ENV_FILE="../.env.prod"
+export PROJECT_ENV_FILE="$ENV_FILE"
 export NETWORK_NAME="infra_internal_net"
 export NETWORK_EXTERNAL="true"
 

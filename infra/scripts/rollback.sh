@@ -8,6 +8,11 @@ CADDYFILE_PROD="$DOCK_DIR/Caddyfile.prod"
 COMPOSE_APP="$DOCK_DIR/compose.prod.yml"
 ENV_FILE="$INFRA_DIR/.env.prod"
 
+# Export variables for compose file expansion
+export PROJECT_ENV_FILE="$ENV_FILE"
+export NETWORK_NAME="infra_internal_net"
+export NETWORK_EXTERNAL="true"
+
 echo "--- Rollback Initiated ---"
 
 # 1. Determine Current Active Color (Bad)

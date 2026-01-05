@@ -6,6 +6,8 @@ INFRA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DOCK_DIR="$INFRA_DIR/docker"
 COMPOSE_APP="$DOCK_DIR/compose.prod.yml"
 COMPOSE_IMAGES="$DOCK_DIR/compose.prod.images.yml"
+COMPOSE_DATA="$DOCK_DIR/compose.data.yml"
+COMPOSE_GATEWAY="$DOCK_DIR/compose.gateway.yml"
 ENV_FILE="$INFRA_DIR/.env.staging"
 
 # Ensure .env.staging exists
@@ -17,7 +19,7 @@ fi
 echo "--- Staging Deployment Started ---"
 
 # Export variables for compose file expansion
-export ENV_FILE="../.env.staging"
+export PROJECT_ENV_FILE="$ENV_FILE"
 export NETWORK_NAME="infra_internal_net"
 export NETWORK_EXTERNAL="true"
 

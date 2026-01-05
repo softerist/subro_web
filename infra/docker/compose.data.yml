@@ -5,7 +5,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     env_file:
-      - ${ENV_FILE:-../.env.prod}
+      - ${PROJECT_ENV_FILE:-../.env.prod}
     environment:
       - PGDATA=/var/lib/postgresql/data/pgdata
     networks:
@@ -41,7 +41,7 @@ services:
     volumes:
       - /backups:/backups
     env_file:
-      - ${ENV_FILE:-../.env.prod}
+      - ${PROJECT_ENV_FILE:-../.env.prod}
     networks:
       - internal_net
     labels:
