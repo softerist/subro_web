@@ -15,8 +15,8 @@ from pathlib import Path
 from sqlalchemy import and_, select
 
 from app.core.config import settings
+from app.db import session as db_session  # Import module, not variable
 from app.db.models.audit_log import AuditLog
-from app.db.session import WorkerSessionLocal, initialize_worker_db_resources
 from app.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -76,8 +76,8 @@ def _serialize_audit_row(row: AuditLog) -> dict:
 
 
 async def _run_audit_export_task(task, filters: dict, actor_user_id: str) -> dict:
-    initialize_worker_db_resources()
-    if WorkerSessionLocal is None:
+    db_session.initialize_worker_db_resources()
+    if db_session.WorkerSessionLocal is None:
         raise RuntimeError("WorkerSessionLocal not initialized")
 
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
@@ -85,7 +85,7 @@ async def _run_audit_export_task(task, filters: dict, actor_user_id: str) -> dic
     filename = _make_export_filename(job_id)
     filepath = EXPORT_DIR / filename
 
-    async with WorkerSessionLocal() as db:
+    async with db_session.WorkerSessionLocal() as db:
         result = await db.execute(_build_export_query(filters))
         count = 0
         with gzip.open(filepath, "wt", encoding="utf-8") as f:

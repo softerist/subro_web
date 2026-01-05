@@ -27,18 +27,19 @@ interface AuditLogTableProps {
   total: number;
   page: number;
   perPage: number;
+  nextCursor: string | null;
   onPageChange: (page: number) => void;
 }
 
 export function AuditLogTable({
   logs,
   isLoading,
-  total,
   page,
-  perPage,
+  nextCursor,
   onPageChange,
 }: AuditLogTableProps) {
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const hasNextPage = Boolean(nextCursor);
 
   const getSeverityBadge = (severity: string) => {
     switch (severity.toLowerCase()) {
@@ -78,107 +79,116 @@ export function AuditLogTable({
     );
   }
 
-  const totalPages = Math.ceil(total / perPage);
-
   return (
     <>
-      <Card className="soft-hover overflow-hidden border-border">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent border-b border-border/40">
-              <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
-                Timestamp
-              </TableHead>
-              <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
-                Severity
-              </TableHead>
-              <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
-                Action
-              </TableHead>
-              <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
-                Actor
-              </TableHead>
-              <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden md:table-cell">
-                IP Address
-              </TableHead>
-              <TableHead className="h-9 text-xs font-semibold text-muted-foreground text-right">
-                Details
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {logs.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
-                  No audit logs found.
-                </TableCell>
+      <Card className="flex flex-col h-full soft-hover overflow-hidden border-border">
+        <div className="flex-1 overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent border-b border-border/40">
+                <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                  Timestamp
+                </TableHead>
+                <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                  Severity
+                </TableHead>
+                <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                  Action
+                </TableHead>
+                <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                  Actor
+                </TableHead>
+                <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden md:table-cell">
+                  IP Address
+                </TableHead>
+                <TableHead className="h-9 text-xs font-semibold text-muted-foreground text-right">
+                  Details
+                </TableHead>
               </TableRow>
-            ) : (
-              logs.map((log) => (
-                <TableRow key={log.id} className="group">
-                  <TableCell className="py-2 text-xs text-muted-foreground">
-                    {format(new Date(log.timestamp), "MMM dd, HH:mm:ss")}
-                  </TableCell>
-                  <TableCell className="py-2">
-                    {getSeverityBadge(log.severity)}
-                  </TableCell>
-                  <TableCell className="py-2 font-mono text-xs">
-                    {log.action}
-                  </TableCell>
-                  <TableCell className="py-2 text-sm">
-                    <div className="flex flex-col">
-                      <span>{log.actor_email || "System"}</span>
-                      {log.impersonator_id && (
-                        <span className="text-[10px] text-yellow-500">
-                          Impersonated
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-2 text-xs text-muted-foreground hidden md:table-cell font-mono">
-                    {log.ip_address}
-                  </TableCell>
-                  <TableCell className="py-2 text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => setSelectedLog(log)}
-                    >
-                      <Eye className="h-4 w-4 text-muted-foreground" />
-                    </Button>
+            </TableHeader>
+            <TableBody>
+              {logs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-24 text-center">
+                    No audit logs found.
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                logs.map((log) => (
+                  <TableRow key={log.id} className="group">
+                    <TableCell className="py-2 text-xs text-muted-foreground">
+                      {format(new Date(log.timestamp), "MMM dd, HH:mm:ss")}
+                    </TableCell>
+                    <TableCell className="py-2">
+                      {getSeverityBadge(log.severity)}
+                    </TableCell>
+                    <TableCell className="py-2 font-mono text-xs">
+                      {log.action}
+                    </TableCell>
+                    <TableCell className="py-2 text-sm">
+                      <div className="flex flex-col">
+                        <span>{log.actor_email || "System"}</span>
+                        {log.impersonator_id && (
+                          <span className="text-[10px] text-yellow-500">
+                            Impersonated
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground hidden md:table-cell font-mono">
+                      {log.ip_address}
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <div className="flex items-center justify-end gap-2">
+                        {log.details && Object.keys(log.details).length > 0 ? (
+                          <span className="text-xs text-muted-foreground font-mono">
+                            {Object.keys(log.details).length}{" "}
+                            {Object.keys(log.details).length === 1
+                              ? "field"
+                              : "fields"}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            —
+                          </span>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => setSelectedLog(log)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border/40">
-            <div className="text-xs text-muted-foreground">
-              Showing {(page - 1) * perPage + 1} to{" "}
-              {Math.min(page * perPage, total)} of {total} results
-            </div>
-            <div className="flex space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onPageChange(page - 1)}
-                disabled={page === 1}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onPageChange(page + 1)}
-                disabled={page === totalPages}
-              >
-                Next
-              </Button>
-            </div>
+        {/* Show More Button */}
+        {hasNextPage && (
+          <div className="flex items-center justify-center px-4 py-4 border-t border-border/40">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(page + 1)}
+              disabled={isLoading}
+            >
+              {isLoading ? "Loading..." : "Show More"}
+            </Button>
+          </div>
+        )}
+
+        {/* Show Less Button (if not on first page) */}
+        {page > 1 && (
+          <div className="flex items-center justify-center px-4 py-2 border-t border-border/40">
+            <Button variant="ghost" size="sm" onClick={() => onPageChange(1)}>
+              Show Less (Back to Top)
+            </Button>
           </div>
         )}
       </Card>

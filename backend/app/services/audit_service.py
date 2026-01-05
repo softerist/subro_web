@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import socket
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -24,6 +25,15 @@ from app.core.request_context import get_request_context
 from app.db.models.audit_log import AuditLog, AuditOutbox
 
 logger = logging.getLogger(__name__)
+
+
+def get_server_ip() -> str:
+    """Get the server's IP address for system events."""
+    try:
+        hostname = socket.gethostname()
+        return socket.gethostbyname(hostname)
+    except Exception:
+        return "127.0.0.1"
 
 
 # Rate Limiter
@@ -81,17 +91,28 @@ ALLOWED_DETAIL_KEYS = {
     "new_label",
     "type",
     "prefix",
-    "impersonator_id",  # Added
-    "request_method",  # Added
-    # Added
-    "request_path",  # Added
-    "status",  # Added
-    "key_id",  # Added
-    "scopes",  # Added
-    "old_status",  # Added
-    "new_status",  # Added
-    "email",  # Added
-    "role",  # Added
+    "impersonator_id",
+    "request_method",
+    "request_path",
+    "status",
+    "key_id",
+    "scopes",
+    "old_status",
+    "new_status",
+    "email",
+    "role",
+    # API validation status keys
+    "tmdb_valid",
+    "tmdb_rate_limited",
+    "omdb_valid",
+    "omdb_rate_limited",
+    "opensubtitles_valid",
+    "opensubtitles_key_valid",
+    "opensubtitles_rate_limited",
+    "google_cloud_valid",
+    "deepl_valid",
+    "validation_count",
+    "apis_validated",
 }
 
 # Severity mapping for actions
@@ -310,7 +331,7 @@ async def log_event(
             "request_method": request_method or (ctx.request_method if ctx else None),
             "request_path": request_path or (ctx.request_path if ctx else None),
             "source": ctx.source if ctx else "web",
-            "ip_address": ctx.ip_address if ctx else "unknown",
+            "ip_address": ctx.ip_address if ctx else get_server_ip(),
             "forwarded_for": ctx.forwarded_for if ctx else None,
             "user_agent": ctx.user_agent if ctx else None,
             "resource_type": resource_type,

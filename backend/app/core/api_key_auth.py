@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.core.request_context import set_actor
 from app.core.security import fastapi_users
 from app.db.models.api_key import ApiKey
 from app.db.models.user import User
@@ -121,6 +122,7 @@ async def get_current_user_with_api_key_or_jwt(
     if api_key:
         user = await get_user_by_api_key(api_key, db)
         if user:
+            set_actor(user_id=str(user.id), email=user.email, actor_type="api_key")
             return user
 
         # Audit Log: Suspicious Token (Invalid API Key)
@@ -145,6 +147,7 @@ async def get_current_user_with_api_key_or_jwt(
 
     # 2. Check JWT (Optional was used, so it's None if not found/valid)
     if user_jwt:
+        set_actor(user_id=str(user_jwt.id), email=user_jwt.email, actor_type="user")
         return user_jwt
 
     # 3. Neither found

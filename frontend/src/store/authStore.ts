@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage, StateStorage } from "zustand/middleware";
 import { UserPreferences } from "@/features/admin/types";
 
 interface User {
@@ -37,6 +37,22 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "auth-storage", // unique name
+      storage: createJSONStorage(() => {
+        if (typeof window !== "undefined" && window.localStorage) {
+          return window.localStorage;
+        }
+        const storageData: Record<string, string> = {};
+        const memoryStorage: StateStorage = {
+          getItem: (name) => storageData[name] ?? null,
+          setItem: (name, value) => {
+            storageData[name] = value;
+          },
+          removeItem: (name) => {
+            delete storageData[name];
+          },
+        };
+        return memoryStorage;
+      }),
       // We only persist the user info maybe? Or token too?
       // Security: Storing access token in localStorage is vulnerable to XSS.
       // Ideally we only store it in memory.

@@ -139,9 +139,11 @@ async def create_user_admin(
             target_user_id=created_user.id,
             details={"role": created_user.role, "email": created_user.email},
         )
+        await session.commit()
         return created_user
     except Exception as e:
         logger.error(f"Error creating user by admin: {e}", exc_info=True)
+        await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"USER_CREATION_FAILED: {e!s}",
@@ -323,10 +325,6 @@ async def delete_user_by_id_admin(
 
     try:
         await session.delete(target_user)
-        await session.commit()
-        logger.info(
-            f"Admin permanently deleted user: {user_email_to_delete} (ID: {user_id_to_delete})"
-        )
 
         # Audit Log
         from app.services import audit_service
@@ -339,6 +337,11 @@ async def delete_user_by_id_admin(
             actor_user_id=current_user.id,
             target_user_id=user_id_to_delete,  # user object is deleted, but ID persists in audit log props
             details={"email": user_email_to_delete},
+        )
+
+        await session.commit()
+        logger.info(
+            f"Admin permanently deleted user: {user_email_to_delete} (ID: {user_id_to_delete})"
         )
     except Exception as e:  # Catching a general Exception here
         await session.rollback()

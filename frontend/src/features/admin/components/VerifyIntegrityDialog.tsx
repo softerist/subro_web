@@ -21,6 +21,8 @@ export function VerifyIntegrityDialog() {
   const [result, setResult] = useState<{
     verified: boolean;
     issues: string[];
+    checkedCount: number | null;
+    corruptedCount: number | null;
   } | null>(null);
 
   const handleVerify = async () => {
@@ -75,6 +77,11 @@ export function VerifyIntegrityDialog() {
                   <AlertTitle className="text-emerald-500">Verified</AlertTitle>
                   <AlertDescription className="text-emerald-500/90">
                     The audit log chain is intact. No tampering detected.
+                    {result.checkedCount !== null && (
+                      <span className="block mt-1 text-xs text-emerald-500/80">
+                        Checked {result.checkedCount} entries.
+                      </span>
+                    )}
                   </AlertDescription>
                 </Alert>
               ) : (
@@ -84,6 +91,11 @@ export function VerifyIntegrityDialog() {
                   <AlertDescription>
                     Detected {result.issues.length} potential inconsistencies in
                     the hash chain.
+                    {result.checkedCount !== null && (
+                      <span className="block mt-1 text-xs">
+                        Checked {result.checkedCount} entries.
+                      </span>
+                    )}
                   </AlertDescription>
                 </Alert>
               )}

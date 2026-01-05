@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.rate_limit import get_real_client_ip, limiter
+from app.core.request_context import set_actor
 from app.core.security_logger import security_log
 from app.core.users import (
     UserManager,
@@ -175,6 +176,7 @@ async def custom_login(
     await clear_failed_attempts(db, email)
 
     # Audit Log: Success
+    set_actor(user_id=str(user.id), email=user.email, actor_type="user")
     await audit_service.log_event(
         db,
         category="auth",

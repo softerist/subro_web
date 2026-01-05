@@ -7,7 +7,8 @@ import logging
 from datetime import date
 
 from dateutil.relativedelta import relativedelta
-from sqlalchemy import text
+from sqlalchemy import func, select
+from sqlalchemy.schema import DDL
 
 from app.db.session import WorkerSessionLocal, initialize_worker_db_resources
 from app.tasks.celery_app import celery_app
@@ -52,11 +53,11 @@ async def manage_audit_partitions():
             end_str = m_end.strftime("%Y-%m-01")
 
             # Check if partition exists
-            check_query = text(f"SELECT to_regclass('public.{table_name}')")
+            check_query = select(func.to_regclass(f"public.{table_name}"))
             result = await db.execute(check_query)
             if result.scalar() is None:
                 logger.warning(f"Partition {table_name} missing. Creating...")
-                create_query = text(
+                create_query = DDL(
                     f"CREATE TABLE IF NOT EXISTS {table_name} "
                     f"PARTITION OF audit_logs "
                     f"FOR VALUES FROM ('{start_str}') TO ('{end_str}')"

@@ -451,6 +451,143 @@ async def validate_deepl_keys_background(  # noqa: C901
     logger.info("Background DeepL validation completed.")
 
 
+async def _apply_tmdb_validation(settings_row, tmdb_key: str | None) -> None:
+    if tmdb_key:
+        tmdb_result = await validate_tmdb(tmdb_key)
+        settings_row.tmdb_valid = tmdb_result["valid"]
+        settings_row.tmdb_rate_limited = tmdb_result["rate_limited"]
+        return
+
+    settings_row.tmdb_valid = None
+    settings_row.tmdb_rate_limited = None
+
+
+async def _apply_omdb_validation(settings_row, omdb_key: str | None) -> None:
+    if omdb_key:
+        omdb_result = await validate_omdb(omdb_key)
+        settings_row.omdb_valid = omdb_result["valid"]
+        settings_row.omdb_rate_limited = omdb_result["rate_limited"]
+        return
+
+    settings_row.omdb_valid = None
+    settings_row.omdb_rate_limited = None
+
+
+async def _apply_opensubtitles_validation(
+    settings_row,
+    os_api_key: str | None,
+    os_username: str | None,
+    os_password: str | None,
+) -> None:
+    if os_api_key:
+        u_arg = str(os_username) if os_username else None
+        p_arg = str(os_password) if os_password else None
+
+        os_result = await validate_opensubtitles(str(os_api_key), u_arg, p_arg)
+        settings_row.opensubtitles_key_valid = os_result["key_valid"]
+        settings_row.opensubtitles_valid = os_result["login_valid"]
+        settings_row.opensubtitles_rate_limited = os_result["rate_limited"]
+        settings_row.opensubtitles_level = os_result["level"]
+        settings_row.opensubtitles_vip = os_result["vip"]
+        settings_row.opensubtitles_allowed_downloads = os_result["allowed_downloads"]
+        return
+
+    settings_row.opensubtitles_key_valid = None
+    settings_row.opensubtitles_valid = None
+    settings_row.opensubtitles_rate_limited = None
+    settings_row.opensubtitles_level = None
+    settings_row.opensubtitles_vip = None
+    settings_row.opensubtitles_allowed_downloads = None
+
+
+async def _apply_google_validation(settings_row, google_creds: str | None) -> None:
+    if google_creds:
+        is_valid, project_id, _error_msg = await validate_google_cloud(google_creds)
+        settings_row.google_cloud_valid = is_valid
+        settings_row.google_cloud_project_id = project_id
+        return
+
+    from app.core.config import settings as env_settings
+
+    if getattr(env_settings, "GOOGLE_CREDENTIALS_PATH", None):
+        return
+
+
+def _collect_validation_details(settings_row) -> dict:
+    apis_validated = []
+    if getattr(settings_row, "tmdb_valid", None) is not None:
+        apis_validated.append("TMDB")
+    if getattr(settings_row, "omdb_valid", None) is not None:
+        apis_validated.append("OMDB")
+    if getattr(settings_row, "opensubtitles_valid", None) is not None:
+        apis_validated.append("OpenSubtitles")
+    if getattr(settings_row, "google_cloud_valid", None) is not None:
+        apis_validated.append("Google Cloud")
+
+    details = {
+        "tmdb_valid": getattr(settings_row, "tmdb_valid", None),
+        "tmdb_rate_limited": getattr(settings_row, "tmdb_rate_limited", None),
+        "omdb_valid": getattr(settings_row, "omdb_valid", None),
+        "omdb_rate_limited": getattr(settings_row, "omdb_rate_limited", None),
+        "opensubtitles_valid": getattr(settings_row, "opensubtitles_valid", None),
+        "opensubtitles_key_valid": getattr(settings_row, "opensubtitles_key_valid", None),
+        "opensubtitles_rate_limited": getattr(settings_row, "opensubtitles_rate_limited", None),
+        "google_cloud_valid": getattr(settings_row, "google_cloud_valid", None),
+        "validation_count": len(apis_validated),
+        "apis_validated": ", ".join(apis_validated),
+    }
+    return details
+
+
+async def _log_validation_event(db: AsyncSession, settings_row) -> None:
+    details = _collect_validation_details(settings_row)
+    await audit_service.log_event(
+        db,
+        category="security",
+        action="security.api_validation",
+        severity="info" if getattr(settings_row, "tmdb_valid", False) else "warning",
+        details=details,
+    )
+
+
+async def _trigger_deepl_validation(db: AsyncSession) -> None:
+    deepl_keys = await crud_app_settings.get_decrypted_value(db, "deepl_api_keys")
+    logger.info(
+        "DeepL keys retrieved for validation: %s - count: %s",
+        type(deepl_keys),
+        len(deepl_keys) if isinstance(deepl_keys, list) else "N/A",
+    )
+
+    if deepl_keys and isinstance(deepl_keys, list):
+        import asyncio
+
+        from app.db.session import FastAPISessionLocal
+
+        if FastAPISessionLocal:
+            logger.info(
+                "Creating background task for %s DeepL keys validation...",
+                len(deepl_keys),
+            )
+            asyncio.create_task(  # noqa: RUF006
+                validate_deepl_keys_background(deepl_keys, FastAPISessionLocal)
+            )
+            logger.info("Background task created successfully for DeepL validation.")
+        else:
+            logger.error("FastAPISessionLocal is None, cannot trigger DeepL background validation!")
+    else:
+        logger.warning("No DeepL keys found to validate. deepl_keys = %s", deepl_keys)
+
+
+def _log_validation_summary(settings_row) -> None:
+    logger.info(
+        "Validation status updated: TMDB=%s, OMDB=%s, OS_Key=%s, OS_Login=%s.",
+        settings_row.tmdb_valid,
+        settings_row.omdb_valid,
+        settings_row.opensubtitles_key_valid,
+        settings_row.opensubtitles_valid,
+    )
+
+
 async def validate_all_settings(db: AsyncSession) -> None:
     """
     Fetch current settings, validate configured credentials, and update validation status in DB.
@@ -467,109 +604,20 @@ async def validate_all_settings(db: AsyncSession) -> None:
         os_password = await crud_app_settings.get_decrypted_value(db, "opensubtitles_password")
 
         # 1. Validate General API keys (fast)
-        if tmdb_key:
-            tmdb_result = await validate_tmdb(tmdb_key)
-            settings_row.tmdb_valid = tmdb_result["valid"]
-            settings_row.tmdb_rate_limited = tmdb_result["rate_limited"]
-        else:
-            settings_row.tmdb_valid = None
-            settings_row.tmdb_rate_limited = None
-
-        # OMDB validation with direct rate limit detection
-        if omdb_key:
-            omdb_result = await validate_omdb(omdb_key)
-            settings_row.omdb_valid = omdb_result["valid"]
-            settings_row.omdb_rate_limited = omdb_result["rate_limited"]
-        else:
-            settings_row.omdb_valid = None
-            settings_row.omdb_rate_limited = None
-
-        if os_api_key:
-            u_arg = str(os_username) if os_username else None
-            p_arg = str(os_password) if os_password else None
-
-            os_result = await validate_opensubtitles(str(os_api_key), u_arg, p_arg)
-            settings_row.opensubtitles_key_valid = os_result["key_valid"]
-            settings_row.opensubtitles_valid = os_result["login_valid"]
-            settings_row.opensubtitles_rate_limited = os_result["rate_limited"]
-            settings_row.opensubtitles_level = os_result["level"]
-            settings_row.opensubtitles_vip = os_result["vip"]
-            settings_row.opensubtitles_allowed_downloads = os_result["allowed_downloads"]
-        else:
-            settings_row.opensubtitles_key_valid = None
-            settings_row.opensubtitles_valid = None
-            settings_row.opensubtitles_rate_limited = None
-            settings_row.opensubtitles_level = None
-            settings_row.opensubtitles_vip = None
-            settings_row.opensubtitles_allowed_downloads = None
+        await _apply_tmdb_validation(settings_row, tmdb_key)
+        await _apply_omdb_validation(settings_row, omdb_key)
+        await _apply_opensubtitles_validation(settings_row, os_api_key, os_username, os_password)
 
         # 2. Validate Google Cloud Translation
         google_creds = await crud_app_settings.get_decrypted_value(db, "google_cloud_credentials")
-        if google_creds:
-            is_valid, project_id, _error_msg = await validate_google_cloud(google_creds)
-            settings_row.google_cloud_valid = is_valid
-            settings_row.google_cloud_project_id = project_id
-        else:
-            # Check env fallback if DB is empty
-            from app.core.config import settings as env_settings
+        await _apply_google_validation(settings_row, google_creds)
 
-            if getattr(env_settings, "GOOGLE_CREDENTIALS_PATH", None):
-                # We don't perform live validation for env file path here to avoid blocking
-                # but we mark as potentially valid if it exists.
-                # Actually, better to leave as None or True based on config presence.
-                # SettingsRead.google_cloud_valid handles the display logic for env.
-                pass
-
-        # --- Audit Log Enhancements ---
-        await audit_service.log_event(
-            db,
-            category="security",
-            action="security.api_validation",
-            severity="info" if getattr(settings_row, "tmdb_valid", False) else "warning",
-            details={
-                "tmdb_valid": getattr(settings_row, "tmdb_valid", None),
-                "omdb_valid": getattr(settings_row, "omdb_valid", None),
-                "opensubtitles_valid": getattr(settings_row, "opensubtitles_valid", None),
-                "google_cloud_valid": getattr(settings_row, "google_cloud_valid", None),
-            },
-        )
-
+        await _log_validation_event(db, settings_row)
         await db.commit()
 
         # 3. Trigger DeepL Validation in Background
-        # We need to get the keys first
-        deepl_keys = await crud_app_settings.get_decrypted_value(db, "deepl_api_keys")
-        logger.info(
-            f"DeepL keys retrieved for validation: {type(deepl_keys)} - count: {len(deepl_keys) if isinstance(deepl_keys, list) else 'N/A'}"
-        )
-
-        if deepl_keys and isinstance(deepl_keys, list):
-            # We need to pass the session maker, not the current session.
-            import asyncio
-
-            from app.db.session import FastAPISessionLocal
-
-            if FastAPISessionLocal:
-                logger.info(
-                    f"Creating background task for {len(deepl_keys)} DeepL keys validation..."
-                )
-                asyncio.create_task(  # noqa: RUF006
-                    validate_deepl_keys_background(deepl_keys, FastAPISessionLocal)
-                )
-                logger.info("Background task created successfully for DeepL validation.")
-            else:
-                logger.error(
-                    "FastAPISessionLocal is None, cannot trigger DeepL background validation!"
-                )
-        else:
-            logger.warning(f"No DeepL keys found to validate. deepl_keys = {deepl_keys}")
-
-        logger.info(
-            f"Validation status updated: TMDB={settings_row.tmdb_valid}, "
-            f"OMDB={settings_row.omdb_valid}, "
-            f"OS_Key={settings_row.opensubtitles_key_valid}, "
-            f"OS_Login={settings_row.opensubtitles_valid}."
-        )
+        await _trigger_deepl_validation(db)
+        _log_validation_summary(settings_row)
 
     except Exception as e:
         await db.rollback()

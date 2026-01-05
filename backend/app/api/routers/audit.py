@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.users import get_current_active_admin_user
 from app.db.models.audit_log import AuditLog
 from app.db.models.user import User
-from app.db.session import WorkerSessionLocal, get_async_session, initialize_worker_db_resources
+from app.db.session import get_async_session
 from app.services import audit_service
 from app.tasks.audit_export import EXPORT_DIR, run_audit_export
 from app.tasks.celery_app import celery_app
@@ -65,6 +65,7 @@ def _build_audit_conditions(
     action: str | None,
     severity: str | None,
     actor_user_id: str | None,
+    actor_email: str | None,
     target_user_id: str | None,
     resource_type: str | None,
     resource_id: str | None,
@@ -77,7 +78,6 @@ def _build_audit_conditions(
 
     eq_filters = [
         (category, AuditLog.category),
-        (action, AuditLog.action),
         (severity, AuditLog.severity),
         (resource_type, AuditLog.resource_type),
         (resource_id, AuditLog.resource_id),
@@ -86,6 +86,14 @@ def _build_audit_conditions(
     for value, column in eq_filters:
         if value:
             conditions.append(column == value)
+
+    # Action filter uses LIKE for partial matching
+    if action:
+        conditions.append(AuditLog.action.ilike(f"%{action}%"))
+
+    # Actor email filter uses LIKE for partial matching
+    if actor_email:
+        conditions.append(AuditLog.actor_email.ilike(f"%{actor_email}%"))
 
     if actor_user_id:
         conditions.append(
@@ -199,12 +207,13 @@ class AuditVerifyResponse(BaseModel):
 async def list_audit_logs(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     _current_user: Annotated[User, Depends(get_current_active_admin_user)],
-    cursor: str | None = Query(None, description="Cursor for pagination"),
+    cursor: str | None = Query(None, description="Filter for pagination"),
     limit: int = Query(50, ge=1, le=100, description="Max items to return"),
     category: str | None = Query(None, description="Filter by category"),
     action: str | None = Query(None, description="Filter by action"),
     severity: str | None = Query(None, description="Filter by severity"),
     actor_user_id: str | None = Query(None, description="Filter by actor user ID"),
+    actor_email: str | None = Query(None, description="Filter by actor email"),
     target_user_id: str | None = Query(None, description="Filter by target user ID"),
     resource_type: str | None = Query(None, description="Filter by resource type"),
     resource_id: str | None = Query(None, description="Filter by resource ID"),
@@ -230,6 +239,7 @@ async def list_audit_logs(
         action=action,
         severity=severity,
         actor_user_id=actor_user_id,
+        actor_email=actor_email,
         target_user_id=target_user_id,
         resource_type=resource_type,
         resource_id=resource_id,
@@ -327,10 +337,6 @@ async def export_audit_logs(
     current_user: Annotated[User, Depends(get_current_active_admin_user)],
 ):
     """Start an asynchronous audit log export."""
-    initialize_worker_db_resources()
-    if WorkerSessionLocal is None:
-        raise RuntimeError("WorkerSessionLocal not initialized")
-
     # Audit Log: Export Initiation
     await audit_service.log_event(
         db,

@@ -13,8 +13,8 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db import session as db_session  # Import module, not variable
 from app.db.models.audit_log import AuditLog, AuditOutbox
-from app.db.session import WorkerSessionLocal, initialize_worker_db_resources
 from app.services.audit_service import compute_event_hash, get_last_hash
 from app.tasks.celery_app import celery_app
 
@@ -26,10 +26,10 @@ def audit_worker_batch_task(batch_size: int = 100):
     """Celery task wrapper for outbox processing."""
 
     async def _run():
-        initialize_worker_db_resources()
-        if WorkerSessionLocal is None:
+        db_session.initialize_worker_db_resources()
+        if db_session.WorkerSessionLocal is None:
             raise RuntimeError("WorkerSessionLocal not initialized")
-        async with WorkerSessionLocal() as db:
+        async with db_session.WorkerSessionLocal() as db:
             return await process_outbox_batch(db, batch_size)
 
     return asyncio.run(_run())
