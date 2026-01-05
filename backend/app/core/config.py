@@ -481,57 +481,53 @@ class Settings(BaseSettings):
 
     @computed_field(repr=False)
     @property
-    def ASYNC_SQLALCHEMY_DATABASE_URL(self) -> PostgresDsn:
-        return self._build_postgres_dsn(self.PRIMARY_DATABASE_URL_ENV, use_async=True)
+    def ASYNC_SQLALCHEMY_DATABASE_URL(self) -> str:
+        return str(self._build_postgres_dsn(self.PRIMARY_DATABASE_URL_ENV, use_async=True))
 
     @computed_field(repr=False)
     @property
-    def ASYNC_SQLALCHEMY_DATABASE_URL_WORKER(self) -> PostgresDsn:
+    def ASYNC_SQLALCHEMY_DATABASE_URL_WORKER(self) -> str:
         base_for_worker = (
             self.ASYNC_SQLALCHEMY_DATABASE_URL_WORKER_ENV or self.PRIMARY_DATABASE_URL_ENV
         )
-        return self._build_postgres_dsn(base_for_worker, use_async=True)
+        return str(self._build_postgres_dsn(base_for_worker, use_async=True))
 
     @computed_field(repr=False)
     @property
-    def SYNC_SQLALCHEMY_DATABASE_URL(self) -> PostgresDsn:
-        return self._build_postgres_dsn(self.PRIMARY_DATABASE_URL_ENV, use_async=False)
+    def SYNC_SQLALCHEMY_DATABASE_URL(self) -> str:
+        return str(self._build_postgres_dsn(self.PRIMARY_DATABASE_URL_ENV, use_async=False))
 
     @property
-    def CELERY_BROKER_URL(self) -> RedisDsn | None:
+    def CELERY_BROKER_URL(self) -> str | None:
         if self.CELERY_BROKER_URL_ENV:
-            return self.CELERY_BROKER_URL_ENV
+            return str(self.CELERY_BROKER_URL_ENV)
         if self.REDIS_HOST:  # Construct if not provided explicitly
             try:
-                return RedisDsn(f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0")
+                return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
             except Exception as e:  # Catch Pydantic validation error or others
                 logger.error(f"Failed to build CELERY_BROKER_URL from components: {e}")
                 return None
         return None  # No explicit URL and no components to build from
 
     @property
-    def CELERY_RESULT_BACKEND(self) -> RedisDsn | None:
+    def CELERY_RESULT_BACKEND(self) -> str | None:
         if self.CELERY_RESULT_BACKEND_ENV:
-            return self.CELERY_RESULT_BACKEND_ENV
+            return str(self.CELERY_RESULT_BACKEND_ENV)
         if self.REDIS_HOST:
             try:
-                return RedisDsn(
-                    f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/1"
-                )  # Different DB for results
+                return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/1"  # Different DB for results
             except Exception as e:
                 logger.error(f"Failed to build CELERY_RESULT_BACKEND from components: {e}")
                 return None
         return None
 
     @property
-    def REDIS_PUBSUB_URL(self) -> RedisDsn | None:
+    def REDIS_PUBSUB_URL(self) -> str | None:
         if self.REDIS_PUBSUB_URL_ENV:
-            return self.REDIS_PUBSUB_URL_ENV
+            return str(self.REDIS_PUBSUB_URL_ENV)
         if self.REDIS_HOST:
             try:
-                return RedisDsn(
-                    f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/2"
-                )  # Different DB for pubsub
+                return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/2"  # Different DB for pubsub
             except Exception as e:
                 logger.error(f"Failed to build REDIS_PUBSUB_URL from components: {e}")
                 return None
