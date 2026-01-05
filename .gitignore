@@ -117,6 +117,125 @@ Desktop.ini
 nltk_data/
 **/nltk_data/
 *.pickle
+# --- General ---
+*.log
+*.bak
+*.swp
+*~
+.#*
+.smart-coding-cache/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyd
+.Python
+
+# Packaging / build artifacts
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+develop-eggs/
+parts/
+sdist/
+typings/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.manifest
+*.spec
+
+# Test / coverage / tooling
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+nosetests.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+.cache/
+.ruff_cache/
+
+# --- Environment Files ---
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Poetry
+.poetry/
+# NOTE: usually you *commit* poetry.lock for apps; ignore only if you mean to
+poetry.lock
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Yarn / PnP
+.pnp/
+.pnp.js
+.pnp.loader.mjs
+.yarn-integrity
+
+# Vite / builds / coverage
+dist/
+dist-ssr/
+.vite/
+coverage/
+
+# --- Docker ---
+docker-compose.override.yml
+# .dockerignore
+
+# --- IDE / System ---
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.sublime-workspace
+*.sublime-project
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- Secrets ---
+*.pem
+*.key
+
+# --- NLTK Data (downloaded at build time) ---
+nltk_data/
+**/nltk_data/
+*.pickle
 punkt.zip
 heuristic-mcp
 heuristic-mcp-repo
@@ -126,5 +245,6 @@ heuristic-mcp-repo
 backend/secrets/*.json
 backend/secrets/*.pem
 backend/secrets/*.key
+backend/celerybeat-schedule.db
 backend/celerybeat-sc*
 backend/exports/audit/audit_export*
