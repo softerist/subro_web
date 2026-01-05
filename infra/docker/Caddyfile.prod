@@ -38,13 +38,19 @@
         }
 }
 
-# HTTP listener on port 80 (for nginx reverse proxy)
-http://:80 {
+# Production domain (supports both port 80 via proxy and direct 443)
+http://{$DOMAIN_NAME}, {$DOMAIN_NAME} {
         import common_security_headers
 
         # Define named matchers
         @api path /api*
         @websockets path /ws*
+        @health path /health
+
+        # 0. Handle Health Check requests (for CI/CD verification)
+        route @health {
+                reverse_proxy blue-api-1:8000
+        }
 
         # 1. Handle API requests
         route @api {
@@ -84,7 +90,7 @@ http://:80 {
         }
 }
 
-# Match requests for your domain (or catch-all for single-tenant VPS)
+# Production domain (HTTPS block with explicit health route)
 {$DOMAIN_NAME} {
         # TLS is automatic with Caddy for valid public domains.
 
@@ -93,8 +99,14 @@ http://:80 {
         # Define named matchers
         @api path /api*
         @websockets path /ws*
+        @health path /health
 
-        # 1. Handle API requests (including WebSockets at /api/v1/ws/...)
+        # 0. Handle Health Check requests
+        route @health {
+                reverse_proxy blue-api-1:8000
+        }
+
+        # 1. Handle API requests
         route @api {
                 reverse_proxy blue-api-1:8000 {
                         lb_try_duration 5s
@@ -118,9 +130,6 @@ http://:80 {
 
         # 3. Handle Frontend (SPA)
         route {
-                # Serve static files from /srv (needs to be mounted/copied in prod Dockerfile)
-                # OR reverse proxy to a node server if using SSR / separate frontend container
-                # Since we have a 'frontend' service in docker-compose.prod which is likely nginx or similar:
                 reverse_proxy blue-frontend-1:8080 {
                         header_up Connection {http.request.header.Connection}
                         header_up Upgrade {http.request.header.Upgrade}
@@ -135,12 +144,17 @@ http://:80 {
         }
 }
 
-# Staging domain
-staging.{$DOMAIN_NAME} {
+# Staging domain (supports both port 80 via proxy and direct 443)
+http://staging.{$DOMAIN_NAME}, staging.{$DOMAIN_NAME} {
         import common_security_headers
 
         @api path /api*
         @websockets path /ws*
+        @health path /health
+
+        route @health {
+                reverse_proxy subro_staging-api-1:8000
+        }
 
         route @api {
                 reverse_proxy subro_staging-api-1:8000 {
