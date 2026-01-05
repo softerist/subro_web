@@ -10,6 +10,7 @@ stages:
   - scan
   - deploy
   - verify
+  - release
 
 # -------- Global Variables --------
 variables:
@@ -352,3 +353,36 @@ verify_prod:
       done
       echo "Production health check failed!"
       exit 1
+
+# ============ RELEASE STAGE ============
+release_version:
+  stage: release
+  image: python:3.12-slim
+  variables:
+    GIT_STRATEGY: clone
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\): bump version/'
+      when: on_success
+  before_script:
+    - apt-get update && apt-get install -y git
+    - git config --global user.email "ci-bot@gitlab.com"
+    - git config --global user.name "CI Bot"
+    # Authenticate with git using the CI_JOB_TOKEN or a Project Access Token if write access is needed
+    # Using HTTPS with token for push
+    - git remote set-url origin https://oauth2:$GIT_PUSH_TOKEN@gitlab.com/$CI_PROJECT_PATH.git
+  script:
+    - echo "Bumping version..."
+    - python3 backend/scripts/bump_version.py
+
+    # Check for changes
+    - |
+      if [[ -n $(git status --porcelain) ]]; then
+        git add backend/pyproject.toml backend/app/core/config.py
+        # Extract new version for commit message
+        NEW_VERSION=$(grep 'version = ' backend/pyproject.toml | head -n 1 | cut -d '"' -f 2)
+        git commit -m "chore(release): bump version to $NEW_VERSION [skip ci]"
+        git push origin HEAD:$CI_COMMIT_BRANCH
+        echo "Version bumped to $NEW_VERSION and pushed to $CI_COMMIT_BRANCH"
+      else
+        echo "No version changes detected."
+      fi

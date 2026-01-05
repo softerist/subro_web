@@ -59,23 +59,52 @@ async def init_db(db: AsyncSession) -> None:
         logger.warning(f"Initial settings validation encountered issues: {e}")
 
     # 2. Handle Default Storage Paths
+    await create_default_paths(db)
+
+
+async def _create_default_downloads_path(db: AsyncSession) -> None:
+    """Helper to ensure the default /downloads path exists."""
     from app.crud.crud_storage_path import storage_path as crud_storage_path
     from app.schemas.storage_path import StoragePathCreate
 
     default_path = "/downloads"
     if Path(default_path).exists():
-        existing_path = await crud_storage_path.get_by_path(db, path=default_path)
-        if not existing_path:
+        if not await crud_storage_path.get_by_path(db, path=default_path):
             await crud_storage_path.create(
                 db, obj_in=StoragePathCreate(path=default_path, label="Default Downloads")
             )
             logger.info(f"Created default storage path: {default_path}")
+
+
+async def _create_env_storage_paths(db: AsyncSession) -> None:
+    """Helper to populate storage paths from environment variables."""
+    from app.crud.crud_storage_path import storage_path as crud_storage_path
+    from app.schemas.storage_path import StoragePathCreate
+
+    if not settings.ALLOWED_MEDIA_FOLDERS:
+        return
+
+    for folder in settings.ALLOWED_MEDIA_FOLDERS:
+        folder_path = folder.strip()
+        if not folder_path:
+            continue
+
+        p = Path(folder_path)
+        if p.exists() and p.is_dir():
+            if not await crud_storage_path.get_by_path(db, path=folder_path):
+                label = f"Media: {p.name}"
+                await crud_storage_path.create(
+                    db, obj_in=StoragePathCreate(path=folder_path, label=label)
+                )
+                logger.info(f"Created storage path from env: {folder_path}")
         else:
-            logger.info(f"Default storage path {default_path} already exists.")
-    else:
-        logger.warning(
-            f"Default path {default_path} does not exist in container. Skipping creation."
-        )
+            logger.warning(f"Env path {folder_path} not found in container. Skipping.")
+
+
+async def create_default_paths(db: AsyncSession) -> None:
+    """Creates default storage paths from legacy defaults and environment variables."""
+    await _create_default_downloads_path(db)
+    await _create_env_storage_paths(db)
 
     # 3. Handle Superuser and Setup Status
     app_settings = await crud_app_settings.get(db)
