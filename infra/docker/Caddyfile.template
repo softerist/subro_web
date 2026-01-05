@@ -153,6 +153,11 @@ staging.{$DOMAIN_NAME} {
 
 	@api path /api*
 	@websockets path /ws*
+	@health path /health
+
+	route @health {
+		reverse_proxy subro_staging-api-1:8000
+	}
 
 	route @api {
 		reverse_proxy subro_staging-api-1:8000 {

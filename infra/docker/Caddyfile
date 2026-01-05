@@ -26,8 +26,14 @@ https://localhost:8444 {
 	# Define named matchers for clarity
 	@api path /api*      # Matches /api and /api/*
 	@websockets path /ws* # Matches /ws and /ws/*
+	@health path /health  # Health Check
 
 	# IMPORTANT: Use route blocks for explicit ordering and control
+
+	# 0. Handle Health Check requests
+	route @health {
+		reverse_proxy api:8000
+	}
 
 	# 1. Handle API requests - NO rewrite/strip should happen here
 	route @api {

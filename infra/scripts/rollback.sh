@@ -71,7 +71,7 @@ sed "s/{{UPSTREAM_API}}/$OLD_WORKING_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$OLD
 
 # Reload Caddy
 COMPOSE_GATEWAY="$DOCK_DIR/compose.gateway.yml"
-docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec caddy caddy reload --config /etc/caddy/Caddyfile.prod
+docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T caddy caddy reload --config /etc/caddy/Caddyfile.prod
 
 # 6. Stop Bad Color
 echo "--- Stopping Bad Color ($CURRENT_MALFUNCTIONING_COLOR) ---"

@@ -508,7 +508,8 @@ release_version:
         NEW_VERSION=$(grep 'version = ' backend/pyproject.toml | head -n 1 | cut -d '"' -f 2)
         git commit -m "chore(release): bump version to $NEW_VERSION"
         git push origin HEAD:$CI_COMMIT_BRANCH
-        echo "Version bumped to $NEW_VERSION and pushed to $CI_COMMIT_BRANCH"
+        git push gitlab HEAD:$CI_COMMIT_BRANCH
+        echo "Version bumped to $NEW_VERSION and pushed to origin and gitlab ($CI_COMMIT_BRANCH)"
       else
         echo "No version changes detected."
       fi

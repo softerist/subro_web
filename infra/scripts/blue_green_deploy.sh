@@ -178,7 +178,7 @@ fi
 sed "s/{{UPSTREAM_API}}/$NEW_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$NEW_COLOR-frontend-1/g" "$TEMPLATE" > "$CADDYFILE_PROD"
 
 # Reload Caddy (in infra project)
-docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec caddy caddy reload --config /etc/caddy/Caddyfile.prod
+docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T caddy caddy reload --config /etc/caddy/Caddyfile.prod
 
 echo "--- Traffic Switched ---"
 
