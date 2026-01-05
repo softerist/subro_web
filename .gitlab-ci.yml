@@ -608,6 +608,7 @@ rollback_prod:
       echo "Rolling back to previous version..."
       ssh -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
         cd /opt/subro_web
+        chmod +x ./infra/scripts/*.sh
         if [ -f ./infra/scripts/rollback.sh ]; then
           ./infra/scripts/rollback.sh
         else
