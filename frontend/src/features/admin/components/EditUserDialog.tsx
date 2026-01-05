@@ -94,12 +94,12 @@ export function EditUserDialog({
   const form = useForm<EditUserFormValues>({
     resolver: zodResolver(editUserSchema),
     defaultValues: {
-      email: "",
-      role: "standard",
-      is_active: true,
-      is_verified: false,
-      force_password_change: false,
-      mfa_enabled: false,
+      email: user?.email || "",
+      role: user?.role || "standard",
+      is_active: user?.is_active ?? true,
+      is_verified: user?.is_verified ?? false,
+      force_password_change: user?.force_password_change ?? false,
+      mfa_enabled: user?.mfa_enabled ?? false,
       new_password: "",
       confirm_password: "",
     },
@@ -232,6 +232,7 @@ export function EditUserDialog({
                   <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                     <FormControl>
                       <Checkbox
+                        data-testid="active-checkbox"
                         checked={field.value}
                         onCheckedChange={field.onChange}
                       />
@@ -286,6 +287,7 @@ export function EditUserDialog({
                     <FormLabel>New Password</FormLabel>
                     <FormControl>
                       <Input
+                        data-testid="new-password-input"
                         type="password"
                         placeholder="Leave blank to keep current password"
                         {...field}
@@ -304,6 +306,7 @@ export function EditUserDialog({
                     <FormLabel>Confirm Password</FormLabel>
                     <FormControl>
                       <Input
+                        data-testid="confirm-password-input"
                         type="password"
                         placeholder="Confirm new password"
                         {...field}

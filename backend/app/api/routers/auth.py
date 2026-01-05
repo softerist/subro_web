@@ -28,6 +28,7 @@ from app.db.models.user import User as UserModel  # Your DB model, aliased
 from app.db.session import get_async_session
 from app.schemas.auth import Token
 from app.schemas.user import UserCreate, UserRead  # UserCreate for register router
+from app.services import audit_service
 
 logger = logging.getLogger(__name__)
 
@@ -109,12 +110,43 @@ async def custom_login(
         logger.info(f"Applying {delay_status.delay_seconds}s delay for {email}")
         await asyncio.sleep(delay_status.delay_seconds)
 
+    # 1. Check if account is suspended BEFORE authenticating
+    # We fetch the user manually here to check status
+    from sqlalchemy import select
+
+    res = await db.execute(select(UserModel).where(UserModel.email == email))
+    pre_auth_user = res.scalar_one_or_none()
+
+    if pre_auth_user and pre_auth_user.status == "suspended":
+        logger.warning(f"Login attempt for suspended user: {email}")
+        await audit_service.log_event(
+            db,
+            category="auth",
+            action="auth.login",
+            severity="warning",
+            success=False,
+            target_user_id=pre_auth_user.id,
+            details={"reason": "ACCOUNT_SUSPENDED"},
+        )
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="LOGIN_BAD_CREDENTIALS")
+
     # Attempt authentication
     user = await user_manager.authenticate(credentials)
 
     if user is None:
         # Record failed attempt
         await record_login_attempt(db, email, client_ip, success=False, user_agent=user_agent)
+
+        # Audit Log: Failed Login
+        await audit_service.log_event(
+            db,
+            category="auth",
+            action="auth.login",
+            success=False,
+            details={"reason": "INVALID_CREDENTIALS"},
+        )
+        await db.commit()
 
         # Get updated delay info for logging
         updated_delay = await get_progressive_delay(db, email)
@@ -127,11 +159,29 @@ async def custom_login(
     if not user.is_active:
         logger.warning(f"Login attempt for inactive user: {user.email} (ID: {user.id})")
         security_log.failed_login(client_ip, email, "USER_INACTIVE")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="LOGIN_USER_INACTIVE")
+        await audit_service.log_event(
+            db,
+            category="auth",
+            action="auth.login",
+            success=False,
+            target_user_id=user.id,
+            details={"reason": "USER_INACTIVE"},
+        )
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="LOGIN_BAD_CREDENTIALS")
 
     # Successful password authentication - record and clear failed attempts
     await record_login_attempt(db, email, client_ip, success=True, user_agent=user_agent)
     await clear_failed_attempts(db, email)
+
+    # Audit Log: Success
+    await audit_service.log_event(
+        db,
+        category="auth",
+        action="auth.login",
+        success=True,
+    )
+    await db.commit()
 
     # SECURITY: Superusers/admins should have MFA enabled
     # We allow login but flag the response so frontend shows persistent warning
@@ -222,6 +272,20 @@ async def custom_refresh(
 
     if not user:
         logger.warning("Refresh token invalid, expired, or user inactive. Deleting cookie.")
+        # Audit Log: Failed Refresh
+        from app.db.session import FastAPISessionLocal
+
+        if FastAPISessionLocal:
+            async with FastAPISessionLocal() as db_session:
+                await audit_service.log_event(
+                    db_session,
+                    category="auth",
+                    action="auth.token_refresh",
+                    success=False,
+                    details={"reason": "INVALID_TOKEN"},
+                )
+                await db_session.commit()
+
         response.delete_cookie(
             key=cookie_transport.cookie_name,
             path=cookie_transport.cookie_path,
@@ -233,6 +297,19 @@ async def custom_refresh(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="REFRESH_TOKEN_INVALID"
         )
+
+    # Audit Log: Success
+    from app.db.session import FastAPISessionLocal
+
+    if FastAPISessionLocal:
+        async with FastAPISessionLocal() as db_session:
+            await audit_service.log_event(
+                db_session,
+                category="auth",
+                action="auth.token_refresh",
+                success=True,
+            )
+            await db_session.commit()
 
     new_access_token = await access_token_strategy.write_token(user)  # Pass the user model instance
 
@@ -374,13 +451,42 @@ async def change_password(
     )
 
     logger.info(f"Password changed successfully for {current_user.email}. Sessions invalidated.")
+    from app.db.session import FastAPISessionLocal
+
+    if FastAPISessionLocal:
+        async with FastAPISessionLocal() as db_session:
+            await audit_service.log_event(
+                db_session,
+                category="auth",
+                action="auth.password_change",
+                success=True,
+                details={"reason": "USER_INITIATED"},
+            )
+            await db_session.commit()
+
     return {"message": "Password changed successfully."}
 
 
 # --- Custom Logout Endpoint ---
 @auth_router.post("/logout", summary="Logout user", status_code=status.HTTP_200_OK)
-async def custom_logout(response: Response):
-    logger.info(f"Logout attempt. Deleting cookie: {cookie_transport.cookie_name}")
+async def custom_logout(
+    response: Response,
+    current_user: UserModel = Depends(current_active_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    logger.info(
+        f"Logout attempt for {current_user.email}. Deleting cookie: {cookie_transport.cookie_name}"
+    )
+
+    # Audit Log: Logout
+    await audit_service.log_event(
+        db,
+        category="auth",
+        action="auth.logout",
+        success=True,
+    )
+    await db.commit()
+
     response.delete_cookie(
         key=cookie_transport.cookie_name,
         path=cookie_transport.cookie_path,

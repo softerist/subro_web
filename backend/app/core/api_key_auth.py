@@ -122,6 +122,21 @@ async def get_current_user_with_api_key_or_jwt(
         user = await get_user_by_api_key(api_key, db)
         if user:
             return user
+
+        # Audit Log: Suspicious Token (Invalid API Key)
+        from app.services import audit_service
+
+        key_prefix = get_api_key_prefix(api_key)
+        await audit_service.log_event(
+            db,
+            category="security",
+            action="security.suspicious_token",
+            severity="critical",
+            success=False,
+            details={"type": "invalid_api_key", "prefix": key_prefix},
+        )
+        await db.commit()
+
         # If API Key provided but invalid -> 401
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

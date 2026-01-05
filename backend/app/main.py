@@ -53,6 +53,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routers.admin import admin_router
+from app.api.routers.audit import audit_router
 from app.api.routers.auth import auth_router as custom_auth_router
 from app.api.routers.dashboard import router as dashboard_router
 from app.api.routers.files import router as files_router
@@ -65,6 +66,7 @@ from app.api.routers.translation_stats import router as translation_stats_router
 from app.api.routers.users import router as users_router
 from app.api.websockets.job_logs import router as job_logs_websocket_router
 from app.core.rate_limit import limiter  # Import the limiter instance
+from app.core.request_context import RequestContextMiddleware
 from app.core.users import UserManager
 from app.db import session as db_session_module
 from app.db.models.user import User as UserModel
@@ -205,6 +207,9 @@ app = FastAPI(
     },
 )
 
+# --- Request Context Middleware (added early) ---
+app.add_middleware(RequestContextMiddleware)
+
 # --- Rate Limiting Setup ---
 app.state.limiter = limiter
 
@@ -292,6 +297,31 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler_custom(request: Request, exc: HTTPException):
+    # Audit 403 Forbidden
+    if exc.status_code == status.HTTP_403_FORBIDDEN:
+        from app.core.rate_limit import get_real_client_ip
+        from app.db.session import FastAPISessionLocal
+        from app.services import audit_service
+
+        if FastAPISessionLocal:
+            client_ip = get_real_client_ip(request)
+            async with FastAPISessionLocal() as db:
+                await audit_service.log_event(
+                    db,
+                    category="security",
+                    action="security.permission_denied",
+                    severity="warning",
+                    success=False,
+                    details={
+                        "endpoint": request.url.path,
+                        "method": request.method,
+                        "reason": str(exc.detail),
+                        "client_ip": client_ip,
+                    },
+                    http_status=403,
+                )
+                await db.commit()
+
     log_message = f"HTTPException: Status={exc.status_code}, Detail='{exc.detail}' for {request.method} {request.url.path}"
     if exc.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
         logger.error(log_message, exc_info=True)
@@ -320,6 +350,7 @@ api_v1_router = APIRouter()
 api_v1_router.include_router(
     custom_auth_router, prefix="/auth", tags=["Auth - Authentication & Authorization"]
 )
+api_v1_router.include_router(audit_router)  # prefix is already "/admin/audit" in router
 api_v1_router.include_router(users_router, prefix="/users", tags=["Users - User Management"])
 api_v1_router.include_router(admin_router, prefix="/admin", tags=["Admins - Admin Management"])
 api_v1_router.include_router(

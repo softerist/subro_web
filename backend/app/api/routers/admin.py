@@ -106,6 +106,7 @@ async def create_user_admin(
     user_create: UserCreate,
     user_manager: UserManager = Depends(get_user_manager),
     current_user: User = Depends(get_current_active_admin_user),
+    session: AsyncSession = Depends(get_async_session),
 ):
     """
     Creates a new user.
@@ -125,6 +126,19 @@ async def create_user_admin(
 
     try:
         created_user = await user_manager.create(user_create, safe=False)
+
+        # Audit Log
+        from app.services import audit_service
+
+        await audit_service.log_event(
+            session,
+            category="auth",
+            action="auth.user_created_by_admin",
+            severity="info",
+            actor_user_id=current_user.id,
+            target_user_id=created_user.id,
+            details={"role": created_user.role, "email": created_user.email},
+        )
         return created_user
     except Exception as e:
         logger.error(f"Error creating user by admin: {e}", exc_info=True)
@@ -194,7 +208,55 @@ async def update_user_by_id_admin(  # noqa: C901
                     target_user.mfa_backup_codes = None
                     made_changes = True
                     logger.info(f"Admin disabled MFA for user {target_user.id}")
+
+                    # Audit Log: MFA Reset
+                    from app.services import audit_service
+
+                    await audit_service.log_event(
+                        session,
+                        category="auth",
+                        action="auth.mfa_reset_by_admin",
+                        severity="warning",
+                        actor_user_id=current_user.id,
+                        target_user_id=target_user.id,
+                        impersonator_id=current_user.id,
+                        details={"reason": "admin_reset"},
+                    )
+
             elif current_value != value:
+                # Audit specific security changes before applying
+                from app.services import audit_service
+
+                if key == "status":
+                    # Status change (active <-> suspended/banned)
+                    # Note: We use 'ip_ban_removed' as proxy for unban, or add 'auth.account_unlocked'
+                    # Better names:
+                    action_name = "auth.account_suspended"
+                    if value == "active" and current_value in ["suspended", "banned"]:
+                        action_name = "auth.account_unlocked"  # or unbanned
+
+                    await audit_service.log_event(
+                        session,
+                        category="auth",
+                        action=action_name,
+                        severity="warning" if value != "active" else "info",
+                        actor_user_id=current_user.id,
+                        target_user_id=target_user.id,
+                        details={"old_status": current_value, "new_status": value},
+                    )
+
+                if key == "locked_until" and value is None and current_value is not None:
+                    # Unlock
+                    await audit_service.log_event(
+                        session,
+                        category="auth",
+                        action="auth.account_unlocked",
+                        severity="info",
+                        actor_user_id=current_user.id,
+                        target_user_id=target_user.id,
+                        details={"reason": "admin_unlock"},
+                    )
+
                 setattr(target_user, key, value)
                 made_changes = True
                 logger.debug(
@@ -264,6 +326,19 @@ async def delete_user_by_id_admin(
         await session.commit()
         logger.info(
             f"Admin permanently deleted user: {user_email_to_delete} (ID: {user_id_to_delete})"
+        )
+
+        # Audit Log
+        from app.services import audit_service
+
+        await audit_service.log_event(
+            session,
+            category="auth",
+            action="auth.user_deleted_by_admin",
+            severity="critical",
+            actor_user_id=current_user.id,
+            target_user_id=user_id_to_delete,  # user object is deleted, but ID persists in audit log props
+            details={"email": user_email_to_delete},
         )
     except Exception as e:  # Catching a general Exception here
         await session.rollback()

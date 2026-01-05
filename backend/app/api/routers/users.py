@@ -91,12 +91,30 @@ async def regenerate_api_key(
     await db.commit()
     await db.refresh(api_key_record)
 
-    return ApiKeyCreateResponse(
+    new_record_data = ApiKeyCreateResponse(
         id=api_key_record.id,
         api_key=new_key,
         preview=api_key_record.preview,
         created_at=api_key_record.created_at,
     )
+
+    # Audit Log
+    from app.services import audit_service
+
+    await audit_service.log_event(
+        db,
+        category="security",
+        action="security.api_key_created",
+        severity="warning",
+        actor_user_id=current_user.id,
+        details={
+            "key_id": str(api_key_record.id),
+            "prefix": api_key_record.prefix,
+            "scopes": api_key_record.scopes,
+        },
+    )
+
+    return new_record_data
 
 
 @router.delete(
@@ -123,6 +141,17 @@ async def revoke_api_key(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No active API keys to revoke.",
         )
+    # Audit Log
+    from app.services import audit_service
+
+    await audit_service.log_event(
+        db,
+        category="security",
+        action="security.api_key_revoked",
+        severity="info",
+        actor_user_id=current_user.id,
+        details={"reason": "user_requested"},
+    )
     return ApiKeyRevokeResponse(revoked=True)
 
 

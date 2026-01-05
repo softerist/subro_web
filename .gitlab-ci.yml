@@ -1,6 +1,6 @@
 # ============================================================
 # subro_web GitLab CI/CD Pipeline
-# Based on hello-lseg patterns, adapted for blue-green deploy
+# Based on project patterns, adapted for blue-green deploy
 # ============================================================
 
 stages:

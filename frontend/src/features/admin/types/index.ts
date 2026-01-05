@@ -11,6 +11,7 @@ export interface User {
   is_verified: boolean;
   role: "admin" | "standard";
   created_at?: string;
+  updated_at?: string;
   preferences?: UserPreferences;
   force_password_change?: boolean;
   mfa_enabled?: boolean;

@@ -17,6 +17,7 @@
 from app.db.base_class import Base  # noqa: F401
 from app.db.models.api_key import ApiKey  # noqa: F401
 from app.db.models.app_settings import AppSettings  # noqa: F401
+from app.db.models.audit_log import AuditLog, AuditOutbox  # noqa: F401
 from app.db.models.dashboard import DashboardTile  # noqa: F401
 from app.db.models.deepl_usage import DeepLUsage  # noqa: F401
 from app.db.models.job import Job  # noqa: F401

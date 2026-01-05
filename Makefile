@@ -316,7 +316,7 @@ format-ts: ## Run TypeScript/JS formatter (Prettier)
 # ==============================================================================
 # Testing & Coverage (Run inside Docker)
 # ==============================================================================
-.PHONY: test test-py test-ts test-integration test-integration-prod coverage coverage-py coverage-ts
+.PHONY: test test-py test-ts test-integration test-integration-prod coverage coverage-py coverage-ts test-audit
 test: test-py scan-all ## Run backend Python tests and all security scans
 
 test-py: ## Run backend Python tests
@@ -326,6 +326,16 @@ test-py: ## Run backend Python tests
 test-ts: ## Run frontend tests
 	@echo "Running frontend tests..."
 	docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) exec -T frontend npm run test
+
+test-audit: ## Run audit and security focused tests
+	@echo "Running audit focused tests..."
+	docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) exec -T api poetry run pytest \
+		tests/api/test_audit.py \
+		tests/api/test_audit_integration.py \
+		tests/unit/tasks/test_maintenance.py \
+		tests/unit/services/test_security_audit.py \
+		tests/unit/test_audit_service.py \
+		tests/unit/services/test_security_lockout.py -v
 
 coverage: coverage-py ## Run backend tests and generate coverage report
 
@@ -354,7 +364,7 @@ test-integration-prod: ## Run integration tests inside prod container (requires 
 	@echo "Running integration tests inside prod container..."
 	docker exec -e TEST_API_BASE_URL=http://localhost:8000 \
 		-e TEST_WS_BASE_URL=ws://localhost:8000 \
-		blue-api-1 python -m pytest /app/tests/integration/ -v --tb=short -o "addopts="
+		blue-api-1 python -m pytest /app/tests/integration/ /app/tests/api/test_audit_integration.py -v --tb=short -o "addopts="
 
 
 # ==============================================================================
