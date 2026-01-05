@@ -71,7 +71,7 @@ if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
     echo "--- Using pre-built images from registry ---"
     # Pull images explicitly (using overlay)
     docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" \
-        -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" pull
+        -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" pull --ignore-pull-failures
 
     # Start WITHOUT --build (using overlay)
     docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" \

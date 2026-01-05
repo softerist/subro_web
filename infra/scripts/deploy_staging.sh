@@ -31,7 +31,7 @@ export DOCKER_IMAGE_FRONTEND=${DOCKER_IMAGE_FRONTEND:-"subro-frontend:latest"}
 echo "--- Pulling/Starting Staging App Stack (with isolated Data) ---"
 # We manage the app + data stack here for staging isolation.
 docker compose --env-file "$ENV_FILE" -p subro_staging \
-    -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA" pull
+    -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA" pull --ignore-pull-failures
 
 # We don't use blue-green for staging to save resources
 docker compose --env-file "$ENV_FILE" -p subro_staging \
