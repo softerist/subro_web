@@ -364,11 +364,13 @@ release_version:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\): bump version/'
       when: on_success
   before_script:
-    - apk add --no-cache git openssh-client bash python3 py3-pip
+    - apk add --no-cache git openssh-client openssh-keygen bash python3 py3-pip
     - pip install --break-system-packages tomlkit
     - eval "$(ssh-agent -s)"
     - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
     - chmod 600 /tmp/ssh_key
+    - echo "Key header:" && head -1 /tmp/ssh_key
+    - ssh-keygen -y -f /tmp/ssh_key > /dev/null && echo "Key is valid"
     - ssh-add /tmp/ssh_key
     - rm -f /tmp/ssh_key
     - mkdir -p ~/.ssh
