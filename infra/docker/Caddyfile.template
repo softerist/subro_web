@@ -42,6 +42,12 @@ http://:80 {
 	# Define named matchers
 	@api path /api*
 	@websockets path /ws*
+	@health path /health
+
+	# 0. Handle Health Check requests (for CI/CD verification)
+	route @health {
+		reverse_proxy {{UPSTREAM_API}}:8000
+	}
 
 	# 1. Handle API requests
 	route @api {
@@ -90,6 +96,12 @@ http://:80 {
 	# Define named matchers
 	@api path /api*
 	@websockets path /ws*
+	@health path /health
+
+	# 0. Handle Health Check requests (for CI/CD verification)
+	route @health {
+		reverse_proxy {{UPSTREAM_API}}:8000
+	}
 
 	# 1. Handle API requests (including WebSockets at /api/v1/ws/...)
 	route @api {
