@@ -20,6 +20,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     role: Mapped[Literal["admin", "standard"]] = mapped_column(
         String(50), default="standard", nullable=False, index=True
     )
+    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     api_key: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

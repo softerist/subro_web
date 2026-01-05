@@ -37,6 +37,9 @@ celery_app.conf.beat_schedule = {
     },
 }
 
+# Store celerybeat-schedule.db in /tmp to avoid polluting the mounted volume
+celery_app.conf.beat_schedule_filename = "/tmp/celerybeat-schedule.db"
+
 
 # --- Worker Process Lifecycle Signal Handlers ---
 

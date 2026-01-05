@@ -40,6 +40,8 @@ import { adminApi } from "../api/admin";
 const editUserSchema = z
   .object({
     email: z.string().email("Please enter a valid email address"),
+    first_name: z.string().optional(),
+    last_name: z.string().optional(),
     role: z.enum(["admin", "standard"]),
     is_active: z.boolean(),
     is_verified: z.boolean(),
@@ -95,6 +97,8 @@ export function EditUserDialog({
     resolver: zodResolver(editUserSchema),
     defaultValues: {
       email: user?.email || "",
+      first_name: user?.first_name || "",
+      last_name: user?.last_name || "",
       role: user?.role || "standard",
       is_active: user?.is_active ?? true,
       is_verified: user?.is_verified ?? false,
@@ -110,6 +114,8 @@ export function EditUserDialog({
     if (user && open) {
       form.reset({
         email: user.email,
+        first_name: user.first_name || "",
+        last_name: user.last_name || "",
         role: user.role,
         is_active: user.is_active,
         is_verified: user.is_verified,
@@ -126,6 +132,8 @@ export function EditUserDialog({
       // Build update payload, only include password if set
       const payload: {
         email?: string;
+        first_name?: string | null;
+        last_name?: string | null;
         role?: "admin" | "standard";
         is_active?: boolean;
         is_verified?: boolean;
@@ -134,6 +142,8 @@ export function EditUserDialog({
         password?: string;
       } = {
         email: data.email,
+        first_name: data.first_name || null,
+        last_name: data.last_name || null,
         role: data.role,
         is_active: data.is_active,
         is_verified: data.is_verified,
@@ -174,6 +184,37 @@ export function EditUserDialog({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+            {/* Name Fields */}
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="first_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>First Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="John" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="last_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Last Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Doe" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             {/* Email Field */}
             <FormField
               control={form.control}

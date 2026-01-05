@@ -21,6 +21,8 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
     # Inherits id, email, is_active, is_superuser, is_verified
     # Add our custom fields that should be readable
     role: Literal["admin", "standard"]
+    first_name: str | None = None
+    last_name: str | None = None
     api_key_preview: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -33,6 +35,8 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
 
 class UserCreate(schemas.BaseUserCreate):
     role: UserRole = UserRole.STANDARD  # Example: default to standard
+    first_name: str | None = None
+    last_name: str | None = None
     is_superuser: bool = False  # Example: default to False
     is_active: bool = True  # Example: default to True
     is_verified: bool = False  # Example: default to False
@@ -61,6 +65,8 @@ class AdminUserUpdate(BaseModel):
     # Define fields an admin IS allowed to change
     email: EmailStr | None = None
     password: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
     role: Literal["admin", "standard"] | None = None
     is_active: bool | None = None
     is_superuser: bool | None = None  # Keep this aligned with 'role'

@@ -6,6 +6,8 @@ export interface UserPreferences {
 export interface User {
   id: string;
   email: string;
+  first_name?: string | null;
+  last_name?: string | null;
   is_active: boolean;
   is_superuser: boolean;
   is_verified: boolean;
@@ -20,6 +22,8 @@ export interface User {
 export interface UserCreate {
   email: string;
   password: string;
+  first_name?: string;
+  last_name?: string;
   role?: "admin" | "standard";
   is_superuser?: boolean;
   is_active?: boolean;
@@ -28,6 +32,8 @@ export interface UserCreate {
 export interface UserUpdate {
   email?: string;
   password?: string;
+  first_name?: string | null;
+  last_name?: string | null;
   role?: "admin" | "standard";
   is_superuser?: boolean;
   is_active?: boolean;

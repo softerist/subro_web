@@ -127,3 +127,5 @@ backend/secrets/*.json
 backend/secrets/*.pem
 backend/secrets/*.key
 backend/celerybeat-schedule.db
+backend/celerybeat-sc*
+backend/exports/audit/audit_export*

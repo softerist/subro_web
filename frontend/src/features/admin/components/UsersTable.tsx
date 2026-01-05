@@ -190,6 +190,9 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
           <TableHeader>
             <TableRow className="hover:bg-transparent border-b border-border/40">
               <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
+                Name
+              </TableHead>
+              <TableHead className="h-9 text-xs font-semibold text-muted-foreground">
                 Email
               </TableHead>
               <TableHead className="h-9 text-xs font-semibold text-muted-foreground hidden sm:table-cell">
@@ -206,7 +209,7 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center">
+                <TableCell colSpan={5} className="h-24 text-center">
                   No users found.
                 </TableCell>
               </TableRow>
@@ -218,9 +221,22 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
                 const isTargetSuperuser = user.is_superuser;
                 const isCurrentSuperuser = currentUser?.is_superuser;
                 const canModify = !isTargetSuperuser || isCurrentSuperuser;
+                const displayName =
+                  user.first_name || user.last_name
+                    ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
+                    : null;
 
                 return (
                   <TableRow key={user.id}>
+                    <TableCell className="py-2 text-sm">
+                      {displayName ? (
+                        <span className="font-medium">{displayName}</span>
+                      ) : (
+                        <span className="text-muted-foreground italic text-xs">
+                          Not set
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell className="py-2 text-sm font-medium">
                       {user.email}
                     </TableCell>
