@@ -19,8 +19,6 @@ fi
 
 echo "Processing path: $TORRENT_PATH"
 
-# Deduplicate path if it ends with same folder name twice (common with %R/%N)
-# Example: /mnt/media/Show/Show -> /mnt/media/Show
 BASENAME=$(basename "$TORRENT_PATH")
 PARENT=$(dirname "$TORRENT_PATH")
 PARENT_BASENAME=$(basename "$PARENT")
