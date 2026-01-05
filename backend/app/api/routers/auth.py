@@ -13,7 +13,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.rate_limit import limiter  # Import limiter
+from app.core.rate_limit import get_real_client_ip, limiter
+from app.core.security_logger import security_log
 from app.core.users import (
     UserManager,
     cookie_transport,
@@ -94,11 +95,8 @@ async def custom_login(
         record_login_attempt,
     )
 
-    # Get client IP (handles proxies)
-    client_ip = request.client.host if request.client else "unknown"
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        client_ip = forwarded_for.split(",")[0].strip()
+    # Get client IP using trusted proxy-aware extraction
+    client_ip = get_real_client_ip(request)
 
     user_agent = request.headers.get("User-Agent")
     email = credentials.username.lower()
@@ -128,6 +126,7 @@ async def custom_login(
 
     if not user.is_active:
         logger.warning(f"Login attempt for inactive user: {user.email} (ID: {user.id})")
+        security_log.failed_login(client_ip, email, "USER_INACTIVE")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="LOGIN_USER_INACTIVE")
 
     # Successful password authentication - record and clear failed attempts

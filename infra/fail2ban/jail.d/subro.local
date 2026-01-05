@@ -1,0 +1,123 @@
+# ============================================================
+# Subro Web Application Fail2Ban Jails
+# ============================================================
+#
+# This configuration provides:
+# - Progressive ban escalation (15m -> 6h -> 6d -> 1 year)
+# - Split jails for different attack types (tuned thresholds)
+# - Recidive jail for repeat offenders (1-year ban)
+# - nftables support for modern firewalls
+#
+# Installation:
+#   1. Copy this file to /etc/fail2ban/jail.d/subro.local
+#   2. Copy filter files to /etc/fail2ban/filter.d/
+#   3. Run: systemctl restart fail2ban
+#
+# ============================================================
+
+[DEFAULT]
+# ============================================================
+# Global Defaults
+# ============================================================
+
+# Ignore localhost, Docker internal networks, and common monitoring
+# IMPORTANT: Add your office VPN ranges here!
+ignoreip = 127.0.0.1/8 ::1 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+
+# Use nftables if available (modern kernels), fallback to iptables
+banaction = nftables-multiport
+banaction_allports = nftables-allports
+
+# Progressive ban escalation
+# Formula: next_ban = current_ban * 24 (exponential growth)
+# Pattern: 15m -> 6h -> 6d -> capped at 1 year
+bantime.increment = true
+bantime.factor = 24
+bantime.formula = ban.Time * math.exp(float(ban.Count) * banFactor) / math.exp(1 * banFactor)
+bantime.maxtime = 31536000
+
+# Default action: ban and log (no email - use your observability stack)
+action = %(action_)s
+
+# Backend for log monitoring
+# auto: automatically detect pyinotify/systemd/polling
+backend = auto
+
+
+# ============================================================
+# Jail: Login Brute Force (STRICT)
+# ============================================================
+# Catches: FAILED_LOGIN, MFA_FAILED
+# Threshold: 5 failures in 10 minutes -> 15 minute ban (escalates)
+[subro-login]
+enabled = true
+port = http,https
+filter = subro-login
+logpath = /opt/subro_web/logs/security.log
+maxretry = 5
+findtime = 600
+bantime = 900
+
+
+# ============================================================
+# Jail: Token/API Key Abuse (MEDIUM)
+# ============================================================
+# Catches: BAD_TOKEN (malformed/bad_signature), API_KEY_ABUSE
+# Threshold: 10 failures in 10 minutes -> 15 minute ban
+# Higher threshold because some token failures are expected (clock skew, etc.)
+[subro-token]
+enabled = true
+port = http,https
+filter = subro-token
+logpath = /opt/subro_web/logs/security.log
+maxretry = 10
+findtime = 600
+bantime = 900
+
+
+# ============================================================
+# Jail: Rate Limit Abuse (CAUTIOUS)
+# ============================================================
+# Catches: RATE_LIMIT on /api/v1/auth/* endpoints only
+# Threshold: 20 violations in 5 minutes -> 15 minute ban
+# Higher threshold to avoid false positives from legitimate users
+[subro-ratelimit]
+enabled = true
+port = http,https
+filter = subro-ratelimit
+logpath = /opt/subro_web/logs/security.log
+maxretry = 20
+findtime = 300
+bantime = 900
+
+
+# ============================================================
+# Jail: Scanning/Exploit Attempts (STRICT, via Nginx)
+# ============================================================
+# Catches: Path traversal, wp-admin probes, suspicious HTTP methods
+# Reads from Nginx access log (not application log)
+# Threshold: 5 attempts in 1 minute -> 1 hour ban
+[subro-scan]
+enabled = true
+port = http,https
+filter = subro-scan
+logpath = /var/log/nginx/access.log
+maxretry = 5
+findtime = 60
+bantime = 3600
+
+
+# ============================================================
+# Jail: Recidive (REPEAT OFFENDERS -> 1 YEAR BAN)
+# ============================================================
+# Watches the fail2ban log itself
+# If someone gets banned 4+ times in a week -> banned for 1 year on ALL ports
+# This is the "escalate to permanent" jail
+[recidive]
+enabled = true
+filter = recidive
+logpath = /var/log/fail2ban.log
+banaction = nftables-allports
+maxretry = 4
+findtime = 604800
+bantime = 31536000

@@ -420,3 +420,34 @@ local-db-revision: ## (DEPRECATED-STYLE) Create Alembic revision locally (MSG="y
 	@echo "Creating a new LOCAL database revision (MSG=\"$(MSG)\")..."
 	@if [ -z "$(MSG)" ]; then echo "Error: MSG variable is not set. Usage: make local-db-revision MSG=\"your message\""; exit 1; fi
 	cd backend && poetry run alembic revision -m "$(MSG)"
+
+
+# ==============================================================================
+# Fail2Ban Management
+# ==============================================================================
+.PHONY: fail2ban-install fail2ban-status fail2ban-unban fail2ban-test
+
+fail2ban-install: ## Install and configure fail2ban for subro_web
+	@echo "Installing fail2ban for subro_web..."
+	@chmod +x infra/scripts/install_fail2ban.sh
+	@sudo infra/scripts/install_fail2ban.sh
+
+fail2ban-status: ## Check fail2ban status and all banned IPs
+	@echo "=== Fail2Ban Status ==="
+	@sudo fail2ban-client status
+	@echo ""
+	@echo "=== Currently Banned IPs ==="
+	@sudo fail2ban-client banned || echo "No IPs currently banned"
+
+fail2ban-unban: ## Unban an IP address (usage: make fail2ban-unban IP=x.x.x.x)
+	@if [ -z "$(IP)" ]; then echo "Usage: make fail2ban-unban IP=x.x.x.x"; exit 1; fi
+	@echo "Unbanning $(IP) from all jails..."
+	@sudo fail2ban-client unban $(IP)
+	@echo "Done. $(IP) has been unbanned."
+
+fail2ban-test: ## Test fail2ban filter regex against security log
+	@echo "Testing subro-login filter..."
+	@sudo fail2ban-regex /opt/subro_web/logs/security.log /etc/fail2ban/filter.d/subro-login.conf 2>/dev/null || echo "Filter not installed yet"
+	@echo ""
+	@echo "Testing subro-ratelimit filter..."
+	@sudo fail2ban-regex /opt/subro_web/logs/security.log /etc/fail2ban/filter.d/subro-ratelimit.conf 2>/dev/null || echo "Filter not installed yet"

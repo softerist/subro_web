@@ -47,7 +47,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi_users.exceptions import UserNotExists
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import select, text
@@ -221,7 +220,28 @@ if settings.ENVIRONMENT == "development":
         return {"status": "running", "environment": "development"}
 
 
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# --- Custom Rate Limit Exception Handler for Security Logging ---
+async def security_rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """
+    Custom rate limit handler that logs to security log for fail2ban.
+    """
+    from app.core.rate_limit import get_real_client_ip
+    from app.core.security_logger import security_log
+
+    client_ip = get_real_client_ip(request)
+    endpoint = request.url.path
+
+    # Log rate limit violation for fail2ban
+    security_log.rate_limited(client_ip, endpoint)
+
+    # Return standard 429 response
+    return JSONResponse(
+        status_code=429,
+        content={"detail": f"Rate limit exceeded: {exc.detail}"},
+    )
+
+
+app.add_exception_handler(RateLimitExceeded, security_rate_limit_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 if settings.BACKEND_CORS_ORIGINS:

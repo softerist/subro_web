@@ -14,6 +14,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.security_logger import security_log
 from app.db.models.login_attempt import LoginAttempt
 
 logger = logging.getLogger(__name__)
@@ -107,8 +108,11 @@ async def record_login_attempt(
 
     if success:
         logger.info(f"Successful login recorded for {email} from {ip_address}")
+        security_log.successful_login(ip_address, email)
     else:
         logger.warning(f"Failed login attempt for {email} from {ip_address}")
+        # Log to security log for fail2ban
+        security_log.failed_login(ip_address, email, "BAD_CREDENTIALS")
 
 
 async def clear_failed_attempts(

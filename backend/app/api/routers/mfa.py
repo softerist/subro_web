@@ -15,7 +15,9 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rate_limit import get_real_client_ip
 from app.core.security import current_active_user
+from app.core.security_logger import security_log
 from app.core.users import UserManager, get_user_manager
 from app.db.models.user import User
 from app.db.session import get_async_session
@@ -203,6 +205,10 @@ async def verify_mfa_login(
     is_valid = await mfa_service.verify_mfa(db, user, request_data.code)
 
     if not is_valid:
+        # Log MFA failure for fail2ban
+        client_ip = get_real_client_ip(request)
+        security_log.mfa_failed(client_ip, str(user.id))
+        logger.warning(f"MFA verification failed for user: {user.email} from {client_ip}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid verification code.",

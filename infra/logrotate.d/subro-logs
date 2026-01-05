@@ -1,0 +1,26 @@
+# Logrotate configuration for Subro Web security logs
+# Install to /etc/logrotate.d/subro-logs
+#
+# Uses copytruncate for fail2ban compatibility (no rotation signals needed)
+
+/opt/subro_web/logs/security.log {
+    daily
+    rotate 90
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    create 640 root adm
+}
+
+/opt/subro_web/logs/*.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    create 640 root adm
+}
