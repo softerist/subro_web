@@ -6,6 +6,14 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AuditLogPage from "../features/admin/pages/AuditLogPage";
 
+vi.mock("../features/admin/api/audit", () => ({
+  getAuditLogs: vi.fn().mockResolvedValue({
+    items: [],
+    next_cursor: null,
+    total_count: 0,
+  }),
+}));
+
 // Mock Components
 vi.mock("../features/admin/components/AuditLogTable", () => ({
   AuditLogTable: () => <div data-testid="mock-audit-table">Audit Table</div>,
