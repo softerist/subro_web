@@ -317,9 +317,14 @@ class VersionBumper:
             from app.core.config import settings
 
             # Use sync engine for script
-            # settings.SQLALCHEMY_DATABASE_URI is typically async (postgresql+asyncpg)
-            # We need to convert it to sync (postgresql+psycopg2 or just postgresql)
-            db_url = str(settings.SQLALCHEMY_DATABASE_URI).replace("+asyncpg", "+psycopg2")
+            db_url = (
+                str(settings.PRIMARY_DATABASE_URL_ENV or "")
+                .replace("+asyncpg", "")
+                .replace("postgresql://", "postgresql+psycopg2://")
+            )
+            if not db_url or "None" in db_url:
+                # Fallback to reconstructed URL if env var is missing
+                db_url = f"postgresql+psycopg2://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
             if "+psycopg2" not in db_url and "postgresql" in db_url:
                 # If it was just postgresql:// (libpq), fine.
                 # But usually asyncpg is specified. Ensure we have a sync driver or default.

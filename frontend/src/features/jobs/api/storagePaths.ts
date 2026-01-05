@@ -15,4 +15,12 @@ export const storagePathsApi = {
   delete: async (id: string) => {
     await api.delete(`/v1/storage-paths/${id}`);
   },
+
+  update: async (id: string, data: Partial<StoragePathCreate>) => {
+    const response = await api.patch<StoragePath>(
+      `/v1/storage-paths/${id}`,
+      data,
+    );
+    return response.data;
+  },
 };

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import crud
 from app.core.security import current_active_superuser, current_active_user
 from app.db.session import get_async_session
-from app.schemas.storage_path import StoragePathCreate, StoragePathRead
+from app.schemas.storage_path import StoragePathCreate, StoragePathRead, StoragePathUpdate
 
 router = APIRouter(
     tags=["Storage Paths"],
@@ -133,3 +133,26 @@ async def delete_storage_path(
             detail="Storage path not found.",
         )
     await crud.storage_path.remove(db, id=path_id)
+
+
+@router.patch("/{path_id}", response_model=StoragePathRead)
+async def update_storage_path(
+    path_id: UUID,
+    path_in: StoragePathUpdate,
+    db: AsyncSession = Depends(get_async_session),
+    current_user=Depends(current_active_user),  # noqa: ARG001
+):
+    """
+    Update a storage path's label. Path itself is immutable via this endpoint for safety.
+    """
+    existing = await crud.storage_path.get(db, id=path_id)
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Storage path not found.",
+        )
+
+    # We only allow updating the label. If they provide a new path, we might ignore it or error.
+    # To keep it simple and safe for non-superusers, we only patch the label.
+    update_data = {"label": path_in.label}
+    return await crud.storage_path.update(db, db_obj=existing, obj_in=update_data)

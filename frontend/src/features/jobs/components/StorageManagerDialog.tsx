@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Loader2, FolderPlus } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Loader2,
+  FolderPlus,
+  Pencil,
+  Check,
+  X,
+} from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -53,6 +61,8 @@ interface ApiError extends Error {
 
 export function StorageManagerDialog() {
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
   const queryClient = useQueryClient();
 
   const { data: paths, isLoading: isLoadingPaths } = useQuery({
@@ -106,6 +116,42 @@ export function StorageManagerDialog() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, label }: { id: string; label: string }) =>
+      storagePathsApi.update(id, { label }),
+    onSuccess: () => {
+      toast.success("Path updated successfully");
+      setEditingId(null);
+      queryClient.invalidateQueries({ queryKey: ["storage-paths"] });
+    },
+    onError: (error: ApiError) => {
+      const detail = error.response?.data?.detail;
+      const msg =
+        typeof detail === "string"
+          ? detail
+          : detail?.message || error.message || "Failed to update path";
+      toast.error(msg);
+    },
+  });
+
+  const startEditing = (id: string, currentLabel: string) => {
+    setEditingId(id);
+    setEditLabel(currentLabel);
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditLabel("");
+  };
+
+  const handleUpdate = (id: string) => {
+    if (!editLabel.trim()) {
+      toast.error("Label cannot be empty");
+      return;
+    }
+    updateMutation.mutate({ id, label: editLabel });
+  };
+
   const onSubmit = (values: FormValues) => {
     createMutation.mutate({
       path: values.path,
@@ -121,6 +167,8 @@ export function StorageManagerDialog() {
           size="sm"
           className="ml-2 h-9 px-3 border-dashed"
           title="Manage allowed folders"
+          aria-label="Manage folders"
+          data-testid="storage-manager-trigger"
         >
           <FolderPlus className="h-4 w-4 mr-1" />
           Edit
@@ -208,10 +256,65 @@ export function StorageManagerDialog() {
                   paths?.map((path) => (
                     <TableRow key={path.id}>
                       <TableCell className="font-mono text-xs">
-                        {path.path}
-                        {path.label && (
-                          <div className="text-xs text-muted-foreground mt-0.5">
-                            {path.label}
+                        <div className="font-semibold text-foreground/80">
+                          {path.path}
+                        </div>
+                        {editingId === path.id ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <Input
+                              value={editLabel}
+                              onChange={(e) => setEditLabel(e.target.value)}
+                              className="h-7 text-xs flex-1"
+                              placeholder="Path label..."
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleUpdate(path.id);
+                                if (e.key === "Escape") cancelEditing();
+                              }}
+                              autoFocus
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+                              onClick={() => handleUpdate(path.id)}
+                              disabled={updateMutation.isPending}
+                              aria-label="Save changes"
+                              title="Save"
+                            >
+                              {updateMutation.isPending ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                              onClick={cancelEditing}
+                              aria-label="Cancel editing"
+                              title="Cancel"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center group mt-0.5">
+                            <div className="text-xs text-muted-foreground truncate max-w-[300px]">
+                              {path.label || "No label"}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() =>
+                                startEditing(path.id, path.label || "")
+                              }
+                              aria-label={`Edit label for ${path.path}`}
+                              title="Edit Label"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
                           </div>
                         )}
                       </TableCell>
@@ -226,7 +329,9 @@ export function StorageManagerDialog() {
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                           onClick={() => deleteMutation.mutate(path.id)}
-                          disabled={deleteMutation.isPending}
+                          disabled={
+                            deleteMutation.isPending || editingId === path.id
+                          }
                         >
                           {deleteMutation.isPending ? (
                             <Loader2 className="h-4 w-4 animate-spin" />

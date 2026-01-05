@@ -197,3 +197,36 @@ async def test_only_superuser_can_delete_path(test_client: AsyncClient, db_sessi
 
     # Assert: Should be forbidden (requires superuser)
     assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_user_can_update_path_label(test_client: AsyncClient, db_session: AsyncSession):
+    """Test that any authenticated user can update the label of a storage path."""
+    # Arrange: Create a path
+    path = await crud.storage_path.create(
+        db_session, obj_in=StoragePathCreate(path="/tmp", label="Old Label")
+    )
+    await db_session.flush()
+    path_id = path.id
+
+    # Create a standard user
+    user = UserFactory.create_user(
+        session=db_session,
+        email="update_path_user@example.com",
+        role="standard",
+    )
+    await db_session.flush()
+
+    headers = await login_user(test_client, user.email, "password123")
+
+    # Act: Update the label
+    response = await test_client.patch(
+        f"{API_PREFIX}/storage-paths/{path_id}",
+        json={"label": "New Label", "path": "/tmp"},
+        headers=headers,
+    )
+
+    # Assert
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["label"] == "New Label"
+    assert response.json()["path"] == "/tmp"  # Should remain unchanged

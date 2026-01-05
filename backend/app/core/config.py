@@ -49,7 +49,7 @@ class Settings(BaseSettings):
 
     # --- Core Application Settings ---
     APP_NAME: str = Field(default="Subtitle Downloader", validation_alias="APP_NAME")
-    APP_VERSION: str = Field(default="0.1.1", validation_alias="APP_VERSION")
+    APP_VERSION: str = Field(default="0.1.3-PROD", validation_alias="APP_VERSION")
     APP_DESCRIPTION: str = Field(
         default="API for managing subtitle download jobs and user authentication.",
         validation_alias="APP_DESCRIPTION",
@@ -301,7 +301,9 @@ class Settings(BaseSettings):
     USER_AGENT_APP_NAME: str = Field(
         default="SubtitleDownloader", validation_alias="USER_AGENT_APP_NAME"
     )
-    USER_AGENT_APP_VERSION: str = Field(default="1.0", validation_alias="USER_AGENT_APP_VERSION")
+    USER_AGENT_APP_VERSION: str = Field(
+        default="0.1.3-PROD", validation_alias="USER_AGENT_APP_VERSION"
+    )
     LOG_FILE_NAME_PATTERN: str = Field(
         default="{base_name}.log", validation_alias="LOG_FILE_NAME_PATTERN"
     )

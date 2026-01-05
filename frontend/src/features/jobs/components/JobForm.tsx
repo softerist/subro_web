@@ -131,7 +131,10 @@ export function JobForm() {
                 name={field.name}
               >
                 <FormControl>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger
+                    className="h-9"
+                    data-testid="folder-select-trigger"
+                  >
                     <SelectValue placeholder="Select a folder..." />
                   </SelectTrigger>
                 </FormControl>
@@ -170,7 +173,10 @@ export function JobForm() {
                   name={field.name}
                 >
                   <FormControl>
-                    <SelectTrigger className="h-9">
+                    <SelectTrigger
+                      className="h-9"
+                      data-testid="language-select-trigger"
+                    >
                       <SelectValue placeholder="Select language..." />
                     </SelectTrigger>
                   </FormControl>
@@ -199,7 +205,10 @@ export function JobForm() {
                   name={field.name}
                 >
                   <FormControl>
-                    <SelectTrigger className="h-9">
+                    <SelectTrigger
+                      className="h-9"
+                      data-testid="log-level-select-trigger"
+                    >
                       <SelectValue placeholder="Select log level..." />
                     </SelectTrigger>
                   </FormControl>
