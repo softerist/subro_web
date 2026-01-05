@@ -357,15 +357,15 @@ verify_prod:
 # ============ RELEASE STAGE ============
 release_version:
   stage: release
-  image: python:3.12-slim
+  image: alpine:3.20
   variables:
     GIT_STRATEGY: clone
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\): bump version/'
       when: on_success
   before_script:
-    - apt-get update && apt-get install -y git openssh-client
-    - pip install tomlkit
+    - apk add --no-cache git openssh-client bash python3 py3-pip
+    - pip install --break-system-packages tomlkit
     - eval "$(ssh-agent -s)"
     - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
     - chmod 600 /tmp/ssh_key
