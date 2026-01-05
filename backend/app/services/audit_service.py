@@ -360,7 +360,7 @@ async def anonymize_audit_actor(
         stmt_actor = (
             update(AuditLog)
             .where(AuditLog.actor_user_id == user_id)
-            .values(actor_email="[ANONYMIZED]", ip_address="0.0.0.0", details=None)
+            .values(actor_email="[ANONYMIZED]", ip_address="192.0.2.1", details=None)
         )
         result_actor = await db.execute(stmt_actor)
 
