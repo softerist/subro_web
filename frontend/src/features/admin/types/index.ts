@@ -10,8 +10,10 @@ export interface User {
   is_superuser: boolean;
   is_verified: boolean;
   role: "admin" | "standard";
-  created_at?: string; // Optional if not always present
+  created_at?: string;
   preferences?: UserPreferences;
+  force_password_change?: boolean;
+  mfa_enabled?: boolean;
 }
 
 export interface UserCreate {

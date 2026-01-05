@@ -218,6 +218,10 @@ prod: ensure-dev-cleanup ## Deploy to production using blue-green deployment scr
 	chmod +x ./infra/scripts/blue_green_deploy.sh
 	./infra/scripts/blue_green_deploy.sh
 	@echo "Production stack deployed."
+	@echo ""
+	@echo "Installing/updating fail2ban security..."
+	-@$(MAKE) fail2ban-install 2>/dev/null || echo "Note: fail2ban-install requires sudo. Run 'make fail2ban-install' manually if needed."
+	@echo ""
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8080"
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
 	@echo "API Docs are MASKED for security. Access via your secret path defined in .env.prod"

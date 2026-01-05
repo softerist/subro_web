@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Loader2, UserCheck, UserX, Key } from "lucide-react";
+import { Trash2, Loader2, UserCheck, UserX, Key, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -38,6 +38,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { User } from "../types";
 import { adminApi } from "../api/admin";
 import { useAuthStore } from "@/store/authStore";
+import { EditUserDialog } from "./EditUserDialog";
 
 const resetPasswordSchema = z
   .object({
@@ -70,6 +71,12 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
 
   // Reset Password state
   const [resetState, setResetState] = useState<{
+    open: boolean;
+    user: User | null;
+  }>({ open: false, user: null });
+
+  // Edit User state
+  const [editState, setEditState] = useState<{
     open: boolean;
     user: User | null;
   }>({ open: false, user: null });
@@ -145,6 +152,10 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
   const handleResetRequest = (user: User) => {
     setResetState({ open: true, user });
     form.reset();
+  };
+
+  const handleEditRequest = (user: User) => {
+    setEditState({ open: true, user });
   };
 
   const executeDelete = async () => {
@@ -240,6 +251,18 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
                       </Badge>
                     </TableCell>
                     <TableCell className="py-2 text-right space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEditRequest(user)}
+                        disabled={!canModify}
+                        title={
+                          canModify ? "Edit User" : "Cannot modify Superuser"
+                        }
+                        className={!canModify ? "opacity-50" : ""}
+                      >
+                        <Pencil className="h-4 w-4 text-slate-400" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -422,6 +445,14 @@ export function UsersTable({ users, isLoading }: UsersTableProps) {
           </Form>
         </DialogContent>
       </Dialog>
+
+      <EditUserDialog
+        open={editState.open}
+        onOpenChange={(open) =>
+          setEditState((prev) => ({ ...prev, open: open }))
+        }
+        user={editState.user}
+      />
     </>
   );
 }
