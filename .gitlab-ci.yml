@@ -313,9 +313,9 @@ deploy_staging:
         export USE_PREBUILT_IMAGES=1
         export DEPLOY_ENV=staging
 
-        # Deploy staging (uses docker-compose with staging profile)
+        # Deploy staging
         chmod +x ./infra/scripts/*.sh
-        ./infra/scripts/deploy_staging.sh || ./infra/scripts/blue_green_deploy.sh
+        ./infra/scripts/deploy_staging.sh
 
         docker logout $CI_REGISTRY
       "
@@ -490,8 +490,6 @@ release_version:
     - eval "$(ssh-agent -s)"
     - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
     - chmod 600 /tmp/ssh_key
-    - echo "Key header:" && head -1 /tmp/ssh_key
-    - ssh-keygen -y -f /tmp/ssh_key > /dev/null && echo "Key is valid"
     - ssh-add /tmp/ssh_key
     - rm -f /tmp/ssh_key
     - mkdir -p ~/.ssh
