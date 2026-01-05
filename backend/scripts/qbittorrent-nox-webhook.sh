@@ -19,7 +19,16 @@ fi
 
 echo "Processing path: $TORRENT_PATH"
 
-# Command 1: Submit job to production API
+# Deduplicate path if it ends with same folder name twice (common with %R/%N)
+# Example: /mnt/media/Show/Show -> /mnt/media/Show
+BASENAME=$(basename "$TORRENT_PATH")
+PARENT=$(dirname "$TORRENT_PATH")
+PARENT_BASENAME=$(basename "$PARENT")
+
+if [ "$BASENAME" == "$PARENT_BASENAME" ] && [ -d "$PARENT" ]; then
+    echo "Duplicate path detected. Deduplicating: $TORRENT_PATH -> $PARENT"
+    TORRENT_PATH="$PARENT"
+fi
 echo "Submitting job to API..."
 # -s: Silent
 # -L: Follow redirects

@@ -204,6 +204,10 @@ echo "--- Running Post-Deployment Hooks ---"
 if [ -f "$INFRA_DIR/../backend/scripts/qbittorrent-nox-webhook.sh" ]; then
     echo "Ensuring webhook script is executable..."
     chmod +x "$INFRA_DIR/../backend/scripts/qbittorrent-nox-webhook.sh"
+    echo "Ensuring log permissions for qbittorrent-nox..."
+    mkdir -p "$INFRA_DIR/../logs"
+    chown -R qbittorrent-nox:qbittorrent-nox "$INFRA_DIR/../logs" 2>/dev/null || true
+    chmod -R 775 "$INFRA_DIR/../logs"
 fi
 
 echo "--- Deployment Complete ($NEW_COLOR Active) ---"
