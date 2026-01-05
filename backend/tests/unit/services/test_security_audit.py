@@ -82,6 +82,10 @@ async def test_api_key_validation_audit():
             _, kwargs = call
             if kwargs.get("action") == "security.api_validation":
                 assert kwargs["details"]["tmdb_valid"] is True
+                assert kwargs["details"]["validation_count"] == 4
+                assert (
+                    kwargs["details"]["apis_validated"] == "TMDB, OMDB, OpenSubtitles, Google Cloud"
+                )
                 found_call = True
         assert found_call
 

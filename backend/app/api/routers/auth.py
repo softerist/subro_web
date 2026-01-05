@@ -500,12 +500,80 @@ async def custom_logout(
     return {"message": "LOGOUT_SUCCESSFUL"}
 
 
-# --- FastAPI-Users Built-in Routes for Auth ---
-if settings.OPEN_SIGNUP:
-    auth_router.include_router(
-        fastapi_users_instance.get_register_router(UserRead, UserCreate),
-        tags=["Auth - Authentication & Authorization"],  # Updated tag for consistency
-    )
+# --- Dynamic Registration Endpoint ---
+# Check database setting at runtime instead of env var at startup
+
+
+@auth_router.post(
+    "/register",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new user (if open signup is enabled)",
+)
+async def register_user(
+    request: Request,
+    user_create: UserCreate,
+    user_manager: UserManager = Depends(get_user_manager),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """
+    Register a new user account.
+    Only available when open signup is enabled in app settings.
+    """
+    from sqlalchemy.future import select
+
+    from app.db.models.app_settings import AppSettings
+
+    # Check if open signup is enabled
+    result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
+    app_settings = result.scalar_one_or_none()
+
+    # Default to env var if no DB setting exists yet
+    open_signup_enabled = False
+    if app_settings:
+        open_signup_enabled = app_settings.open_signup
+    else:
+        open_signup_enabled = settings.OPEN_SIGNUP
+
+    if not open_signup_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User registration is currently disabled.",
+        )
+
+    # Use fastapi-users to create the user
+    try:
+        created_user = await user_manager.create(user_create, safe=True, request=request)
+
+        # Audit Log
+        await audit_service.log_event(
+            db,
+            category="auth",
+            action="auth.register",
+            severity="info",
+            actor_user_id=created_user.id,
+            details={"email": created_user.email},
+        )
+        await db.commit()
+
+        logger.info(f"New user registered: {created_user.email}")
+        return UserRead.model_validate(created_user)
+
+    except exceptions.UserAlreadyExists:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="REGISTER_USER_ALREADY_EXISTS",
+        ) from None
+    except Exception as e:
+        await db.rollback()
+        error_detail = str(e) or "REGISTER_FAILED"
+        logger.error(f"Registration failed: {error_detail}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_detail,
+        ) from e
+
 
 # REMOVE the specific "get_forgot_password_router()" line if it's combined:
 # auth_router.include_router(

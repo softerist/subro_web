@@ -8,10 +8,11 @@ to the immutable audit_logs table. Uses SKIP LOCKED for concurrency safety.
 
 import asyncio
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.schema import DDL
 
 from app.db import session as db_session  # Import module, not variable
 from app.db.models.audit_log import AuditLog, AuditOutbox
@@ -19,6 +20,53 @@ from app.services.audit_service import compute_event_hash, get_last_hash
 from app.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+
+def _next_month_start(month_start: date) -> date:
+    if month_start.month == 12:
+        return date(month_start.year + 1, 1, 1)
+    return date(month_start.year, month_start.month + 1, 1)
+
+
+async def _ensure_audit_partition(db: AsyncSession, month_start: date) -> None:
+    table_name = f"audit_logs_{month_start.strftime('%Y_%m')}"
+    start_str = month_start.strftime("%Y-%m-01")
+    end_str = _next_month_start(month_start).strftime("%Y-%m-01")
+
+    check_query = select(func.to_regclass(f"public.{table_name}"))
+    result = await db.execute(check_query)
+    if result.scalar() is not None:
+        return
+
+    logger.warning("Partition %s missing. Creating...", table_name)
+    create_query = DDL(
+        f"CREATE TABLE IF NOT EXISTS {table_name} "
+        f"PARTITION OF audit_logs "
+        f"FOR VALUES FROM ('{start_str}') TO ('{end_str}')"
+    )
+    await db.execute(create_query)
+
+
+def _extract_event_timestamp(row: AuditOutbox) -> datetime:
+    event_data = row.event_data or {}
+    if isinstance(event_data, dict):
+        ts_value = event_data.get("timestamp")
+        if isinstance(ts_value, datetime):
+            return ts_value
+        if isinstance(ts_value, str):
+            try:
+                return datetime.fromisoformat(ts_value)
+            except ValueError:
+                logger.warning("Invalid audit timestamp '%s'; using created_at.", ts_value)
+    return row.created_at
+
+
+def _collect_partition_months(outbox_rows: list[AuditOutbox]) -> list[date]:
+    month_starts = {
+        date(timestamp.year, timestamp.month, 1)
+        for timestamp in (_extract_event_timestamp(row) for row in outbox_rows)
+    }
+    return sorted(month_starts)
 
 
 @celery_app.task(name="app.tasks.audit_worker_batch")
@@ -64,6 +112,9 @@ async def process_outbox_batch(db: AsyncSession, batch_size: int = 100) -> int:
         return 0
 
     processed_count = 0
+
+    for month_start in _collect_partition_months(outbox_rows):
+        await _ensure_audit_partition(db, month_start)
 
     for row in outbox_rows:
         try:
