@@ -344,10 +344,11 @@ verify_staging:
     - if: '$CI_COMMIT_BRANCH == "main"'
   script:
     - apk add --no-cache curl
+    - echo "$SSH_HOST staging.$SSH_HOST" >> /etc/hosts
     - |
       echo "Verifying staging deployment..."
       for i in $(seq 1 10); do
-        if curl -k --fail --silent --max-time 10 "https://$SSH_HOST/health" | grep -q "healthy"; then
+        if curl -k --fail --silent --max-time 10 "https://staging.$SSH_HOST/health" | grep -q "healthy"; then
           echo "Staging is healthy!"
           exit 0
         fi
@@ -367,8 +368,9 @@ e2e_tests:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
   variables:
-    E2E_BASE_URL: https://$SSH_HOST
+    E2E_BASE_URL: https://staging.$SSH_HOST
   script:
+    - echo "$SSH_HOST staging.$SSH_HOST" >> /etc/hosts
     - cd frontend
     - npm ci --prefer-offline
     - npx playwright install --with-deps chromium
