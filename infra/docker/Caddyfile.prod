@@ -38,8 +38,8 @@
         }
 }
 
-# Production domain (supports both port 80 via proxy and direct 443)
-http://{$DOMAIN_NAME}, {$DOMAIN_NAME} {
+# Production domain (HTTP only - nginx handles SSL termination)
+http://{$DOMAIN_NAME} {
         import common_security_headers
 
         # Define named matchers
@@ -144,8 +144,8 @@ http://{$DOMAIN_NAME}, {$DOMAIN_NAME} {
         }
 }
 
-# Staging domain (supports both port 80 via proxy and direct 443)
-http://staging.{$DOMAIN_NAME}, staging.{$DOMAIN_NAME} {
+# Staging domain (HTTP only - nginx handles SSL termination)
+http://staging.{$DOMAIN_NAME} {
         import common_security_headers
 
         @api path /api*
