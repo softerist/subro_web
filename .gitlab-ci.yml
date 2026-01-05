@@ -124,7 +124,7 @@ build_backup:
         "$CONTEXT"
 
 # ============ TEST STAGE ============
-test:
+backend_tests:
   stage: test
   extends: .default-docker
   needs: [build_api]
@@ -295,7 +295,7 @@ deploy_staging:
   image: alpine:3.20
   resource_group: staging
   needs:
-    - job: test
+    - job: backend_tests
     - job: scan_image_vulns
     - job: sast_scan
     - job: secret_scan
@@ -420,7 +420,7 @@ e2e_tests:
   image: alpine:3.20
   resource_group: $CI_ENVIRONMENT_NAME # Serializes deploys per environment
   needs:
-    - job: test
+    - job: backend_tests
     - job: scan_image_vulns
     - job: sast_scan
     - job: secret_scan
