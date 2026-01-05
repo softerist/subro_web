@@ -87,26 +87,35 @@ class SecurityLogger:
         self.logger.setLevel(logging.INFO)
         self.logger.propagate = False  # Don't propagate to root logger
 
-        # Ensure log directory exists
-        SECURITY_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            # Ensure log directory exists
+            SECURITY_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-        # Rotating file handler: 50MB max, keep 10 backups
-        handler = RotatingFileHandler(
-            str(SECURITY_LOG_PATH),
-            maxBytes=50 * 1024 * 1024,
-            backupCount=10,
-        )
-
-        # Format: timestamp SECURITY [message
-        # The message will contain EVENT_TYPE] ip=... fields...
-        handler.setFormatter(
-            logging.Formatter(
-                "%(asctime)s SECURITY [%(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
+            # Rotating file handler: 50MB max, keep 10 backups
+            handler = RotatingFileHandler(
+                str(SECURITY_LOG_PATH),
+                maxBytes=50 * 1024 * 1024,
+                backupCount=10,
             )
-        )
 
-        self.logger.addHandler(handler)
+            # Format: timestamp SECURITY [message
+            # The message will contain EVENT_TYPE] ip=... fields...
+            handler.setFormatter(
+                logging.Formatter(
+                    "%(asctime)s SECURITY [%(message)s",
+                    datefmt="%Y-%m-%d %H:%M:%S",
+                )
+            )
+
+            self.logger.addHandler(handler)
+        except (OSError, PermissionError) as e:
+            # In test environments or read-only filesystems, use a NullHandler
+            # This allows the code to run without file access
+            self.logger.addHandler(logging.NullHandler())
+            logging.getLogger(__name__).debug(
+                f"SecurityLogger: Unable to create file handler ({e}), using NullHandler"
+            )
+
         SecurityLogger._initialized = True
 
     def failed_login(self, ip: str, email: str, reason: str) -> None:

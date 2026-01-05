@@ -15,7 +15,7 @@ concurrency:
 jobs:
   scaffold-check:
     name: Check Scaffold Structure
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, subro_web]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -29,21 +29,21 @@ jobs:
   # test-backend:
   #   name: Test Backend
   #   needs: scaffold-check
-  #   runs-on: ubuntu-latest
+  #   runs-on: [self-hosted, subro_web]
   #   steps:
   #     - # ... setup python, install deps, run tests ...
   #
   # test-frontend:
   #   name: Test Frontend
   #   needs: scaffold-check
-  #   runs-on: ubuntu-latest
+  #   runs-on: [self-hosted, subro_web]
   #   steps:
   #     - # ... setup node, install deps, run tests ...
 
   build-docker-images:
     name: Build Docker Images (Test)
     needs: scaffold-check # Depends on basic checks
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, subro_web]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

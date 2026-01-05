@@ -18,6 +18,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import SettingsPage from "@/pages/SettingsPage";
 import StatisticsPage from "@/pages/StatisticsPage";
 import { UsersPage } from "@/features/admin/pages/UsersPage";
+import AuditLogPage from "@/features/admin/pages/AuditLogPage";
 import { PathsPage } from "@/features/paths/routes/PathsPage";
 import { ForceChangePasswordPage } from "@/features/auth/pages/ForceChangePasswordPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
@@ -243,6 +244,7 @@ function AppRoutes() {
             <Route path="/paths" element={<PathsPage />} />
             <Route path="/statistics" element={<StatisticsPage />} />
             <Route path="/admin/users" element={<UsersPage />} />
+            <Route path="/admin/audit" element={<AuditLogPage />} />
 
             {/* Admin-only settings page */}
             <Route

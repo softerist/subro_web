@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import decrypt_value, encrypt_value
 from app.db.models.trusted_device import TrustedDevice
 from app.db.models.user import User
+from app.services import audit_service
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,14 @@ async def setup_mfa(
 
     logger.info(f"MFA setup initiated for user {user.email}")
 
+    await audit_service.log_event(
+        _db,
+        category="auth",
+        action="auth.mfa.setup",
+        target_user_id=user.id,
+        details={"status": "initiated"},
+    )
+
     return {
         "secret": secret,
         "qr_code": f"data:image/png;base64,{qr_code_base64}",
@@ -152,6 +161,14 @@ async def enable_mfa(
     await db.commit()
 
     logger.info(f"MFA enabled for user {user.email}")
+    await audit_service.log_event(
+        db,
+        category="auth",
+        action="auth.mfa_enabled",
+        severity="warning",
+        target_user_id=user.id,
+        details={"status": "enabled"},
+    )
     return True
 
 
@@ -177,6 +194,14 @@ async def verify_mfa(
 
     # Try TOTP verification first
     if verify_totp_code(secret, code):
+        await audit_service.log_event(
+            db,
+            category="auth",
+            action="auth.mfa.verify",
+            success=True,
+            target_user_id=user.id,
+            details={"mfa_method": "totp"},
+        )
         return True
 
     # Try backup codes
@@ -193,10 +218,26 @@ async def verify_mfa(
                 await db.commit()
 
                 logger.info(f"Backup code used for {user.email}, {len(hashed_codes)} remaining")
+                await audit_service.log_event(
+                    db,
+                    category="auth",
+                    action="auth.mfa.verify",
+                    success=True,
+                    target_user_id=user.id,
+                    details={"mfa_method": "backup_code"},
+                )
                 return True
         except Exception as e:
             logger.error(f"Error checking backup codes for {user.email}: {e}")
 
+    await audit_service.log_event(
+        db,
+        category="auth",
+        action="auth.mfa.verify",
+        success=False,
+        target_user_id=user.id,
+        details={"mfa_method": "totp", "reason": "invalid_code"},
+    )
     return False
 
 
@@ -216,6 +257,14 @@ async def disable_mfa(
     await db.commit()
 
     logger.info(f"MFA disabled for user {user.email}")
+    await audit_service.log_event(
+        db,
+        category="auth",
+        action="auth.mfa_disabled",
+        severity="critical",
+        target_user_id=user.id,
+        details={"reason": "user_requested"},
+    )
 
 
 async def trust_device(
@@ -244,6 +293,14 @@ async def trust_device(
     await db.commit()
 
     logger.info(f"Trusted device added for {user.email}: {device_name}")
+    await audit_service.log_event(
+        db,
+        category="auth",
+        action="auth.trusted_device_added",
+        severity="info",
+        actor_user_id=user.id,
+        details={"device_name": device_name, "ip_address": ip_address},
+    )
     return token
 
 

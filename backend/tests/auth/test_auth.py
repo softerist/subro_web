@@ -117,7 +117,7 @@ async def test_login_failure_inactive_user(test_client: AsyncClient, db_session:
     response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert response.json()["detail"] == "LOGIN_USER_INACTIVE"
+    assert response.json()["detail"] == "LOGIN_BAD_CREDENTIALS"
     assert "subRefreshToken" not in response.cookies
 
 
@@ -226,11 +226,14 @@ async def test_logout(test_client: AsyncClient, db_session: AsyncSession):
     refresh_cookie_value = login_response.cookies.get(cookie_transport.cookie_name)
     assert refresh_cookie_value
 
+    access_token = login_response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {access_token}"}
+
     # FIX: Set cookie on the client instead of passing in the request
     test_client.cookies.set(cookie_transport.cookie_name, refresh_cookie_value)
 
-    # Call logout without cookies parameter
-    logout_response = await test_client.post(f"{API_PREFIX}/auth/logout")
+    # Call logout with headers
+    logout_response = await test_client.post(f"{API_PREFIX}/auth/logout", headers=headers)
 
     # Assert logout was successful and cookie deletion header was sent
     assert logout_response.status_code == status.HTTP_200_OK

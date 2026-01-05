@@ -40,6 +40,15 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         DateTime(timezone=True), nullable=True
     )  # Updated when password changes, used to invalidate old tokens
     force_password_change: Mapped[bool] = mapped_column(default=False, nullable=False)
+
+    # --- Account Status & Security ---
+    status: Mapped[str] = mapped_column(
+        String(20), default="active", nullable=False, index=True
+    )  # active|suspended|banned
+    failed_login_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     preferences: Mapped[dict | None] = mapped_column(JSON, default={}, nullable=True)
     jobs: Mapped[list["Job"]] = relationship(
         "Job",

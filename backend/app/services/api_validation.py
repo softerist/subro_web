@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.crud.crud_app_settings import crud_app_settings
 from app.db.models.deepl_usage import DeepLUsage
+from app.services import audit_service
 
 logger = logging.getLogger(__name__)
 
@@ -518,6 +519,19 @@ async def validate_all_settings(db: AsyncSession) -> None:
                 # Actually, better to leave as None or True based on config presence.
                 # SettingsRead.google_cloud_valid handles the display logic for env.
                 pass
+
+        # --- Audit Log Enhancements ---
+        await audit_service.log_event(
+            db,
+            action="security.api_validation",
+            severity="info" if getattr(settings_row, "tmdb_valid", False) else "warning",
+            details={
+                "tmdb_valid": getattr(settings_row, "tmdb_valid", None),
+                "omdb_valid": getattr(settings_row, "omdb_valid", None),
+                "opensubtitles_valid": getattr(settings_row, "opensubtitles_valid", None),
+                "google_cloud_valid": getattr(settings_row, "google_cloud_valid", None),
+            },
+        )
 
         await db.commit()
 

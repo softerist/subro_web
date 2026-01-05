@@ -15,6 +15,7 @@ import {
   BarChart3,
   Menu,
   X,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -93,7 +94,12 @@ export default function DashboardLayout() {
     { name: "Paths", href: "/paths", icon: Folder },
     { name: "Statistics", href: "/statistics", icon: BarChart3 },
     { name: "Settings", href: "/settings", icon: Settings },
-    ...(isAdmin ? [{ name: "Users", href: "/admin/users", icon: Users }] : []),
+    ...(isAdmin
+      ? [
+          { name: "Users", href: "/admin/users", icon: Users },
+          { name: "Audit Logs", href: "/admin/audit", icon: ClipboardList },
+        ]
+      : []),
   ];
 
   return (

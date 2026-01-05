@@ -60,7 +60,8 @@ module.exports = {
     ],
     // You might want to configure unused vars for TypeScript specifically
     "no-unused-vars": "off", // Turn off base no-unused-vars rule
-    "@typescript-eslint/no-unused-vars": [ // Use TypeScript-specific rule
+    "@typescript-eslint/no-unused-vars": [
+      // Use TypeScript-specific rule
       "warn",
       {
         argsIgnorePattern: "^_",
