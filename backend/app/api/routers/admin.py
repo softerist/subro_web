@@ -3,6 +3,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select  # For SQLAlchemy 1.4+ style select
 from sqlalchemy.orm import selectinload
@@ -11,14 +12,25 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings  # Ensures settings is available
 from app.core.users import (
     UserManager,  # For type hinting
+    current_active_superuser,
     get_current_active_admin_user,
     get_user_manager,
 )
+from app.db.models.app_settings import AppSettings
 from app.db.models.user import User  # For ORM operations and type hinting
 from app.db.session import get_async_session
 from app.schemas.user import AdminUserUpdate, UserCreate, UserRead  # Pydantic schemas
 
 logger = logging.getLogger(__name__)
+
+
+# --- Pydantic Schemas for Settings ---
+class OpenSignupResponse(BaseModel):
+    open_signup: bool
+
+
+class OpenSignupUpdate(BaseModel):
+    open_signup: bool
 
 
 admin_router = APIRouter(
@@ -359,3 +371,75 @@ async def delete_user_by_id_admin(
     # or if response_class=Response is set and the function has no explicit return value
     # that would become the body. So, explicitly returning None is good practice.
     return None
+
+
+# --- Open Signup Settings (Superuser Only) ---
+
+
+@admin_router.get(
+    "/settings/open-signup",
+    response_model=OpenSignupResponse,
+    summary="Get open signup setting (Superuser only)",
+    description="Returns whether open user registration is enabled.",
+    dependencies=[Depends(current_active_superuser)],
+)
+async def get_open_signup_setting(
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Get the current open signup setting."""
+    result = await session.execute(select(AppSettings).where(AppSettings.id == 1))
+    app_settings = result.scalar_one_or_none()
+
+    if not app_settings:
+        # Return default if settings don't exist yet
+        return OpenSignupResponse(open_signup=False)
+
+    return OpenSignupResponse(open_signup=app_settings.open_signup)
+
+
+@admin_router.patch(
+    "/settings/open-signup",
+    response_model=OpenSignupResponse,
+    summary="Update open signup setting (Superuser only)",
+    description="Enable or disable open user registration.",
+    dependencies=[Depends(current_active_superuser)],
+)
+async def update_open_signup_setting(
+    update_data: OpenSignupUpdate,
+    current_user: User = Depends(current_active_superuser),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Update the open signup setting. Only superusers can change this."""
+    result = await session.execute(select(AppSettings).where(AppSettings.id == 1))
+    app_settings = result.scalar_one_or_none()
+
+    if not app_settings:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="App settings not initialized. Please complete setup first.",
+        )
+
+    old_value = app_settings.open_signup
+    app_settings.open_signup = update_data.open_signup
+
+    # Audit Log
+    from app.services import audit_service
+
+    await audit_service.log_event(
+        session,
+        category="admin",
+        action="admin.open_signup_changed",
+        severity="warning",
+        actor_user_id=current_user.id,
+        details={
+            "old_value": old_value,
+            "new_value": update_data.open_signup,
+        },
+    )
+
+    await session.commit()
+    logger.info(
+        f"Superuser {current_user.email} changed open_signup from {old_value} to {update_data.open_signup}"
+    )
+
+    return OpenSignupResponse(open_signup=app_settings.open_signup)

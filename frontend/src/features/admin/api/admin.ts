@@ -1,6 +1,10 @@
 import { api } from "@/lib/apiClient";
 import { User, UserCreate, UserUpdate } from "../types";
 
+export interface OpenSignupResponse {
+  open_signup: boolean;
+}
+
 export const adminApi = {
   getUsers: async () => {
     const response = await api.get<User[]>("/v1/admin/users");
@@ -24,5 +28,21 @@ export const adminApi = {
 
   deleteUser: async (id: string) => {
     await api.delete(`/v1/admin/users/${id}`);
+  },
+
+  // Open Signup Settings (Superuser only)
+  getOpenSignup: async () => {
+    const response = await api.get<OpenSignupResponse>(
+      "/v1/admin/settings/open-signup",
+    );
+    return response.data.open_signup;
+  },
+
+  setOpenSignup: async (enabled: boolean) => {
+    const response = await api.patch<OpenSignupResponse>(
+      "/v1/admin/settings/open-signup",
+      { open_signup: enabled },
+    );
+    return response.data.open_signup;
   },
 };

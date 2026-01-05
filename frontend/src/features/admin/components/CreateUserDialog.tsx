@@ -40,6 +40,8 @@ import { adminApi } from "../api/admin";
 const formSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
   role: z.enum(["admin", "standard"]),
   is_active: z.boolean().default(true),
   is_superuser: z.boolean().default(false),
@@ -54,6 +56,8 @@ export function CreateUserDialog() {
     defaultValues: {
       email: "",
       password: "",
+      first_name: "",
+      last_name: "",
       role: "standard",
       is_active: true,
       is_superuser: false,
@@ -93,6 +97,35 @@ export function CreateUserDialog() {
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {/* Name Fields */}
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="first_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>First Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="John" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="last_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Last Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Doe" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             <FormField
               control={form.control}
               name="email"

@@ -354,8 +354,8 @@ verify_staging:
     - |
       echo "Verifying staging deployment..."
       for i in $(seq 1 10); do
-        RESPONSE=$(curl -k --fail --silent --max-time 10 "https://staging.$SSH_HOST/health" 2>&1)
-        if echo "$RESPONSE" | grep -q "healthy"; then
+        RESPONSE=$(curl -k --fail --silent --max-time 10 "https://staging.$SSH_HOST/api/v1/healthz" 2>&1 || true)
+        if echo "$RESPONSE" | grep -qE '"status":\s*"ok"'; then
           echo "Staging is healthy! Response: $RESPONSE"
           exit 0
         fi
@@ -484,11 +484,13 @@ verify_prod:
     - |
       echo "Verifying production deployment..."
       for i in $(seq 1 10); do
-        if curl --fail --silent --max-time 10 "https://$SSH_HOST/health" | grep -q "healthy"; then
-          echo "Production is healthy!"
+        RESPONSE=$(curl --fail --silent --max-time 10 "https://$SSH_HOST/api/v1/healthz" 2>&1 || true)
+        if echo "$RESPONSE" | grep -qE '"status":\s*"ok"'; then
+          echo "Production is healthy! Response: $RESPONSE"
           exit 0
         fi
-        echo "Waiting for production ($i/10)..." && sleep 5
+        echo "Waiting for production ($i/10)... Response: $RESPONSE"
+        sleep 5
       done
       echo "Production health check failed!"
       exit 1

@@ -64,6 +64,9 @@ class AppSettings(Base):
     setup_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     app_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
+    # --- Registration Settings ---
+    open_signup: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     # --- Validation Status (cached after API validation) ---
     tmdb_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
     tmdb_rate_limited: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

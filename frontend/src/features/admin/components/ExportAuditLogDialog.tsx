@@ -43,9 +43,34 @@ export function ExportAuditLogDialog({ filters }: ExportAuditLogDialogProps) {
           // Trigger download
           const filename = response.data.result?.filename;
           if (filename) {
-            window.location.href = `/api/v1/admin/audit/export/download/${filename}`;
-            toast.success("Download started!");
-            setTimeout(() => setIsOpen(false), 1500);
+            try {
+              const downloadRes = await api.get(
+                `/v1/admin/audit/export/download/${filename}`,
+                {
+                  responseType: "blob",
+                },
+              );
+
+              // Create a URL for the blob
+              const url = window.URL.createObjectURL(
+                new Blob([downloadRes.data]),
+              );
+              const link = document.createElement("a");
+              link.href = url;
+              link.setAttribute("download", filename);
+              document.body.appendChild(link);
+              link.click();
+
+              // Cleanup
+              link.parentNode?.removeChild(link);
+              window.URL.revokeObjectURL(url);
+
+              toast.success("Download started!");
+              setTimeout(() => setIsOpen(false), 1500);
+            } catch (error) {
+              console.error("Download error:", error);
+              toast.error("Failed to download file.");
+            }
           }
         } else if (status === "FAILED") {
           clearInterval(pollInterval);

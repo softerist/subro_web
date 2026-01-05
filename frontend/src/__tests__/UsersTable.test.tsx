@@ -39,6 +39,8 @@ const mockUsers: User[] = [
   {
     id: "user-1",
     email: "user1@example.com",
+    first_name: "John",
+    last_name: "Doe",
     role: "standard",
     is_active: true,
     is_superuser: false,
@@ -50,6 +52,8 @@ const mockUsers: User[] = [
   {
     id: "admin-1",
     email: "admin@example.com",
+    first_name: "Admin",
+    last_name: "User",
     role: "admin",
     is_active: true,
     is_superuser: true,

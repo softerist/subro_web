@@ -37,6 +37,8 @@ const updateUserMock = adminApi.updateUser as unknown as ReturnType<
 const mockUser: User = {
   id: "user-1",
   email: "test@example.com",
+  first_name: "Test",
+  last_name: "User",
   role: "standard",
   is_active: true,
   is_superuser: false,

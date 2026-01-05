@@ -106,6 +106,8 @@ ensure-test-db: ## Ensure test database exists on db_test container
 
 compose-up: ## Start the Docker Compose stack in detached mode (builds if necessary)
 	@echo "Starting Docker Compose stack..."
+	@echo "Rebuilding frontend to ensure npm packages are up to date..."
+	docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) build frontend
 	docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) up --build --detach
 
 compose-down: ## Stop and remove the Docker Compose stack AND volumes
