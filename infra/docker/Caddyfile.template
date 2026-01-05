@@ -1,5 +1,8 @@
 # infra/docker/Caddyfile.template
 {
+	# Disable auto HTTPS since nginx handles SSL termination (per Caddyfile.prod)
+	auto_https off
+
 	# In production, remove debug if not needed, but keep for initial troubleshooting if desired.
 	# email your-email@example.com # Optional: for Let's Encrypt notifications
 	email {$ACME_EMAIL}
@@ -134,6 +137,41 @@ http://:80 {
 			header_up Connection {http.request.header.Connection}
 			header_up Upgrade {http.request.header.Upgrade}
 		}
+	}
+
+	# Logging
+	log {
+		output stderr
+		format console
+		level INFO
+	}
+}
+
+# Staging domain
+staging.{$DOMAIN_NAME} {
+	import common_security_headers
+
+	@api path /api*
+	@websockets path /ws*
+
+	route @api {
+		reverse_proxy subro_staging-api-1:8000 {
+			lb_try_duration 5s
+			lb_try_interval 250ms
+		}
+	}
+
+	route @websockets {
+		reverse_proxy subro_staging-api-1:8000 {
+			lb_try_duration 5s
+			lb_try_interval 250ms
+			header_up Connection {http.request.header.Connection}
+			header_up Upgrade {http.request.header.Upgrade}
+		}
+	}
+
+	route {
+		reverse_proxy subro_staging-frontend-1:8080
 	}
 
 	# Logging

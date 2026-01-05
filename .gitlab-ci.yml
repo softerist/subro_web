@@ -360,13 +360,12 @@ e2e_tests:
     - cd frontend
     - npm ci --prefer-offline
     - npx playwright install --with-deps chromium
-    - npx playwright test --reporter=html || true
+    - npx playwright test --reporter=html
   artifacts:
     when: always
     paths:
       - frontend/playwright-report/
     expire_in: 7 days
-  allow_failure: true # Don't block prod deploy initially
 
 # ============ DEPLOY STAGE ============
 .deploy_template:
