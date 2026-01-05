@@ -333,7 +333,7 @@ deploy_staging:
       "
   environment:
     name: staging
-    url: https://staging.$SSH_HOST/
+    url: https://$SSH_HOST/
   retry: 1
 
 verify_staging:
@@ -347,7 +347,7 @@ verify_staging:
     - |
       echo "Verifying staging deployment..."
       for i in $(seq 1 10); do
-        if curl -k --fail --silent --max-time 10 "https://staging.$SSH_HOST/health" | grep -q "healthy"; then
+        if curl -k --fail --silent --max-time 10 "https://$SSH_HOST/health" | grep -q "healthy"; then
           echo "Staging is healthy!"
           exit 0
         fi
@@ -357,7 +357,7 @@ verify_staging:
       exit 1
   environment:
     name: staging
-    url: https://staging.$SSH_HOST/
+    url: https://$SSH_HOST/
 
 # ============ E2E TESTS STAGE ============
 e2e_tests:
@@ -367,7 +367,7 @@ e2e_tests:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
   variables:
-    E2E_BASE_URL: https://staging.$SSH_HOST
+    E2E_BASE_URL: https://$SSH_HOST
   script:
     - cd frontend
     - npm ci --prefer-offline
