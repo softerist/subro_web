@@ -16,23 +16,24 @@ fi
 
 echo "--- Staging Deployment Started ---"
 
+# Export variables for compose file expansion
+export ENV_FILE="../.env.staging"
+export NETWORK_NAME="infra_internal_net"
+export NETWORK_EXTERNAL="true"
+
 # Deploy Staging using a different project name
 export DOCKER_IMAGE_API=${DOCKER_IMAGE_API:-"subro-api:latest"}
 export DOCKER_IMAGE_WORKER=${DOCKER_IMAGE_WORKER:-"subro-worker:latest"}
 export DOCKER_IMAGE_FRONTEND=${DOCKER_IMAGE_FRONTEND:-"subro-frontend:latest"}
 
-echo "--- Ensuring Infrastucture is Up ---"
-COMPOSE_GATEWAY="$DOCK_DIR/compose.gateway.yml"
-COMPOSE_DATA="$DOCK_DIR/compose.data.yml"
-docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --build
-
-echo "--- Pulling/Starting Staging Stack ---"
+echo "--- Pulling/Starting Staging App Stack (with isolated Data) ---"
+# We manage the app + data stack here for staging isolation.
 docker compose --env-file "$ENV_FILE" -p subro_staging \
-    -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" pull
+    -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA" pull
 
 # We don't use blue-green for staging to save resources
 docker compose --env-file "$ENV_FILE" -p subro_staging \
-    -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" up -d
+    -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA" up -d
 
 # Wait for Health
 echo "--- Waiting for Health Checks (staging) ---"

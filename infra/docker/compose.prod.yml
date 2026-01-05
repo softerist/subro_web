@@ -15,7 +15,7 @@ services:
       - /tmp:/tmp
       - ../../logs:/app/logs
     env_file:
-      - ../.env.prod
+      - ${ENV_FILE:-../.env.prod}
     networks:
       - internal_net
     # Depends on DB/Redis which are external now (in Data stack)
@@ -42,7 +42,7 @@ services:
       - /tmp:/tmp
       - ../../logs:/app/logs
     env_file:
-      - ../.env.prod
+      - ${ENV_FILE:-../.env.prod}
     networks:
       - internal_net
     # Entrypoint waits for DB.
@@ -67,7 +67,7 @@ services:
       - "8080" # Nginx default port
     # No volume needed
     env_file:
-      - ../.env.prod
+      - ${ENV_FILE:-../.env.prod}
     networks:
       - internal_net
     healthcheck:
@@ -78,5 +78,5 @@ services:
 
 networks:
   internal_net:
-    external: true
-    name: infra_internal_net
+    name: ${NETWORK_NAME:-infra_internal_net}
+    external: ${NETWORK_EXTERNAL:-true}

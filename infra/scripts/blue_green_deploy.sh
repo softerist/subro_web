@@ -11,6 +11,11 @@ COMPOSE_GATEWAY="$DOCK_DIR/compose.gateway.yml"
 COMPOSE_IMAGES="$DOCK_DIR/compose.prod.images.yml"
 ENV_FILE="$INFRA_DIR/.env.prod"
 
+# Export variables for compose file expansion
+export ENV_FILE="../.env.prod"
+export NETWORK_NAME="infra_internal_net"
+export NETWORK_EXTERNAL="true"
+
 # Ensure .env.prod exists
 if [ ! -f "$ENV_FILE" ]; then
     echo "Error: $ENV_FILE not found. Please create it from $INFRA_DIR/prod.env.example"

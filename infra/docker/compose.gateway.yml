@@ -20,7 +20,7 @@ services:
       - caddy_net
       - internal_net
     env_file:
-      - ../.env.prod
+      - ${ENV_FILE:-../.env.prod}
 
 volumes:
   caddy_data:
