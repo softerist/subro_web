@@ -27,11 +27,12 @@ export NETWORK_EXTERNAL="true"
 export DOCKER_IMAGE_API=${DOCKER_IMAGE_API:-"subro-api:latest"}
 export DOCKER_IMAGE_WORKER=${DOCKER_IMAGE_WORKER:-"subro-worker:latest"}
 export DOCKER_IMAGE_FRONTEND=${DOCKER_IMAGE_FRONTEND:-"subro-frontend:latest"}
+export DOCKER_IMAGE_BACKUP=${DOCKER_IMAGE_BACKUP:-"subro-backup:latest"}
 
 echo "--- Pulling/Starting Staging App Stack (with isolated Data) ---"
 # We manage the app + data stack here for staging isolation.
 docker compose --env-file "$ENV_FILE" -p subro_staging \
-    -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA" pull --ignore-pull-failures
+    -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA" pull
 
 # We don't use blue-green for staging to save resources
 docker compose --env-file "$ENV_FILE" -p subro_staging \

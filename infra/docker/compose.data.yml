@@ -33,7 +33,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/backup/Dockerfile
-    image: subro_backup:latest
+    image: ${DOCKER_IMAGE_BACKUP:-subro_backup:latest}
     container_name: infra-backup-1
     restart: always
     # We want it to just sit there until triggered by scheduler or exec

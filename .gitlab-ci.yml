@@ -21,6 +21,7 @@ variables:
   IMAGE_API: $CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHORT_SHA
   IMAGE_WORKER: $CI_REGISTRY_IMAGE/worker:$CI_COMMIT_SHORT_SHA
   IMAGE_FRONTEND: $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHORT_SHA
+  IMAGE_BACKUP: $CI_REGISTRY_IMAGE/backup:$CI_COMMIT_SHORT_SHA
   DOCKER_TLS_CERTDIR: "/certs"
 
 # -------- Docker-in-Docker Helper --------
@@ -97,6 +98,14 @@ build_frontend:
     TARGET: production
     DOCKERFILE: frontend/Dockerfile
     CONTEXT: frontend
+
+build_backup:
+  extends: .build_template
+  variables:
+    SERVICE: backup
+    IMAGE: $IMAGE_BACKUP
+    DOCKERFILE: infra/docker/backup/Dockerfile
+    CONTEXT: .
   script:
     - |
       set -euo pipefail
@@ -310,6 +319,7 @@ deploy_staging:
         export DOCKER_IMAGE_API='$IMAGE_API'
         export DOCKER_IMAGE_WORKER='$IMAGE_WORKER'
         export DOCKER_IMAGE_FRONTEND='$IMAGE_FRONTEND'
+        export DOCKER_IMAGE_BACKUP='$IMAGE_BACKUP'
         export USE_PREBUILT_IMAGES=1
         export DEPLOY_ENV=staging
 

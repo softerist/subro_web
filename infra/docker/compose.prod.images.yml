@@ -18,3 +18,7 @@ services:
   frontend:
     image: ${DOCKER_IMAGE_FRONTEND:?DOCKER_IMAGE_FRONTEND required}
     pull_policy: always
+
+  backup:
+    image: ${DOCKER_IMAGE_BACKUP:?DOCKER_IMAGE_BACKUP required}
+    pull_policy: always
