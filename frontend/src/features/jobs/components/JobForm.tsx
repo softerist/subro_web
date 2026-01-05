@@ -27,6 +27,7 @@ import {
 import { jobsApi } from "../api/jobs";
 import { LANGUAGES } from "../constants/languages";
 import { useAuthStore } from "@/store/authStore";
+import { StorageManagerDialog } from "./StorageManagerDialog";
 
 const formSchema = z.object({
   folder_path: z.string().min(1, "Target folder is required"),
@@ -120,7 +121,10 @@ export function JobForm() {
           name="folder_path"
           render={({ field }) => (
             <FormItem className="space-y-0.5">
-              <FormLabel>Target Folder</FormLabel>
+              <div className="flex items-center justify-between">
+                <FormLabel>Target Folder</FormLabel>
+                <StorageManagerDialog />
+              </div>
               <Select
                 onValueChange={field.onChange}
                 value={field.value}

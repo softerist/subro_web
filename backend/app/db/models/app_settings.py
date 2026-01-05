@@ -62,6 +62,7 @@ class AppSettings(Base):
 
     # --- Setup State ---
     setup_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    app_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # --- Validation Status (cached after API validation) ---
     tmdb_valid: Mapped[bool | None] = mapped_column(Boolean, default=None, nullable=True)
