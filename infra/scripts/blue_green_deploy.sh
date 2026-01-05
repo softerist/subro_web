@@ -194,8 +194,16 @@ if [ -n "$CURRENT_COLOR" ]; then
 fi
 
 echo "--- Deployment Complete ($NEW_COLOR Active) ---"
-
 # 6. Conservative Pruning
 echo "--- Pruning old images (keeping recent for rollback) ---"
 # Remove dangling images only, preserve tagged images for rollback (older than 1 week)
 docker image prune -f --filter "until=168h" || true
+
+# 7. Post-Deployment Hooks
+echo "--- Running Post-Deployment Hooks ---"
+if [ -f "$INFRA_DIR/../backend/scripts/qbittorrent-nox-webhook.sh" ]; then
+    echo "Ensuring webhook script is executable..."
+    chmod +x "$INFRA_DIR/../backend/scripts/qbittorrent-nox-webhook.sh"
+fi
+
+echo "--- Deployment Complete ($NEW_COLOR Active) ---"

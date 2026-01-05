@@ -25,7 +25,7 @@ echo "Submitting job to API..."
 # -L: Follow redirects
 # -X POST: Submission method
 RESPONSE=$(curl -sL -w "\nHTTP_STATUS:%{http_code}" -X POST https://secure.go.ro/api/v1/jobs/ \
-  -H "X-API-Key: fU8MP5MHIpZYoPmpB7uoqeqseoWFzcNl8wkrNQ-MccgU" \
+  -H "X-API-Key: 71iLDlxlzSGUKKRmcGSoDJB9KieoTZm-mwfaPPpiUwI" \
   -H "Content-Type: application/json" \
   -d "{\"folder_path\": \"$TORRENT_PATH\", \"log_level\": \"INFO\"}")
 
