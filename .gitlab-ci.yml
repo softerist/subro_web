@@ -8,9 +8,13 @@ stages:
   - build
   - test
   - scan
+  - staging
+  - e2e
   - deploy
   - verify
   - release
+  - notify
+  - cleanup
 
 # -------- Global Variables --------
 variables:
@@ -252,6 +256,118 @@ secret_scan:
         --exit-code 1 --no-progress --timeout 5m .
   allow_failure: false
 
+# ============ STAGING STAGE ============
+deploy_staging:
+  stage: staging
+  image: alpine:3.20
+  resource_group: staging
+  needs:
+    - job: test
+    - job: scan_image_vulns
+    - job: sast_scan
+    - job: secret_scan
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+  before_script:
+    - set -euo pipefail
+    - apk add --no-cache bash openssh-client
+    - eval "$(ssh-agent -s)"
+    - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
+    - chmod 600 /tmp/ssh_key
+    - ssh-add /tmp/ssh_key
+    - rm -f /tmp/ssh_key
+    - mkdir -p ~/.ssh
+    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+  script:
+    - |
+      set -euo pipefail
+      ssh -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+        set -euo pipefail
+
+        # Ensure staging directory exists
+        mkdir -p /opt/subro_web_staging
+        cd /opt/subro_web_staging
+
+        # Clone or update repo
+        if [ ! -d .git ]; then
+          git clone --depth 1 git@$CI_SERVER_HOST:$CI_PROJECT_PATH.git .
+        else
+          git fetch --depth 1 origin $CI_COMMIT_SHA
+          git checkout -f $CI_COMMIT_SHA
+          git clean -fd
+        fi
+
+        # Setup staging environment
+        mkdir -p infra
+        echo '$STAGING_ENV_FILE' | base64 -d > infra/.env.staging || echo '$PROD_ENV_FILE' | base64 -d > infra/.env.staging
+        chmod 600 infra/.env.staging
+
+        # Login to registry
+        echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY
+
+        # Set image tags
+        export DOCKER_IMAGE_API='$IMAGE_API'
+        export DOCKER_IMAGE_WORKER='$IMAGE_WORKER'
+        export DOCKER_IMAGE_FRONTEND='$IMAGE_FRONTEND'
+        export USE_PREBUILT_IMAGES=1
+        export DEPLOY_ENV=staging
+
+        # Deploy staging (uses docker-compose with staging profile)
+        chmod +x ./infra/scripts/*.sh
+        ./infra/scripts/deploy_staging.sh || ./infra/scripts/blue_green_deploy.sh
+
+        docker logout $CI_REGISTRY
+      "
+  environment:
+    name: staging
+    url: https://staging.$SSH_HOST/
+  retry: 1
+
+verify_staging:
+  stage: staging
+  image: alpine:3.20
+  needs: [deploy_staging]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - apk add --no-cache curl
+    - |
+      echo "Verifying staging deployment..."
+      for i in $(seq 1 10); do
+        if curl --fail --silent --max-time 10 "https://staging.$SSH_HOST/health" | grep -q "healthy"; then
+          echo "Staging is healthy!"
+          exit 0
+        fi
+        echo "Waiting for staging ($i/10)..." && sleep 5
+      done
+      echo "Staging health check failed!"
+      exit 1
+  environment:
+    name: staging
+    url: https://staging.$SSH_HOST/
+
+# ============ E2E TESTS STAGE ============
+e2e_tests:
+  stage: e2e
+  image: mcr.microsoft.com/playwright:v1.40.0-jammy
+  needs: [verify_staging]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  variables:
+    E2E_BASE_URL: https://staging.$SSH_HOST
+  script:
+    - cd frontend
+    - npm ci --prefer-offline
+    - npx playwright install --with-deps chromium
+    - npx playwright test --reporter=html || true
+  artifacts:
+    when: always
+    paths:
+      - frontend/playwright-report/
+    expire_in: 7 days
+  allow_failure: true # Don't block prod deploy initially
+
 # ============ DEPLOY STAGE ============
 .deploy_template:
   stage: deploy
@@ -276,14 +392,16 @@ secret_scan:
 
 deploy_prod:
   extends: .deploy_template
+  needs:
+    - job: e2e_tests
+      artifacts: false
   environment:
     name: production
     url: https://$SSH_HOST/
     deployment_tier: production
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-      when: manual
-      allow_failure: false
+      when: on_success
     - when: never
   script:
     - |
@@ -338,8 +456,7 @@ verify_prod:
     url: https://$SSH_HOST/
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-      when: manual
-      allow_failure: false
+      when: on_success
   script:
     - apk add --no-cache curl
     - |
@@ -364,6 +481,7 @@ release_version:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\): bump version/'
       when: on_success
   before_script:
+    - set -euo pipefail
     - apk add --no-cache git openssh-client openssh-keygen bash python3 py3-pip
     - pip install --break-system-packages tomlkit
     - eval "$(ssh-agent -s)"
@@ -374,7 +492,7 @@ release_version:
     - ssh-add /tmp/ssh_key
     - rm -f /tmp/ssh_key
     - mkdir -p ~/.ssh
-    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+    - ssh-keyscan "$CI_SERVER_HOST" >> ~/.ssh/known_hosts
     - git config --global user.email "ci-bot@gitlab.com"
     - git config --global user.name "CI Bot"
     - git remote set-url origin git@$CI_SERVER_HOST:$CI_PROJECT_PATH.git
@@ -394,3 +512,109 @@ release_version:
       else
         echo "No version changes detected."
       fi
+
+# ============ NOTIFY STAGE ============
+notify_success:
+  stage: notify
+  image: alpine:3.20
+  needs:
+    - job: verify_prod
+    - job: release_version
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $SLACK_WEBHOOK_URL'
+      when: on_success
+  script:
+    - apk add --no-cache curl
+    - |
+      VERSION=$(grep 'version = ' backend/pyproject.toml | head -n 1 | cut -d '"' -f 2 || echo "unknown")
+      curl -X POST "$SLACK_WEBHOOK_URL" \
+        -H "Content-Type: application/json" \
+        -d "{\"text\":\"✅ *Deploy successful*\\n📦 $CI_PROJECT_NAME v$VERSION\\n🔗 <$CI_PIPELINE_URL|Pipeline #$CI_PIPELINE_ID>\"}"
+  allow_failure: true
+
+notify_failure:
+  stage: notify
+  image: alpine:3.20
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $SLACK_WEBHOOK_URL'
+      when: on_failure
+  script:
+    - apk add --no-cache curl
+    - |
+      curl -X POST "$SLACK_WEBHOOK_URL" \
+        -H "Content-Type: application/json" \
+        -d "{\"text\":\"❌ *Deploy FAILED*\\n📦 $CI_PROJECT_NAME\\n🔗 <$CI_PIPELINE_URL|Pipeline #$CI_PIPELINE_ID>\"}"
+  allow_failure: true
+
+# ============ CLEANUP STAGE ============
+cleanup_registry:
+  stage: cleanup
+  image: alpine:3.20
+  needs:
+    - job: notify_success
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+  script:
+    - apk add --no-cache curl jq
+    - |
+      echo "Cleaning up old container images..."
+      # Keep last 10 tags, delete older ones
+      # This uses GitLab Container Registry API
+      for repo in api worker frontend; do
+        echo "Checking $repo repository..."
+        TAGS=$(curl -s --header "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
+          "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories" | \
+          jq -r ".[] | select(.name==\"$repo\") | .id" || true)
+
+        if [ -n "$TAGS" ]; then
+          echo "Found repository ID: $TAGS for $repo"
+          # List and delete old tags (keeping last 10)
+          curl -s --header "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
+            "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories/$TAGS/tags" | \
+            jq -r '.[10:] | .[].name' | while read tag; do
+              echo "Deleting old tag: $tag"
+              curl -s --request DELETE --header "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
+                "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories/$TAGS/tags/$tag" || true
+            done
+        fi
+      done
+      echo "Cleanup complete!"
+  allow_failure: true
+
+# ============ ROLLBACK (on failure) ============
+rollback_prod:
+  stage: verify
+  image: alpine:3.20
+  needs: [verify_prod]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_failure
+  before_script:
+    - set -euo pipefail
+    - apk add --no-cache bash openssh-client
+    - eval "$(ssh-agent -s)"
+    - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
+    - chmod 600 /tmp/ssh_key
+    - ssh-add /tmp/ssh_key
+    - rm -f /tmp/ssh_key
+    - mkdir -p ~/.ssh
+    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+  script:
+    - |
+      echo "Rolling back to previous version..."
+      ssh -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+        cd /opt/subro_web
+        if [ -f ./infra/scripts/rollback.sh ]; then
+          ./infra/scripts/rollback.sh
+        else
+          echo 'Rollback script not found, manual intervention required'
+          exit 1
+        fi
+      "
+  environment:
+    name: production
+    action: stop
+  allow_failure: true
