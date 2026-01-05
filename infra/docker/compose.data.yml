@@ -41,6 +41,8 @@ services:
       - /backups:/backups
     env_file:
       - ${PROJECT_ENV_FILE:-../.env.prod}
+    environment:
+      - BACKUP_PREFIX=${BACKUP_PREFIX:-}
     networks:
       - internal_net
     labels:

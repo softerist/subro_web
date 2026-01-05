@@ -48,8 +48,14 @@ echo "--- Stopping Development Stack (if running) ---"
 docker compose -p subapp_dev -f "$DOCK_DIR/docker-compose.yml" -f "$DOCK_DIR/docker-compose.override.yml" down 2>/dev/null || true
 
 # 1. Ensure Infrastructure (Gateway + Data) is running
+# 1. Ensure Infrastructure (Gateway + Data) is running
 echo "--- Ensuring Infrastucture is Up ---"
-docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --build
+if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
+    docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" -f "$COMPOSE_IMAGES" up -d
+else
+    # Build locally if no prebuilt images
+    docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --build
+fi
 
 # 1. Determine Active Color
 # We check if 'blue-api-1' is running. If so, next is green.

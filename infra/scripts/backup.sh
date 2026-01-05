@@ -16,7 +16,7 @@ fi
 echo "[$(date)] Starting backup job..."
 
 # 1. Database Backup
-FILENAME="${DB_NAME}_${TIMESTAMP}.sql.gz"
+FILENAME="${BACKUP_PREFIX:-}${DB_NAME}_${TIMESTAMP}.sql.gz"
 FILEPATH="${BACKUP_PATH}/${FILENAME}"
 
 echo "Dumping database ${DB_NAME} from ${DB_HOST}..."

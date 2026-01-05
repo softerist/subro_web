@@ -321,6 +321,7 @@ deploy_staging:
         export DOCKER_IMAGE_WORKER='$IMAGE_WORKER'
         export DOCKER_IMAGE_FRONTEND='$IMAGE_FRONTEND'
         export DOCKER_IMAGE_BACKUP='$IMAGE_BACKUP'
+        export BACKUP_PREFIX=staging_
         export USE_PREBUILT_IMAGES=1
         export DEPLOY_ENV=staging
 
@@ -444,6 +445,7 @@ deploy_prod:
         export DOCKER_IMAGE_API='$IMAGE_API'
         export DOCKER_IMAGE_WORKER='$IMAGE_WORKER'
         export DOCKER_IMAGE_FRONTEND='$IMAGE_FRONTEND'
+        export DOCKER_IMAGE_BACKUP='$IMAGE_BACKUP'
         export USE_PREBUILT_IMAGES=1
 
         # Ensure scripts are executable
