@@ -90,7 +90,7 @@ if [ -d "/opt/subro_web/infra/docker" ]; then
     echo "Shared Caddy configuration updated (Prod Color: $PROD_COLOR)"
 fi
 
-echo "--- Reloading Caddy ---"
-docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T caddy caddy reload --config /etc/caddy/Caddyfile.prod
+echo "--- Recreating Caddy (picks up env changes) ---"
+docker compose --env-file /opt/subro_web/infra/.env.prod -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --force-recreate caddy
 
 echo "--- Staging Deployment Complete ---"
