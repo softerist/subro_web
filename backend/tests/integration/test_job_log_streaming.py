@@ -172,7 +172,7 @@ class TestWebSocketLogStreaming:
             user_id = register_response.json()["id"]
             print(f"   ✅ User registered: {user_id}")
             login_email, login_password = email, password
-        elif register_response.status_code == 404:
+        elif register_response.status_code in {403, 404}:
             # Registration disabled (OPEN_SIGNUP=False), use admin credentials
             print("   ⚠️  Registration disabled, falling back to admin credentials")
             admin_email = settings.FIRST_SUPERUSER_EMAIL

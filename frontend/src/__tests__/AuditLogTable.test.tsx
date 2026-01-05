@@ -2,7 +2,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuditLogTable } from "../features/admin/components/AuditLogTable";
@@ -105,5 +105,40 @@ describe("AuditLogTable", () => {
     // We can check for the container class specific to loading if icon is hard to find by role
     const spinner = document.querySelector(".animate-spin");
     expect(spinner).toBeDefined();
+  });
+
+  it("shows a next-page button when a cursor exists", () => {
+    const onPageChange = vi.fn();
+    render(
+      <AuditLogTable
+        {...defaultProps}
+        nextCursor="cursor-1"
+        onPageChange={onPageChange}
+      />,
+      { wrapper },
+    );
+
+    const showMore = screen.getByRole("button", { name: /show more/i });
+    fireEvent.click(showMore);
+    expect(onPageChange).toHaveBeenCalledWith(2);
+  });
+
+  it("shows a back-to-top button when on a later page", () => {
+    const onPageChange = vi.fn();
+    render(
+      <AuditLogTable
+        {...defaultProps}
+        page={2}
+        nextCursor={null}
+        onPageChange={onPageChange}
+      />,
+      { wrapper },
+    );
+
+    const showLess = screen.getByRole("button", {
+      name: /show less \(back to top\)/i,
+    });
+    fireEvent.click(showLess);
+    expect(onPageChange).toHaveBeenCalledWith(1);
   });
 });
