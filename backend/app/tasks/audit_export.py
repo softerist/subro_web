@@ -6,7 +6,6 @@ Fetches audit logs based on filters, streaming them into a temporary file,
 compressing, and storing for admin download.
 """
 
-import gzip
 import json
 import logging
 from datetime import UTC, datetime
@@ -25,7 +24,7 @@ EXPORT_DIR = Path("/app/exports/audit")
 
 
 def _make_export_filename(job_id: str) -> str:
-    return f"audit_export_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{job_id[:8]}.jsonl.gz"
+    return f"audit_export_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{job_id[:8]}.json"
 
 
 def _build_export_conditions(filters: dict) -> list:
@@ -88,7 +87,7 @@ async def _run_audit_export_task(task, filters: dict, actor_user_id: str) -> dic
     async with db_session.WorkerSessionLocal() as db:
         result = await db.execute(_build_export_query(filters))
         count = 0
-        with gzip.open(filepath, "wt", encoding="utf-8") as f:
+        with filepath.open("w", encoding="utf-8") as f:
             for row in result.scalars():
                 f.write(json.dumps(_serialize_audit_row(row)) + "\n")
                 count += 1

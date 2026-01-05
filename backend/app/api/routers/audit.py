@@ -376,7 +376,7 @@ async def download_audit_export(filename: str):
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="File not found")
 
-    return FileResponse(path=filepath, filename=filename, media_type="application/gzip")
+    return FileResponse(path=filepath, filename=filename, media_type="application/json")
 
 
 @audit_router.post("/verify", response_model=AuditVerifyResponse)
