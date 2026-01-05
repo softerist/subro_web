@@ -294,6 +294,8 @@ deploy_staging:
   stage: staging
   image: alpine:3.20
   resource_group: staging
+  variables:
+    STAGING_DEPLOY_DIR: /opt/subro_web_staging
   needs:
     - job: backend_tests
     - job: scan_image_vulns
@@ -318,9 +320,12 @@ deploy_staging:
       ssh -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
         set -euo pipefail
 
+        STAGING_DEPLOY_DIR=\"\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}\"
+        echo \"Using staging deploy dir: \$STAGING_DEPLOY_DIR\"
+
         # Ensure staging directory exists
-        mkdir -p /opt/subro_web_staging
-        cd /opt/subro_web_staging
+        mkdir -p \"\$STAGING_DEPLOY_DIR\"
+        cd \"\$STAGING_DEPLOY_DIR\"
 
         # Clone or update repo
         if [ ! -d .git ]; then
@@ -330,6 +335,7 @@ deploy_staging:
           git checkout -f $CI_COMMIT_SHA
           git clean -fd
         fi
+        echo \"Checked out commit: \$(git rev-parse HEAD)\"
 
         # Setup staging environment
         mkdir -p infra
@@ -379,8 +385,21 @@ verify_staging:
     - |
       echo "Verifying staging deployment..."
       for i in $(seq 1 10); do
-        RESPONSE=$(curl -k --fail --silent --max-time 10 "https://staging.$SSH_HOST/api/v1/healthz" 2>&1 || true)
-        if echo "$RESPONSE" | grep -qE '"status":\s*"ok"'; then
+        HEALTH_TMP=$(mktemp)
+        HTTP_CODE=$(curl -k --silent --show-error --max-time 10 -o "$HEALTH_TMP" -w "%{http_code}" "https://staging.$SSH_HOST/health" || true)
+        RESPONSE=$(cat "$HEALTH_TMP" 2>/dev/null || true)
+        rm -f "$HEALTH_TMP"
+        echo "Health /health code=$HTTP_CODE body=${RESPONSE:-<empty>}"
+
+        if ! echo "$RESPONSE" | grep -qE '"status":\s*"(ok|healthy)"'; then
+          HEALTH_TMP=$(mktemp)
+          HTTP_CODE=$(curl -k --silent --show-error --max-time 10 -o "$HEALTH_TMP" -w "%{http_code}" "https://staging.$SSH_HOST/api/v1/healthz" || true)
+          RESPONSE=$(cat "$HEALTH_TMP" 2>/dev/null || true)
+          rm -f "$HEALTH_TMP"
+          echo "Health /api/v1/healthz code=$HTTP_CODE body=${RESPONSE:-<empty>}"
+        fi
+
+        if echo "$RESPONSE" | grep -qE '"status":\s*"(ok|healthy)"'; then
           echo "Staging is healthy! Response: $RESPONSE"
           exit 0
         fi
@@ -509,8 +528,11 @@ verify_prod:
     - |
       echo "Verifying production deployment..."
       for i in $(seq 1 10); do
-        RESPONSE=$(curl --fail --silent --max-time 10 "https://$SSH_HOST/api/v1/healthz" 2>&1 || true)
-        if echo "$RESPONSE" | grep -qE '"status":\s*"ok"'; then
+        RESPONSE=$(curl --fail --silent --max-time 10 "https://$SSH_HOST/health" 2>&1 || true)
+        if ! echo "$RESPONSE" | grep -qE '"status":\s*"(ok|healthy)"'; then
+          RESPONSE=$(curl --fail --silent --max-time 10 "https://$SSH_HOST/api/v1/healthz" 2>&1 || true)
+        fi
+        if echo "$RESPONSE" | grep -qE '"status":\s*"(ok|healthy)"'; then
           echo "Production is healthy! Response: $RESPONSE"
           exit 0
         fi
