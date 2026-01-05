@@ -364,12 +364,18 @@ release_version:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\): bump version/'
       when: on_success
   before_script:
-    - apt-get update && apt-get install -y git
+    - apt-get update && apt-get install -y git openssh-client
+    - pip install tomlkit
+    - eval "$(ssh-agent -s)"
+    - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
+    - chmod 600 /tmp/ssh_key
+    - ssh-add /tmp/ssh_key
+    - rm -f /tmp/ssh_key
+    - mkdir -p ~/.ssh
+    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
     - git config --global user.email "ci-bot@gitlab.com"
     - git config --global user.name "CI Bot"
-    # Authenticate with git using the CI_JOB_TOKEN or a Project Access Token if write access is needed
-    # Using HTTPS with token for push
-    - git remote set-url origin https://oauth2:$GIT_PUSH_TOKEN@gitlab.com/$CI_PROJECT_PATH.git
+    - git remote set-url origin git@$CI_SERVER_HOST:$CI_PROJECT_PATH.git
   script:
     - echo "Bumping version..."
     - python3 backend/scripts/bump_version.py

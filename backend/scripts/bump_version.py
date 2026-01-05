@@ -304,55 +304,6 @@ class VersionBumper:
             return False
         return False
 
-    def update_database(self, new_version: Version) -> bool:
-        """Update app_version in the database."""
-        if self.dry_run:
-            logger.info(f"[DRY-RUN] Update DB app_settings to {new_version}")
-            return True
-
-        try:
-            # Lazy import to avoid import errors if not in correct venv
-            from sqlalchemy import create_engine, text
-
-            from app.core.config import settings
-
-            # Use sync engine for script
-            db_url = (
-                str(settings.PRIMARY_DATABASE_URL_ENV or "")
-                .replace("+asyncpg", "")
-                .replace("postgresql://", "postgresql+psycopg2://")
-            )
-            if not db_url or "None" in db_url:
-                # Fallback to reconstructed URL if env var is missing
-                db_url = f"postgresql+psycopg2://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
-            if "+psycopg2" not in db_url and "postgresql" in db_url:
-                # If it was just postgresql:// (libpq), fine.
-                # But usually asyncpg is specified. Ensure we have a sync driver or default.
-                if "postgresql://" in db_url and "+asyncpg" not in db_url:
-                    pass  # Assume default driver (psycopg2)
-
-            # Create a localized sync engine
-            engine = create_engine(db_url)
-
-            with engine.connect() as conn:
-                # Update the singleton row (id=1)
-                sql = text("UPDATE app_settings SET app_version = :ver WHERE id = 1")
-                result = conn.execute(sql, {"ver": str(new_version)})
-                conn.commit()
-                if result.rowcount == 0:
-                    # Row might not exist yet if init_db hasn't run, but usually it does.
-                    logger.warning("No row found in app_settings (id=1). Version not saved to DB.")
-                else:
-                    logger.info(f"✓ Updated Database app_version to {new_version}")
-            return True
-
-        except ImportError as e:
-            logger.warning(f"Database update skipped: Missing dependencies ({e})")
-            return False  # Non-critical if running outside full env, but user asked for it.
-        except Exception as e:
-            logger.error(f"Database update failed: {e}")
-            return False
-
     def bump_version(self) -> bool:
         try:
             with file_lock(self.pyproject_path):
@@ -367,10 +318,8 @@ class VersionBumper:
                 logger.info(f"New version:     {new_version}")
 
                 if self.update_pyproject(new_version) and self.update_config(new_version):
-                    # DB sync is "best effort" via script but important.
-                    # We don't rollback files if DB fails (since DB might differ in envs)
-                    self.update_database(new_version)
-
+                    # Note: Database version sync happens during deployment via sync_db_version.py
+                    # We don't update the DB here to keep CI concerns separate
                     if not self.dry_run:
                         for u in self.updaters:
                             u.cleanup_backup()

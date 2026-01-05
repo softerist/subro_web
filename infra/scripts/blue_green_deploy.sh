@@ -38,9 +38,6 @@ else
 fi
 
 # 0. Clean up potential conflicting manual networks (optional, for safety)
-# docker network rm infra_internal_net infra_caddy_net 2>/dev/null || true
-# We rely on compose to create them correctly.
-
 # 0.5 Stop Development Stack (if running)
 echo "--- Stopping Development Stack (if running) ---"
 docker compose -p subapp_dev -f "$DOCK_DIR/docker-compose.yml" -f "$DOCK_DIR/docker-compose.override.yml" down 2>/dev/null || true
@@ -156,19 +153,16 @@ else
     echo "--- Re-encryption Skipped (REENCRYPT_ON_DEPLOY=0) ---"
 fi
 
+# 3.7 Sync Database Version
+echo "--- Syncing Database Version ---"
+if ! docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" exec -T api python /app/scripts/sync_db_version.py; then
+    echo "Warning: Database version sync failed. Continuing deployment..."
+fi
+echo "--- Database Version Sync Completed ---"
+
 # 4. Switch Traffic (Update Caddy)
 echo "--- Switching Traffic to $NEW_COLOR ---"
 
-# We use sed to replace the upstream in Caddyfile.prod
-# Template: reverse_proxy api:8000 -> reverse_proxy <color>-api-1:8000
-# And frontend:8080 -> <color>-frontend-1:8080
-# BUT, since we overwrite the file, we should maintain a template.
-# Let's assume Caddyfile.prod IS the template but we need to inject the color.
-# Actually, it's safer to have Caddyfile.template.
-# For this iteration, I will create a template on the fly or sed the live file carefully.
-
-# Create a temporary Caddyfile from a fixed template or backup?
-# I'll rely on a Caddyfile.template file. If it doesn't exist, I'll create it from Caddyfile.prod first time.
 TEMPLATE="$DOCK_DIR/Caddyfile.template"
 if [ ! -f "$TEMPLATE" ]; then
     echo "Creating Caddyfile.template from Caddyfile.prod..."
@@ -176,7 +170,6 @@ if [ ! -f "$TEMPLATE" ]; then
 fi
 
 # Prepare new Caddyfile content
-# We replace placeholders with actual container names
 sed "s/{{UPSTREAM_API}}/$NEW_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$NEW_COLOR-frontend-1/g" "$TEMPLATE" > "$CADDYFILE_PROD"
 
 # Reload Caddy (in infra project)
