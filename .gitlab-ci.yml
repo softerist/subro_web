@@ -383,27 +383,79 @@ verify_staging:
       echo "$SERVER_IP staging.$SSH_HOST" >> /etc/hosts
       echo "Added /etc/hosts entry: $SERVER_IP staging.$SSH_HOST"
     - |
+    - |
       echo "Verifying staging deployment..."
-      for i in $(seq 1 10); do
-        HEALTH_TMP=$(mktemp)
-        HTTP_CODE=$(curl -k --silent --show-error --max-time 10 -o "$HEALTH_TMP" -w "%{http_code}" "https://staging.$SSH_HOST/health" || true)
-        RESPONSE=$(cat "$HEALTH_TMP" 2>/dev/null || true)
-        rm -f "$HEALTH_TMP"
-        echo "Health /health code=$HTTP_CODE body=${RESPONSE:-<empty>}"
+      echo "Curl version:"
+      curl --version
 
-        if ! echo "$RESPONSE" | grep -qE '"status":\s*"(ok|healthy)"'; then
-          HEALTH_TMP=$(mktemp)
-          HTTP_CODE=$(curl -k --silent --show-error --max-time 10 -o "$HEALTH_TMP" -w "%{http_code}" "https://staging.$SSH_HOST/api/v1/healthz" || true)
-          RESPONSE=$(cat "$HEALTH_TMP" 2>/dev/null || true)
-          rm -f "$HEALTH_TMP"
-          echo "Health /api/v1/healthz code=$HTTP_CODE body=${RESPONSE:-<empty>}"
-        fi
+      for i in $(seq 1 10); do
+        echo "----------------------------------------------------------------"
+        echo "Attempt $i/10"
+
+        HEALTH_TMP=$(mktemp)
+        HEADERS_TMP=$(mktemp)
+
+        # Request 1: /health
+        # Use -v to see handshake/headers in job log (stderr)
+        # Use -D to dump headers to file for inspection if needed (or just rely on -v)
+        echo "Checking https://staging.$SSH_HOST/health ..."
+        HTTP_CODE=$(curl -k -v --show-error --max-time 10 -o "$HEALTH_TMP" -w "%{http_code}" "https://staging.$SSH_HOST/health" 2>&1 || true)
+
+        # Note: We are capturing stderr in HTTP_CODE due to 2>&1, but wait, if we use -v, stderr is huge.
+        # We should NOT capture stderr in HTTP_CODE if we want to see it in logs.
+        # Correct approach: Don't redirect stderr to stdout if capturing output.
+        # But we want the exit code?
+        # Let's separate the curl execution.
+
+        curl -k -v --show-error --max-time 10 -o "$HEALTH_TMP" -w "%{http_code}" "https://staging.$SSH_HOST/health" > "$HEADERS_TMP" 2>&1 || true
+        # Now HEADERS_TMP has the http code (on last line maybe? no -w prints to stdout) AND verbose output?
+        # No, -w prints to stdout. -v prints to stderr.
+        # If I redirect > "$HEADERS_TMP" 2>&1, EVERYTHING goes to file.
+        # Then I can cat the file to see it in logs, and also parse the http code.
+
+        OUTPUT=$(cat "$HEADERS_TMP")
+        echo "$OUTPUT" # Print everything to job log
+
+        # Extract HTTP code (last line is usually the write-out)
+        HTTP_CODE=$(tail -n 1 "$HEADERS_TMP" | tr -d '\n' | grep -oE '[0-9]{3}$' || echo "000")
+
+        RESPONSE=$(cat "$HEALTH_TMP" 2>/dev/null || true)
+        rm -f "$HEALTH_TMP" "$HEADERS_TMP"
+
+        echo "Health /health code=$HTTP_CODE"
+        echo "Body length: ${#RESPONSE}"
+        echo "Body content: >>$RESPONSE<<"
 
         if echo "$RESPONSE" | grep -qE '"status":\s*"(ok|healthy)"'; then
-          echo "Staging is healthy! Response: $RESPONSE"
+          echo "Staging is healthy! (Found status: ok/healthy)"
           exit 0
         fi
-        echo "Waiting for staging ($i/10)... Response: $RESPONSE"
+
+        # Request 2: /api/v1/healthz (fallback)
+        if [ "$HTTP_CODE" != "200" ] || [ -z "$RESPONSE" ]; then
+            echo "Checking https://staging.$SSH_HOST/api/v1/healthz ..."
+            HEALTH_TMP=$(mktemp)
+            HEADERS_TMP=$(mktemp)
+
+            curl -k -v --show-error --max-time 10 -o "$HEALTH_TMP" -w "%{http_code}" "https://staging.$SSH_HOST/api/v1/healthz" > "$HEADERS_TMP" 2>&1 || true
+            OUTPUT=$(cat "$HEADERS_TMP")
+            echo "$OUTPUT"
+            HTTP_CODE=$(tail -n 1 "$HEADERS_TMP" | tr -d '\n' | grep -oE '[0-9]{3}$' || echo "000")
+
+            RESPONSE=$(cat "$HEALTH_TMP" 2>/dev/null || true)
+            rm -f "$HEALTH_TMP" "$HEADERS_TMP"
+
+            echo "Health /api/v1/healthz code=$HTTP_CODE"
+            echo "Body length: ${#RESPONSE}"
+            echo "Body content: >>$RESPONSE<<"
+
+            if echo "$RESPONSE" | grep -qE '"status":\s*"(ok|healthy)"'; then
+              echo "Staging is healthy! (Found status: ok/healthy)"
+              exit 0
+            fi
+        fi
+
+        echo "Waiting for staging ($i/10)..."
         sleep 5
       done
       echo "Staging health check failed!"
