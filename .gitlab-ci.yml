@@ -333,7 +333,7 @@ deploy_staging:
       "
   environment:
     name: staging
-    url: https://$SSH_HOST/
+    url: https://staging.$SSH_HOST/
   retry: 1
 
 verify_staging:
@@ -358,7 +358,7 @@ verify_staging:
       exit 1
   environment:
     name: staging
-    url: https://$SSH_HOST/
+    url: https://staging.$SSH_HOST/
 
 # ============ E2E TESTS STAGE ============
 e2e_tests:
