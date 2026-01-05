@@ -9,6 +9,10 @@ RUN apk add --no-cache curl && npm ci
 FROM base AS development
 # Copy source code (though usually mounted via volume in dev)
 COPY . .
+# Fix permissions: ensure node_modules and future .vite cache are writable by node user
+RUN chown -R node:node /app && \
+    mkdir -p /app/node_modules/.vite && \
+    chown -R node:node /app/node_modules/.vite
 USER node
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 

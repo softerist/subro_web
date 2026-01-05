@@ -523,6 +523,7 @@ async def validate_all_settings(db: AsyncSession) -> None:
         # --- Audit Log Enhancements ---
         await audit_service.log_event(
             db,
+            category="security",
             action="security.api_validation",
             severity="info" if getattr(settings_row, "tmdb_valid", False) else "warning",
             details={
