@@ -18,7 +18,7 @@ logging.getLogger("faker").setLevel(logging.WARNING)
 
 from app.core.config import settings  # noqa: E402
 from app.core.rate_limit import limiter  # noqa: E402
-from app.db.models.user import Base  # noqa: E402
+from app.db.base import Base  # noqa: E402
 
 # MODIFIED LINE: Import get_async_session instead of get_db_session
 from app.db.session import get_async_session  # noqa: E402

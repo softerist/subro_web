@@ -215,6 +215,7 @@ ensure-migrations:
 
 prod: ensure-dev-cleanup ## Deploy to production using blue-green deployment script
 	@echo "Deploying to production..."
+	chmod +x ./infra/scripts/blue_green_deploy.sh
 	./infra/scripts/blue_green_deploy.sh
 	@echo "Production stack deployed."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8080"
