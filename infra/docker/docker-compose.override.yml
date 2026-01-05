@@ -41,6 +41,17 @@ services:
     # Use --concurrency to control how many tasks can run simultaneously
     command: [ "poetry", "run", "celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=info", "--concurrency=4" ]
 
+  beat:
+    environment:
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - ../../backend:/app
+      - /app/.venv
+      - /mnt/usb3/Media/Movies:/mnt/usb3/Media/Movies
+      - /root/Downloads:/downloads
+    command: [ "poetry", "run", "celery", "-A", "app.tasks.celery_app", "beat", "--loglevel=info" ]
+
   frontend:
     # Command to run Vite dev server with HMR, listening on all interfaces
     # The '--host 0.0.0.0' makes it accessible to Caddy over the docker network

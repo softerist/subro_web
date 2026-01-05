@@ -72,7 +72,8 @@ describe("AuditLogTable", () => {
     isLoading: false,
     total: 2,
     page: 1,
-    perPage: 10,
+    perPage: 15,
+    nextCursor: null as string | null,
     onPageChange: vi.fn(),
   };
 
@@ -91,7 +92,7 @@ describe("AuditLogTable", () => {
   });
 
   it("shows empty state when no logs", () => {
-    render(<AuditLogTable {...defaultProps} logs={[]} total={0} />, {
+    render(<AuditLogTable {...defaultProps} logs={[]} />, {
       wrapper,
     });
 

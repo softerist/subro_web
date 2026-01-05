@@ -18,7 +18,7 @@ celery_app = Celery(
     "worker",
     broker=str(settings.CELERY_BROKER_URL),
     backend=str(settings.CELERY_RESULT_BACKEND),
-    include=["app.tasks.subtitle_jobs"],
+    include=["app.tasks.subtitle_jobs", "app.tasks.audit_export", "app.tasks.audit_worker"],
 )
 
 # Robust configuration using pydantic settings object directly.
@@ -27,6 +27,15 @@ celery_app.config_from_object(settings, namespace="CELERY")
 
 # Optional: keep timezone as it might be named differently in settings (TIMEZONE vs CELERY_TIMEZONE)
 celery_app.conf.timezone = settings.TIMEZONE
+
+# Periodic tasks (Celery beat)
+celery_app.conf.beat_schedule = {
+    "audit_outbox_drain": {
+        "task": "app.tasks.audit_worker_batch",
+        "schedule": 15.0,
+        "args": (100,),
+    },
+}
 
 
 # --- Worker Process Lifecycle Signal Handlers ---

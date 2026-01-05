@@ -32,27 +32,70 @@ vi.mock("../features/jobs/components/StorageManagerDialog", () => ({
 }));
 
 // Mock UI Select components to be standard select/options for JSDOM the tests
-vi.mock("@/components/ui/select", () => ({
-  Select: ({ children, onValueChange, value, name }: any) => (
-    <select
-      data-testid={name}
-      value={value}
-      onChange={(e) => onValueChange(e.target.value)}
-    >
-      {children}
-    </select>
-  ),
-  SelectTrigger: ({ children, "data-testid": testId }: any) => (
-    <div data-testid={testId}>{children}</div>
-  ),
-  SelectValue: ({ placeholder }: any) => <span>{placeholder}</span>,
-  SelectContent: ({ children }: any) => <>{children}</>,
-  SelectItem: ({ children, value }: any) => (
+vi.mock("@/components/ui/select", () => {
+  const SelectItem = ({ children, value }: any) => (
     <option value={value}>
       {typeof children === "string" ? children : value}
     </option>
-  ),
-}));
+  );
+
+  const flattenChildren = (value: any): any[] =>
+    Array.isArray(value) ? value.flatMap(flattenChildren) : [value];
+
+  const extractText = (node: any): string => {
+    if (typeof node === "string") {
+      return node;
+    }
+    if (Array.isArray(node)) {
+      return node.map(extractText).join("");
+    }
+    if (node && typeof node === "object" && "props" in node) {
+      return extractText(node.props?.children);
+    }
+    return "";
+  };
+
+  return {
+    Select: ({ children, onValueChange, value, name }: any) => (
+      <select
+        data-testid={name}
+        value={value}
+        onChange={(e) => onValueChange(e.target.value)}
+      >
+        {children}
+      </select>
+    ),
+    SelectTrigger: () => null,
+    SelectValue: () => null,
+    SelectContent: ({ children }: any) => {
+      const items = flattenChildren(children);
+      return (
+        <>
+          {items.map((child, index) => {
+            if (
+              child &&
+              typeof child === "object" &&
+              "type" in child &&
+              child.type === SelectItem
+            ) {
+              return child;
+            }
+            const label = extractText(child);
+            if (!label) {
+              return null;
+            }
+            return (
+              <option key={`mock-option-${index}`} disabled value="">
+                {label}
+              </option>
+            );
+          })}
+        </>
+      );
+    },
+    SelectItem,
+  };
+});
 
 // Mock Sonner toast
 vi.mock("sonner", () => ({

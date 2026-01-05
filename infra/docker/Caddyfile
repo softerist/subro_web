@@ -37,7 +37,11 @@ https://localhost:8444 {
 
 	# 1. Handle API requests - NO rewrite/strip should happen here
 	route @api {
-		reverse_proxy api:8000
+		reverse_proxy api:8000 {
+			header_up X-Real-IP {http.request.remote.host}
+			header_up X-Forwarded-For {http.request.remote.host}
+			header_up X-Forwarded-Proto {scheme}
+		}
 	}
 
 	# 2. Handle WebSocket requests

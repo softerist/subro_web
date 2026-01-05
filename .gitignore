@@ -126,3 +126,4 @@ heuristic-mcp-repo
 backend/secrets/*.json
 backend/secrets/*.pem
 backend/secrets/*.key
+backend/celerybeat-schedule.db

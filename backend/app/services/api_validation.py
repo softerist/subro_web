@@ -520,16 +520,33 @@ async def validate_all_settings(db: AsyncSession) -> None:
                 # SettingsRead.google_cloud_valid handles the display logic for env.
                 pass
 
+        validation_fields = (
+            ("TMDB", getattr(settings_row, "tmdb_valid", None)),
+            ("OMDB", getattr(settings_row, "omdb_valid", None)),
+            ("OpenSubtitles", getattr(settings_row, "opensubtitles_valid", None)),
+            ("Google Cloud", getattr(settings_row, "google_cloud_valid", None)),
+        )
+        apis_validated = [name for name, value in validation_fields if value is not None]
+
         # --- Audit Log Enhancements ---
         await audit_service.log_event(
             db,
+            category="security",
             action="security.api_validation",
             severity="info" if getattr(settings_row, "tmdb_valid", False) else "warning",
             details={
                 "tmdb_valid": getattr(settings_row, "tmdb_valid", None),
+                "tmdb_rate_limited": getattr(settings_row, "tmdb_rate_limited", None),
                 "omdb_valid": getattr(settings_row, "omdb_valid", None),
+                "omdb_rate_limited": getattr(settings_row, "omdb_rate_limited", None),
                 "opensubtitles_valid": getattr(settings_row, "opensubtitles_valid", None),
+                "opensubtitles_key_valid": getattr(settings_row, "opensubtitles_key_valid", None),
+                "opensubtitles_rate_limited": getattr(
+                    settings_row, "opensubtitles_rate_limited", None
+                ),
                 "google_cloud_valid": getattr(settings_row, "google_cloud_valid", None),
+                "validation_count": len(apis_validated),
+                "apis_validated": ", ".join(apis_validated),
             },
         )
 
@@ -539,7 +556,8 @@ async def validate_all_settings(db: AsyncSession) -> None:
         # We need to get the keys first
         deepl_keys = await crud_app_settings.get_decrypted_value(db, "deepl_api_keys")
         logger.info(
-            f"DeepL keys retrieved for validation: {type(deepl_keys)} - count: {len(deepl_keys) if isinstance(deepl_keys, list) else 'N/A'}"
+            f"DeepL keys retrieved for validation: {type(deepl_keys)} - count: "
+            f"{len(deepl_keys) if isinstance(deepl_keys, list) else 'N/A'}"
         )
 
         if deepl_keys and isinstance(deepl_keys, list):

@@ -25,6 +25,7 @@ from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
 # Project-specific imports
 from app.core.config import settings
+from app.core.request_context import set_actor
 from app.db.models.user import User
 
 # Import the definitive get_user_db adapter factory from db.session
@@ -188,9 +189,28 @@ fastapi_users_instance = FastAPIUsers[User, uuid.UUID](
 )
 
 # --- Standard Current User Dependencies ---
-current_active_user = fastapi_users_instance.current_user(active=True)
-current_active_verified_user = fastapi_users_instance.current_user(active=True, verified=True)
-current_active_superuser = fastapi_users_instance.current_user(active=True, superuser=True)
+_current_active_user = fastapi_users_instance.current_user(active=True)
+_current_active_verified_user = fastapi_users_instance.current_user(active=True, verified=True)
+_current_active_superuser = fastapi_users_instance.current_user(active=True, superuser=True)
+
+
+async def current_active_user(user: User = Depends(_current_active_user)) -> User:
+    set_actor(user_id=str(user.id), email=user.email, actor_type="user")
+    return user
+
+
+async def current_active_verified_user(
+    user: User = Depends(_current_active_verified_user),
+) -> User:
+    set_actor(user_id=str(user.id), email=user.email, actor_type="user")
+    return user
+
+
+async def current_active_superuser(
+    user: User = Depends(_current_active_superuser),
+) -> User:
+    set_actor(user_id=str(user.id), email=user.email, actor_type="user")
+    return user
 
 
 # --- Custom Role-Based Dependencies ---
