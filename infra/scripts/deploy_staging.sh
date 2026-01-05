@@ -68,7 +68,26 @@ echo "--- Staging is Healthy ---"
 echo "--- Running Database Migrations (staging) ---"
 docker compose --env-file "$ENV_FILE" -p subro_staging -f "$COMPOSE_APP" exec -T api poetry run alembic upgrade head
 
-# Reload Caddy to recognize staging domain
+# 5. Reload Caddy (safely sync with latest staging routes)
+echo "--- Updating Shared Caddy Configuration ---"
+# Detect current production color to avoid breaking it
+if docker ps --format '{{.Names}}' | grep -q "blue-api-1"; then
+    PROD_COLOR="blue"
+elif docker ps --format '{{.Names}}' | grep -q "green-api-1"; then
+    PROD_COLOR="green"
+else
+    # Fallback to blue if production is not found (might be first deploy)
+    PROD_COLOR="blue"
+fi
+
+# Update the shared Caddyfile using the latest template from this deployment
+# Note: This assumes production is in /opt/subro_web
+PROD_CADDYFILE="/opt/subro_web/infra/docker/Caddyfile.prod"
+if [ -d "/opt/subro_web/infra/docker" ]; then
+    sed "s/{{UPSTREAM_API}}/$PROD_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$PROD_COLOR-frontend-1/g" "$DOCK_DIR/Caddyfile.template" > "$PROD_CADDYFILE"
+    echo "Shared Caddy configuration updated (Prod Color: $PROD_COLOR)"
+fi
+
 echo "--- Reloading Caddy ---"
 docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T caddy caddy reload --config /etc/caddy/Caddyfile.prod
 
