@@ -39,7 +39,7 @@
 }
 
 # HTTP listener on port 80 (for nginx reverse proxy)
-:80 {
+http://:80 {
         import common_security_headers
 
         # Define named matchers
