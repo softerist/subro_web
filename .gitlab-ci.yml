@@ -104,6 +104,7 @@ build_backup:
   variables:
     SERVICE: backup
     IMAGE: $IMAGE_BACKUP
+    TARGET: production
     DOCKERFILE: infra/docker/backup/Dockerfile
     CONTEXT: .
   script:

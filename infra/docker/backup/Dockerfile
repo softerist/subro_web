@@ -1,4 +1,4 @@
-FROM alpine:3.19
+FROM alpine:3.19 AS production
 
 # Install tools
 # postgresql16-client for pg_dump
