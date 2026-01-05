@@ -6,6 +6,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.crud.crud_app_settings import crud_app_settings
 from app.db.models.deepl_usage import DeepLUsage
 
@@ -151,7 +152,7 @@ async def validate_opensubtitles(  # noqa: C901
         headers = {
             "Api-Key": api_key,
             "Content-Type": "application/json",
-            "User-Agent": "SubtitleDownloader v1.0",
+            "User-Agent": f"{settings.USER_AGENT_APP_NAME} v{settings.USER_AGENT_APP_VERSION}",
         }
         payload = {"username": username, "password": password}
 
@@ -173,7 +174,7 @@ async def validate_opensubtitles(  # noqa: C901
                         logout_headers = {
                             "Api-Key": api_key,
                             "Authorization": f"Bearer {token}",
-                            "User-Agent": "SubtitleDownloader v1.0",
+                            "User-Agent": f"{settings.USER_AGENT_APP_NAME} v{settings.USER_AGENT_APP_VERSION}",
                         }
                         try:
                             await client.delete(logout_url, headers=logout_headers, timeout=5.0)
@@ -213,7 +214,7 @@ async def validate_opensubtitles(  # noqa: C901
     check_url = "https://api.opensubtitles.com/api/v1/infos/formats"
     headers = {
         "Api-Key": api_key,
-        "User-Agent": "SubtitleDownloader v1.0",
+        "User-Agent": f"{settings.USER_AGENT_APP_NAME} v{settings.USER_AGENT_APP_VERSION}",
     }
 
     async with httpx.AsyncClient() as client:

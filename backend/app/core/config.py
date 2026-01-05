@@ -301,8 +301,8 @@ class Settings(BaseSettings):
     USER_AGENT_APP_NAME: str = Field(
         default="SubtitleDownloader", validation_alias="USER_AGENT_APP_NAME"
     )
-    USER_AGENT_APP_VERSION: str = Field(
-        default="0.1.3-PROD", validation_alias="USER_AGENT_APP_VERSION"
+    USER_AGENT_APP_VERSION: str | None = Field(
+        default=None, validation_alias="USER_AGENT_APP_VERSION"
     )
     LOG_FILE_NAME_PATTERN: str = Field(
         default="{base_name}.log", validation_alias="LOG_FILE_NAME_PATTERN"
@@ -386,6 +386,10 @@ class Settings(BaseSettings):
         self._parse_complex_fields()
         self._apply_debug_overrides()
         self._configure_docs()
+
+        # Default User-Agent version to App version if not specified
+        if not self.USER_AGENT_APP_VERSION:
+            self.USER_AGENT_APP_VERSION = self.APP_VERSION
 
         if self.ROOT_PATH and self.ROOT_PATH != "/":
             self.ROOT_PATH = self.ROOT_PATH.strip("/")
