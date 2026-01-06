@@ -292,19 +292,17 @@ sast_scan:
     - when: on_success
   script:
     - |
+      # Debug: Check if token is set (without revealing value)
       if [ -z "${SEMGREP_APP_TOKEN:-}" ]; then
-        echo "SEMGREP_APP_TOKEN is not set. Configure a valid Semgrep App Token to use --config auto."
+        echo "ERROR: SEMGREP_APP_TOKEN is not set or empty."
+        echo "Please configure it in GitLab CI/CD Variables."
         exit 2
       fi
-      EXTRA_ARGS=""
-      if [ "$SAST_FAIL_ON_FINDINGS" == "true" ]; then
-        EXTRA_ARGS="--error"
-      fi
-      if ! semgrep scan --config auto --sarif -o semgrep.sarif \
-        --severity "$SAST_MIN_SEVERITY" $EXTRA_ARGS "$CI_PROJECT_DIR"; then
-        echo "Semgrep scan failed. If you see HTTP 401, verify SEMGREP_APP_TOKEN has access to semgrep.dev configs."
-        exit 2
-      fi
+      echo "✓ SEMGREP_APP_TOKEN is set (length: ${#SEMGREP_APP_TOKEN})"
+
+      # Use 'semgrep ci' for authenticated CI runs (automatically uses SEMGREP_APP_TOKEN)
+      # This is the recommended way to run Semgrep in CI with cloud features
+      semgrep ci --sarif -o semgrep.sarif
   artifacts:
     reports:
       sast: semgrep.sarif
