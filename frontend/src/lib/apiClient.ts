@@ -73,7 +73,7 @@ api.interceptors.response.use(
         // Redirect to login page
         if (
           window.location.pathname !== "/login" &&
-          window.location.pathname !== "/setup"
+          window.location.pathname !== "/onboarding"
         ) {
           window.location.href = "/login";
         }

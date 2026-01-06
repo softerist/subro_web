@@ -59,7 +59,7 @@ from app.api.routers.dashboard import router as dashboard_router
 from app.api.routers.files import router as files_router
 from app.api.routers.jobs import router as jobs_router
 from app.api.routers.mfa import router as mfa_router
-from app.api.routers.onboarding import router as setup_router
+from app.api.routers.onboarding import router as onboarding_router
 from app.api.routers.settings import router as settings_router
 from app.api.routers.storage_paths import router as storage_paths_router
 from app.api.routers.translation_stats import router as translation_stats_router
@@ -263,7 +263,7 @@ if settings.BACKEND_CORS_ORIGINS:
                 "Content-Type",
                 "Authorization",
                 "X-API-Key",
-                "X-Setup-Token",
+                "X-Onboarding-Token",
                 "Accept",
                 "Origin",
                 "X-Requested-With",
@@ -369,9 +369,9 @@ api_v1_router.include_router(
 )
 api_v1_router.include_router(storage_paths_router, prefix="/storage-paths", tags=["Storage Paths"])
 
-# *** SETUP AND SETTINGS ROUTERS ***
-# Setup is PUBLIC (no auth required) - used for initial configuration wizard
-api_v1_router.include_router(setup_router)  # prefix is already "/setup" in router
+# *** ONBOARDING AND SETTINGS ROUTERS ***
+# Onboarding is PUBLIC (no auth required) - used for initial configuration wizard
+api_v1_router.include_router(onboarding_router)  # prefix is already "/onboarding" in router
 # Settings requires admin auth - used for updating configuration after setup
 api_v1_router.include_router(settings_router)  # prefix is already "/settings" in router
 # MFA - Multi-Factor Authentication endpoints

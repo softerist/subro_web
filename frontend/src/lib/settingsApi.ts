@@ -67,19 +67,21 @@ export interface SetupComplete {
 // Public endpoint - no auth required
 export const getSetupStatus = async (): Promise<SetupStatus> => {
   // Use axios directly (no auth interceptor needed for public endpoint)
-  const response = await axios.get<SetupStatus>("/api/v1/setup/status");
+  const response = await axios.get<SetupStatus>("/api/v1/onboarding/status");
   return response.data;
 };
 
 // Public endpoint - complete setup (only works if setup_completed is false)
 export const completeSetup = async (
   data: SetupComplete,
-  setupToken?: string,
+  onboardingToken?: string,
 ): Promise<SetupStatus> => {
   const response = await axios.post<SetupStatus>(
-    "/api/v1/setup/complete",
+    "/api/v1/onboarding/complete",
     data,
-    setupToken ? { headers: { "X-Setup-Token": setupToken } } : undefined,
+    onboardingToken
+      ? { headers: { "X-Onboarding-Token": onboardingToken } }
+      : undefined,
   );
   return response.data;
 };
@@ -88,15 +90,17 @@ export const completeSetup = async (
 export const skipSetup = async (
   adminEmail?: string,
   adminPassword?: string,
-  setupToken?: string,
+  onboardingToken?: string,
 ): Promise<SetupStatus> => {
   const response = await axios.post<SetupStatus>(
-    "/api/v1/setup/skip",
+    "/api/v1/onboarding/skip",
     {
       admin_email: adminEmail || null,
       admin_password: adminPassword || null,
     },
-    setupToken ? { headers: { "X-Setup-Token": setupToken } } : undefined,
+    onboardingToken
+      ? { headers: { "X-Onboarding-Token": onboardingToken } }
+      : undefined,
   );
   return response.data;
 };

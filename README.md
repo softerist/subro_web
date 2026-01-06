@@ -121,7 +121,7 @@ The backend utilizes a **FastAPI** application for HTTP endpoints and a **Celery
 
    There are two ways to initialize the system:
    - **Automated (Recommended):** Set the `FIRST_SUPERUSER_` variables in your `.env` (dev) or `.env.prod` (production) file BEFORE starting the containers. The system will detect these and bootstrap the admin account automatically.
-   - **Setup Wizard:** If no environment variables are detected, visit `https://localhost/setup` on your first visit to create the initial superuser and configure API keys via the web interface.
+   - **Onboarding Wizard:** If no environment variables are detected, visit `https://localhost/onboarding` on your first visit to create the initial superuser and configure API keys via the web interface.
 
    > [!IMPORTANT]
    > All passwords must meet complexity requirements: Minimum 8 characters, including at least one uppercase letter, one lowercase letter, and one number.

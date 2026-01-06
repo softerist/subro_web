@@ -126,7 +126,7 @@ build_backup:
         --target "$TARGET" \
         --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-/api/v1}" \
         --build-arg VITE_WS_BASE_URL="${VITE_WS_BASE_URL:-/api/v1}" \
-        --build-arg VITE_SETUP_TOKEN="${VITE_SETUP_TOKEN:-}" \
+        --build-arg VITE_ONBOARDING_TOKEN="${VITE_ONBOARDING_TOKEN:-}" \
         --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
         --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
         -f "$DOCKERFILE" \
@@ -225,7 +225,7 @@ frontend_tests:
     NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/frontend/.npm"
     VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:8000/api/v1}"
     VITE_WS_BASE_URL: "${VITE_WS_BASE_URL:-ws://localhost:8000/api/v1}"
-    VITE_SETUP_TOKEN: "${VITE_SETUP_TOKEN}"
+    VITE_ONBOARDING_TOKEN: "${VITE_ONBOARDING_TOKEN}"
     VITE_API_PROXY_TARGET: "${VITE_API_PROXY_TARGET:-http://localhost:8000}"
   cache:
     key:
@@ -469,6 +469,49 @@ e2e_tests:
     paths:
       - frontend/playwright-report/
     expire_in: 7 days
+
+# Cleanup staging after E2E tests (ephemeral staging)
+cleanup_staging:
+  stage: e2e
+  image: alpine:3.20
+  needs:
+    - job: e2e_tests
+      artifacts: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always # Run even if e2e_tests fail
+  before_script:
+    - set -euo pipefail
+    - apk add --no-cache bash openssh-client
+    - eval "$(ssh-agent -s)"
+    - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
+    - chmod 600 /tmp/ssh_key
+    - ssh-add /tmp/ssh_key
+    - rm -f /tmp/ssh_key
+    - mkdir -p ~/.ssh
+    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+  script:
+    - |
+      echo "Stopping staging environment..."
+      ssh -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+        set -euo pipefail
+        STAGING_DIR=\"\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}\"
+
+        if [ -d \"\$STAGING_DIR\" ]; then
+          cd \"\$STAGING_DIR\"
+
+          # Stop staging containers (app stack)
+          docker compose -p subro_staging \
+            --env-file infra/.env.staging \
+            -f infra/docker/compose.prod.yml \
+            down --remove-orphans 2>/dev/null || true
+
+          echo '✓ Staging environment stopped'
+        else
+          echo 'Staging directory not found, nothing to clean up'
+        fi
+      "
+  allow_failure: true # Don't block pipeline if cleanup fails
 
 # ============ DEPLOY STAGE ============
 .deploy_template:

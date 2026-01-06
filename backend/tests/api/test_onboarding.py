@@ -14,7 +14,7 @@ API_PREFIX = settings.API_V1_STR
 @pytest.mark.asyncio
 async def test_setup_status_returns_all_fields(test_client: AsyncClient):
     """Verify setup_required and setup_forced are returned along with setup_completed."""
-    response = await test_client.get(f"{API_PREFIX}/setup/status")
+    response = await test_client.get(f"{API_PREFIX}/onboarding/status")
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert "setup_completed" in data
@@ -35,7 +35,7 @@ async def test_complete_setup_success(test_client: AsyncClient, db_session: Asyn
     }
 
     with patch("app.api.routers.onboarding.validate_all_settings"):
-        response = await test_client.post(f"{API_PREFIX}/setup/complete", json=setup_payload)
+        response = await test_client.post(f"{API_PREFIX}/onboarding/complete", json=setup_payload)
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["setup_completed"] is True
@@ -55,7 +55,7 @@ async def test_setup_endpoints_forbidden_once_completed(
     await db_session.commit()
 
     setup_payload = {"admin_email": "another_admin@example.com", "admin_password": "Password123"}
-    response = await test_client.post(f"{API_PREFIX}/setup/complete", json=setup_payload)
+    response = await test_client.post(f"{API_PREFIX}/onboarding/complete", json=setup_payload)
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -66,7 +66,7 @@ async def test_skip_without_credentials_fails_when_signup_disabled(test_client: 
     with patch.object(settings, "OPEN_SIGNUP", False):
         with patch.object(settings, "FIRST_SUPERUSER_EMAIL", None):
             with patch.object(settings, "FIRST_SUPERUSER_PASSWORD", None):
-                response = await test_client.post(f"{API_PREFIX}/setup/skip", json={})
+                response = await test_client.post(f"{API_PREFIX}/onboarding/skip", json={})
                 assert response.status_code == status.HTTP_400_BAD_REQUEST
                 assert "Admin credentials required" in response.json()["detail"]
 
@@ -77,7 +77,7 @@ async def test_skip_partial_credentials_fails(test_client: AsyncClient):
     """Verify 400 returned when only email or password provided (not both)."""
     # Only email, no password
     response = await test_client.post(
-        f"{API_PREFIX}/setup/skip",
+        f"{API_PREFIX}/onboarding/skip",
         json={"admin_email": "test@example.com", "admin_password": None},
     )
     assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -85,7 +85,7 @@ async def test_skip_partial_credentials_fails(test_client: AsyncClient):
 
     # Only password, no email
     response = await test_client.post(
-        f"{API_PREFIX}/setup/skip",
+        f"{API_PREFIX}/onboarding/skip",
         json={"admin_email": None, "admin_password": "somepassword"},
     )
     assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -98,7 +98,7 @@ async def test_skip_with_env_fallback_succeeds(test_client: AsyncClient):
     with patch.object(settings, "FIRST_SUPERUSER_EMAIL", "env_admin@example.com"):
         with patch.object(settings, "FIRST_SUPERUSER_PASSWORD", "EnvPassword123"):
             with patch("app.api.routers.onboarding.validate_all_settings"):
-                response = await test_client.post(f"{API_PREFIX}/setup/skip", json={})
+                response = await test_client.post(f"{API_PREFIX}/onboarding/skip", json={})
                 assert response.status_code == status.HTTP_200_OK
                 data = response.json()
                 assert data["setup_completed"] is True
@@ -136,7 +136,7 @@ async def test_complete_with_existing_admin_updates_password_on_first_setup(
     # Now complete setup with same email but different password
     with patch("app.api.routers.onboarding.validate_all_settings"):
         response = await test_client.post(
-            f"{API_PREFIX}/setup/complete",
+            f"{API_PREFIX}/onboarding/complete",
             json={
                 "admin_email": "existing@example.com",
                 "admin_password": "NewPassword123",
@@ -158,7 +158,7 @@ async def test_force_initial_setup_shows_wizard_after_completion(
     await db_session.commit()
 
     # Without force flag, setup should NOT be required
-    response = await test_client.get(f"{API_PREFIX}/setup/status")
+    response = await test_client.get(f"{API_PREFIX}/onboarding/status")
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["setup_completed"] is True
@@ -166,7 +166,7 @@ async def test_force_initial_setup_shows_wizard_after_completion(
 
     # With FORCE_INITIAL_SETUP=true, setup_required should be True
     with patch.object(settings, "FORCE_INITIAL_SETUP", True):
-        response = await test_client.get(f"{API_PREFIX}/setup/status")
+        response = await test_client.get(f"{API_PREFIX}/onboarding/status")
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["setup_completed"] is True  # Still true
@@ -185,13 +185,15 @@ async def test_forced_setup_allows_complete_after_already_completed(
 
     # Without force, should return 404
     setup_payload = {"admin_email": "forced@example.com", "admin_password": "ForcedPassword123"}
-    response = await test_client.post(f"{API_PREFIX}/setup/complete", json=setup_payload)
+    response = await test_client.post(f"{API_PREFIX}/onboarding/complete", json=setup_payload)
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
     # With FORCE_INITIAL_SETUP=true, should succeed
     with patch.object(settings, "FORCE_INITIAL_SETUP", True):
         with patch("app.api.routers.onboarding.validate_all_settings"):
-            response = await test_client.post(f"{API_PREFIX}/setup/complete", json=setup_payload)
+            response = await test_client.post(
+                f"{API_PREFIX}/onboarding/complete", json=setup_payload
+            )
             assert response.status_code == status.HTTP_200_OK
 
 
@@ -203,7 +205,7 @@ async def test_skip_endpoint_blocked_after_completion(
     await crud_app_settings.mark_setup_completed(db_session)
     await db_session.commit()
 
-    response = await test_client.post(f"{API_PREFIX}/setup/skip", json={})
+    response = await test_client.post(f"{API_PREFIX}/onboarding/skip", json={})
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -270,7 +272,7 @@ async def test_forced_setup_with_existing_admin_preserves_password(
     with patch.object(settings, "FORCE_INITIAL_SETUP", True):
         with patch("app.api.routers.onboarding.validate_all_settings"):
             response = await test_client.post(
-                f"{API_PREFIX}/setup/complete",
+                f"{API_PREFIX}/onboarding/complete",
                 json={
                     "admin_email": "existing_admin@example.com",
                     "admin_password": "DifferentPassword456",

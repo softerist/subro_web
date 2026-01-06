@@ -29,22 +29,22 @@ from app.services.api_validation import validate_all_settings
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/setup", tags=["Setup"])
+router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
 
 
-def _require_setup_token(setup_token: str | None) -> None:
+def _require_onboarding_token(onboarding_token: str | None) -> None:
     if settings.ENVIRONMENT != "production":
         return
-    # If SETUP_TOKEN is not configured, allow setup to proceed without token
+    # If ONBOARDING_TOKEN is not configured, allow onboarding to proceed without token
     # This is intentional for simpler deployments that don't need token protection
-    if not settings.SETUP_TOKEN:
-        logger.warning("SETUP_TOKEN is not configured. Setup endpoints are unprotected.")
+    if not settings.ONBOARDING_TOKEN:
+        logger.warning("ONBOARDING_TOKEN is not configured. Onboarding endpoints are unprotected.")
         return
-    # If SETUP_TOKEN is configured, require it to match
-    if not setup_token or setup_token != settings.SETUP_TOKEN:
+    # If ONBOARDING_TOKEN is configured, require it to match
+    if not onboarding_token or onboarding_token != settings.ONBOARDING_TOKEN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid setup token.",
+            detail="Invalid onboarding token.",
         )
 
 
@@ -259,7 +259,7 @@ async def complete_setup(
     setup_data: SetupComplete,
     db: AsyncSession = Depends(get_async_session),
     user_manager: UserManager = Depends(get_user_manager),
-    setup_token: str | None = Header(default=None, alias="X-Setup-Token"),
+    onboarding_token: str | None = Header(default=None, alias="X-Onboarding-Token"),
 ) -> SetupStatus:
     """
     Complete the initial setup wizard.
@@ -274,7 +274,7 @@ async def complete_setup(
 
     Security: This endpoint is PUBLIC but protected by setup_required state.
     """
-    _require_setup_token(setup_token)
+    _require_onboarding_token(onboarding_token)
 
     state = await _require_setup_state(db)
     await _upsert_admin_for_complete(
@@ -300,7 +300,7 @@ async def skip_setup(
     skip_data: SetupSkip | None = None,
     db: AsyncSession = Depends(get_async_session),
     user_manager: UserManager = Depends(get_user_manager),
-    setup_token: str | None = Header(default=None, alias="X-Setup-Token"),
+    onboarding_token: str | None = Header(default=None, alias="X-Onboarding-Token"),
 ) -> SetupStatus:
     """
     Skip the setup wizard and use environment variable defaults.
@@ -311,7 +311,7 @@ async def skip_setup(
     Security: This endpoint is PUBLIC but protected by setup_required state.
     Fail-safe: Returns 400 if no credentials AND OPEN_SIGNUP is disabled.
     """
-    _require_setup_token(setup_token)
+    _require_onboarding_token(onboarding_token)
 
     state = await _require_setup_state(db)
     admin_email, admin_password = _resolve_skip_credentials(skip_data)

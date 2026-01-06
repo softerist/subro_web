@@ -157,13 +157,13 @@ const SetupCheckWrapper = ({ children }: { children: React.ReactNode }) => {
     return <LoadingSpinner />;
   }
 
-  // If setup is required and not already on /setup, redirect
-  if (setupRequired === true && location.pathname !== "/setup") {
-    return <Navigate to="/setup" replace />;
+  // If setup is required and not already on /onboarding, redirect
+  if (setupRequired === true && location.pathname !== "/onboarding") {
+    return <Navigate to="/onboarding" replace />;
   }
 
-  // If setup is not required and on /setup, redirect to login
-  if (setupRequired === false && location.pathname === "/setup") {
+  // If setup is not required and on /onboarding, redirect to login
+  if (setupRequired === false && location.pathname === "/onboarding") {
     return <Navigate to="/login" replace />;
   }
 
@@ -193,8 +193,8 @@ function AppRoutes() {
     <SetupCheckWrapper>
       <AuthBootstrap>
         <Routes>
-          {/* Setup route - public, only accessible when setup not completed */}
-          <Route path="/setup" element={<SetupPage />} />
+          {/* Onboarding route - public, only accessible when setup not completed */}
+          <Route path="/onboarding" element={<SetupPage />} />
 
           {/* Login route - public */}
           <Route

@@ -44,7 +44,7 @@ echo "Health: ok"
 curl "${CURL_FLAGS[@]}" "$API_BASE/healthz" >/dev/null
 echo "Healthz: ok"
 
-SETUP_STATUS="$(curl "${CURL_FLAGS[@]}" "$API_BASE/setup/status")"
+SETUP_STATUS="$(curl "${CURL_FLAGS[@]}" "$API_BASE/onboarding/status")"
 echo "Setup status: $SETUP_STATUS"
 if ! echo "$SETUP_STATUS" | rg -q '"setup_completed":true'; then
   echo "Setup is not completed."

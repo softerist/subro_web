@@ -228,7 +228,7 @@ class TestWebSocketLogStreaming:
         login_response = await self._login_with_retry(client, admin_email, admin_password)
         if login_response.status_code != 200:
             setup_response = await client.post(
-                "/api/v1/setup/complete",
+                "/api/v1/onboarding/complete",
                 json={"admin_email": admin_email, "admin_password": admin_password},
             )
             if setup_response.status_code not in (200, 201, 403, 409):

@@ -137,7 +137,7 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER_PASSWORD: str | None = Field(
         default=None, validation_alias="FIRST_SUPERUSER_PASSWORD"
     )
-    SETUP_TOKEN: str | None = Field(default=None, validation_alias="SETUP_TOKEN")
+    ONBOARDING_TOKEN: str | None = Field(default=None, validation_alias="ONBOARDING_TOKEN")
     FORCE_INITIAL_SETUP: bool = Field(
         default=False,
         description="When true, the setup wizard is required regardless of setup_completed status.",

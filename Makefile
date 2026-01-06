@@ -274,12 +274,12 @@ rebuild-prod: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
 	@echo "Restarting infrastructure..."
 	@docker compose -f infra/docker/compose.data.yml -f infra/docker/compose.gateway.yml -p infra up -d
 	@echo "Redeploying application..."
-	@# Explicitly set --env-file to ensure build args like VITE_SETUP_TOKEN are picked up
+	@# Explicitly set --env-file to ensure build args like VITE_ONBOARDING_TOKEN are picked up
 	@docker compose --env-file infra/.env.prod -p blue -f infra/docker/compose.prod.yml up -d --build
-	@echo "Database reset complete. Please visit the Setup page."
+	@echo "Database reset complete. Please visit the Onboarding page."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8080"
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8443"
-	@echo "Setup Page:           https://localhost:8443/setup"
+	@echo "Onboarding Page:      https://localhost:8443/onboarding"
 
 add-test-statistics: ## Populate translation_log and deepl_usage tables from /app/logs/translation_log.json
 	@echo "Copying and running population script..."
