@@ -2,6 +2,8 @@ import json
 import logging
 import os
 import sys
+import tempfile
+from pathlib import Path
 from typing import Literal
 
 from pydantic import (
@@ -17,6 +19,19 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+
+def _default_app_state_dir() -> str:
+    xdg_state_home = os.getenv("XDG_STATE_HOME")
+    if xdg_state_home:
+        base_dir = Path(xdg_state_home)
+    else:
+        home_dir = os.getenv("HOME")
+        if home_dir:
+            base_dir = Path(home_dir) / ".local" / "state"
+        else:
+            base_dir = Path(tempfile.gettempdir())
+    return str(base_dir / "subro-web")
 
 
 class Settings(BaseSettings):
@@ -53,6 +68,11 @@ class Settings(BaseSettings):
     APP_DESCRIPTION: str = Field(
         default="API for managing subtitle download jobs and user authentication.",
         validation_alias="APP_DESCRIPTION",
+    )
+
+    # --- Runtime State Paths ---
+    APP_STATE_DIR: str = Field(
+        default_factory=_default_app_state_dir, validation_alias="APP_STATE_DIR"
     )
     API_V1_STR: str = Field(default="/api/v1", validation_alias="API_V1_STR")
     OPENAPI_URL: str | None = Field(default=None, validation_alias="OPENAPI_URL")
@@ -187,6 +207,9 @@ class Settings(BaseSettings):
     )
     CELERY_RESULT_BACKEND_ENV: RedisDsn | None = Field(
         default=None, validation_alias="CELERY_RESULT_BACKEND"
+    )
+    CELERY_BEAT_SCHEDULE_FILENAME_ENV: str | None = Field(
+        default=None, validation_alias="CELERY_BEAT_SCHEDULE_FILENAME"
     )
     REDIS_PUBSUB_URL_ENV: RedisDsn | None = Field(default=None, validation_alias="REDIS_PUBSUB_URL")
     CELERY_SUBTITLE_TASK_NAME: str = Field(
@@ -383,6 +406,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _run_post_init_logic(self) -> "Settings":
         """Orchestrates post-initialization logic to reduce complexity."""
+        self._normalize_state_dir()
         self._parse_complex_fields()
         self._apply_debug_overrides()
         self._configure_docs()
@@ -394,6 +418,13 @@ class Settings(BaseSettings):
         if self.ROOT_PATH and self.ROOT_PATH != "/":
             self.ROOT_PATH = self.ROOT_PATH.strip("/")
         return self
+
+    def _normalize_state_dir(self) -> None:
+        raw_state_dir = str(self.APP_STATE_DIR).strip()
+        if not raw_state_dir:
+            raw_state_dir = _default_app_state_dir()
+        state_dir = Path(os.path.expandvars(raw_state_dir)).expanduser()
+        self.APP_STATE_DIR = str(state_dir)
 
     def _parse_complex_fields(self) -> None:
         """Parses JSON list strings from environment variables."""
@@ -526,6 +557,14 @@ class Settings(BaseSettings):
                 logger.error(f"Failed to build CELERY_RESULT_BACKEND from components: {e}")
                 return None
         return None
+
+    @property
+    def CELERY_BEAT_SCHEDULE_FILENAME(self) -> str:
+        if self.CELERY_BEAT_SCHEDULE_FILENAME_ENV:
+            return str(
+                Path(os.path.expandvars(str(self.CELERY_BEAT_SCHEDULE_FILENAME_ENV))).expanduser()
+            )
+        return str(Path(self.APP_STATE_DIR) / "celerybeat-schedule.db")
 
     @property
     def REDIS_PUBSUB_URL(self) -> str | None:

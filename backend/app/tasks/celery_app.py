@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 import nest_asyncio
 from celery import Celery
@@ -37,8 +38,10 @@ celery_app.conf.beat_schedule = {
     },
 }
 
-# Store celerybeat-schedule.db in /tmp to avoid polluting the mounted volume
-celery_app.conf.beat_schedule_filename = "/tmp/celerybeat-schedule.db"
+# Use the configured beat schedule path and ensure the directory exists.
+beat_schedule_path = Path(settings.CELERY_BEAT_SCHEDULE_FILENAME).expanduser()
+beat_schedule_path.parent.mkdir(parents=True, exist_ok=True)
+celery_app.conf.beat_schedule_filename = str(beat_schedule_path)
 
 
 # --- Worker Process Lifecycle Signal Handlers ---

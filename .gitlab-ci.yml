@@ -393,27 +393,35 @@ verify_staging:
       echo "Added /etc/hosts entry: $SERVER_IP staging.$SSH_HOST"
     - |
       echo "Verifying staging deployment..."
-      # Note: External Nginx intercepts /health with empty 200.
-      # We check /api/v1/ which returns JSON and passes through to FastAPI.
+      echo ""
+      echo "=== DEBUG: Testing different endpoints ==="
 
-      for i in $(seq 1 15); do
-        echo "--- Attempt $i/15 ---"
+      # Test 1: /api/v1/ with verbose output
+      echo "--- Test: /api/v1/ ---"
+      curl -k -v --max-time 10 "https://staging.$SSH_HOST/api/v1/" 2>&1 | head -50 || true
+      echo ""
 
-        # Try the API root endpoint which returns version info
-        RESPONSE=$(curl -k --silent --max-time 10 "https://staging.$SSH_HOST/api/v1/" 2>/dev/null || echo "")
-        echo "Response from /api/v1/: $RESPONSE"
+      # Test 2: Try a simple curl to see HTTP response
+      echo "--- Test: Simple response check ---"
+      HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "000")
+      RESPONSE=$(curl -k -s --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "")
+      echo "HTTP Code: $HTTP_CODE"
+      echo "Response length: ${#RESPONSE}"
+      echo "Response: >>$RESPONSE<<"
+      echo ""
 
-        # Check if we got a valid JSON response with version or message
-        if echo "$RESPONSE" | grep -qE '"(version|message)"'; then
-          echo "Staging API is responding correctly!"
-          exit 0
-        fi
+      # Check if API is responding with valid content
+      if echo "$RESPONSE" | grep -qE '"(version|message)"'; then
+        echo "✅ Staging API is responding correctly!"
+        exit 0
+      fi
 
-        echo "Waiting for staging ($i/15)..."
-        sleep 4
-      done
-
-      echo "Staging verification failed - API not responding"
+      echo ""
+      echo "⚠️  WARNING: External Nginx is intercepting requests and returning empty 200."
+      echo "    The staging containers may be running fine, but requests don't reach them."
+      echo "    Please check your external Nginx config for staging.secure.go.ro"
+      echo ""
+      echo "    To fix: Update Nginx to proxy_pass to Caddy (port 8080)"
       exit 1
   environment:
     name: staging
