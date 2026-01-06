@@ -1,4 +1,4 @@
-# backend/app/api/routers/setup.py
+# backend/app/api/routers/onboarding.py
 """
 Public endpoints for initial application setup.
 

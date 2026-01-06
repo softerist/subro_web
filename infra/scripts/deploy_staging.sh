@@ -18,6 +18,29 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
+# Retry helper for docker compose pull (handles registry timeouts)
+docker_compose_pull_with_retry() {
+    local max_attempts=3
+    local attempt=1
+    local wait_time=5
+
+    echo "Pulling Docker images with retry (max $max_attempts attempts)..."
+    while [ $attempt -le $max_attempts ]; do
+        if docker compose "$@" pull; then
+            echo "Docker pull successful!"
+            return 0
+        fi
+        if [ $attempt -eq $max_attempts ]; then
+            echo "ERROR: Docker pull failed after $max_attempts attempts."
+            return 1
+        fi
+        echo "Docker pull failed (attempt $attempt/$max_attempts). Retrying in ${wait_time}s..."
+        sleep $wait_time
+        wait_time=$((wait_time * 2))
+        attempt=$((attempt + 1))
+    done
+}
+
 echo "--- Staging Deployment Started ---"
 
 # Export variables for compose file expansion
@@ -34,8 +57,8 @@ export BACKUP_PREFIX="staging_"
 
 echo "--- Pulling/Starting Staging App Stack (with isolated Data) ---"
 # We manage the app + data stack here for staging isolation.
-docker compose --env-file "$ENV_FILE" -p subro_staging \
-    -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA" pull
+docker_compose_pull_with_retry --env-file "$ENV_FILE" -p subro_staging \
+    -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA"
 
 # We don't use blue-green for staging to save resources
 docker compose --env-file "$ENV_FILE" -p subro_staging \

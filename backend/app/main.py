@@ -59,8 +59,8 @@ from app.api.routers.dashboard import router as dashboard_router
 from app.api.routers.files import router as files_router
 from app.api.routers.jobs import router as jobs_router
 from app.api.routers.mfa import router as mfa_router
+from app.api.routers.onboarding import router as setup_router
 from app.api.routers.settings import router as settings_router
-from app.api.routers.setup import router as setup_router
 from app.api.routers.storage_paths import router as storage_paths_router
 from app.api.routers.translation_stats import router as translation_stats_router
 from app.api.routers.users import router as users_router

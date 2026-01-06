@@ -34,7 +34,7 @@ async def test_complete_setup_success(test_client: AsyncClient, db_session: Asyn
         "settings": {"tmdb_api_key": "some_key"},
     }
 
-    with patch("app.api.routers.setup.validate_all_settings"):
+    with patch("app.api.routers.onboarding.validate_all_settings"):
         response = await test_client.post(f"{API_PREFIX}/setup/complete", json=setup_payload)
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -97,7 +97,7 @@ async def test_skip_with_env_fallback_succeeds(test_client: AsyncClient):
     """Verify skip works when env vars are set but no credentials provided."""
     with patch.object(settings, "FIRST_SUPERUSER_EMAIL", "env_admin@example.com"):
         with patch.object(settings, "FIRST_SUPERUSER_PASSWORD", "EnvPassword123"):
-            with patch("app.api.routers.setup.validate_all_settings"):
+            with patch("app.api.routers.onboarding.validate_all_settings"):
                 response = await test_client.post(f"{API_PREFIX}/setup/skip", json={})
                 assert response.status_code == status.HTTP_200_OK
                 data = response.json()
@@ -134,7 +134,7 @@ async def test_complete_with_existing_admin_updates_password_on_first_setup(
     await db_session.commit()
 
     # Now complete setup with same email but different password
-    with patch("app.api.routers.setup.validate_all_settings"):
+    with patch("app.api.routers.onboarding.validate_all_settings"):
         response = await test_client.post(
             f"{API_PREFIX}/setup/complete",
             json={
@@ -190,7 +190,7 @@ async def test_forced_setup_allows_complete_after_already_completed(
 
     # With FORCE_INITIAL_SETUP=true, should succeed
     with patch.object(settings, "FORCE_INITIAL_SETUP", True):
-        with patch("app.api.routers.setup.validate_all_settings"):
+        with patch("app.api.routers.onboarding.validate_all_settings"):
             response = await test_client.post(f"{API_PREFIX}/setup/complete", json=setup_payload)
             assert response.status_code == status.HTTP_200_OK
 
@@ -268,7 +268,7 @@ async def test_forced_setup_with_existing_admin_preserves_password(
 
     # Do forced setup with same email but different password
     with patch.object(settings, "FORCE_INITIAL_SETUP", True):
-        with patch("app.api.routers.setup.validate_all_settings"):
+        with patch("app.api.routers.onboarding.validate_all_settings"):
             response = await test_client.post(
                 f"{API_PREFIX}/setup/complete",
                 json={

@@ -22,6 +22,29 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
+# Retry helper for docker compose pull (handles registry timeouts)
+docker_compose_pull_with_retry() {
+    local max_attempts=3
+    local attempt=1
+    local wait_time=5
+
+    echo "Pulling Docker images with retry (max $max_attempts attempts)..."
+    while [ $attempt -le $max_attempts ]; do
+        if docker compose "$@" pull; then
+            echo "Docker pull successful!"
+            return 0
+        fi
+        if [ $attempt -eq $max_attempts ]; then
+            echo "ERROR: Docker pull failed after $max_attempts attempts."
+            return 1
+        fi
+        echo "Docker pull failed (attempt $attempt/$max_attempts). Retrying in ${wait_time}s..."
+        sleep $wait_time
+        wait_time=$((wait_time * 2))
+        attempt=$((attempt + 1))
+    done
+}
+
 # Ensure Redis and QUIC sysctls are set on host (persistent)
 SYSCTL_REDIS_CONF="/etc/sysctl.d/99-redis.conf"
 SYSCTL_CADDY_CONF="/etc/sysctl.d/99-caddy.conf"
@@ -50,8 +73,8 @@ docker compose -p subapp_dev -f "$DOCK_DIR/docker-compose.yml" -f "$DOCK_DIR/doc
 # 1. Ensure Infrastructure (Gateway + Data) is running
 echo "--- Ensuring Infrastucture is Up ---"
 if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
-    docker compose --env-file "$ENV_FILE" -p infra \
-        -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" -f "$COMPOSE_IMAGES" pull
+    docker_compose_pull_with_retry --env-file "$ENV_FILE" -p infra \
+        -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" -f "$COMPOSE_IMAGES"
     docker compose --env-file "$ENV_FILE" -p infra \
         -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" -f "$COMPOSE_IMAGES" up -d
 else
@@ -77,9 +100,9 @@ echo "Deploying New Color: $NEW_COLOR"
 echo "--- Starting $NEW_COLOR Stack ---"
 if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
     echo "--- Using pre-built images from registry ---"
-    # Pull images explicitly (using overlay)
-    docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" \
-        -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" pull
+    # Pull images explicitly with retry (using overlay)
+    docker_compose_pull_with_retry --env-file "$ENV_FILE" -p "$NEW_COLOR" \
+        -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES"
 
     # Start WITHOUT --build (using overlay)
     docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" \
