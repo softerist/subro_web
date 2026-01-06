@@ -1,4 +1,5 @@
-FROM alpine:3.19 AS production
+ARG BASE_IMAGE=alpine:3.19
+FROM ${BASE_IMAGE} AS production
 
 # Install tools
 # postgresql16-client for pg_dump
