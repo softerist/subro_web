@@ -35,10 +35,13 @@ variables:
   before_script:
     - set -euo pipefail
     - |
-      echo "Logging into Docker Registry..."
       for i in $(seq 1 3); do
         if echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"; then
-          echo "Docker login successful!"
+          echo "Docker login to $CI_REGISTRY successful!"
+          # Also login to Dependency Proxy server if it exists and is different
+          if [ -n "${CI_DEPENDENCY_PROXY_SERVER:-}" ] && [ "$CI_DEPENDENCY_PROXY_SERVER" != "$CI_REGISTRY" ]; then
+            echo "$CI_DEPENDENCY_PROXY_PASSWORD" | docker login -u "$CI_DEPENDENCY_PROXY_USER" --password-stdin "$CI_DEPENDENCY_PROXY_SERVER" || echo "Warning: Dependency Proxy login failed"
+          fi
           break
         fi
         echo "Docker login failed (attempt $i/3). Retrying in 5 seconds..."
@@ -149,12 +152,26 @@ backend_tests:
     - set -euo pipefail
     - |
       echo "Pulling required Docker images with retry..."
-      DEPENDENCIES="$DOCKER_IMAGE_API postgres:16-alpine redis:7-alpine curlimages/curl:8.7.1"
+      DP_PREFIX="${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/"
+      [ -z "$CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX" ] && DP_PREFIX=""
+
+      # Define images using Dependency Proxy where possible
+      IMAGE_POSTGRES="${DP_PREFIX}postgres:16-alpine"
+      IMAGE_REDIS="${DP_PREFIX}redis:7-alpine"
+      IMAGE_CURL="${DP_PREFIX}curlimages/curl:8.7.1"
+
+      DEPENDENCIES="$DOCKER_IMAGE_API $IMAGE_POSTGRES $IMAGE_REDIS $IMAGE_CURL"
       for img in $DEPENDENCIES; do
         echo "Pulling $img..."
         for i in $(seq 1 3); do
           if docker pull "$img"; then
             echo "Successfully pulled $img"
+            # Tag back to standard name if it was pulled via proxy
+            if [ -n "$DP_PREFIX" ] && [ "$img" != "$DOCKER_IMAGE_API" ]; then
+              STANDARD_NAME=$(echo "$img" | sed "s|$DP_PREFIX||")
+              docker tag "$img" "$STANDARD_NAME"
+              echo "Tagged $img as $STANDARD_NAME"
+            fi
             break
           fi
           if [ $i -eq 3 ]; then
