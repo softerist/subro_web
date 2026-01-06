@@ -292,12 +292,19 @@ sast_scan:
     - when: on_success
   script:
     - |
+      if [ -z "${SEMGREP_APP_TOKEN:-}" ]; then
+        echo "SEMGREP_APP_TOKEN is not set. Configure a valid Semgrep App Token to use --config auto."
+        exit 2
+      fi
       EXTRA_ARGS=""
       if [ "$SAST_FAIL_ON_FINDINGS" == "true" ]; then
         EXTRA_ARGS="--error"
       fi
-      semgrep scan --config auto --sarif -o semgrep.sarif \
-        --severity "$SAST_MIN_SEVERITY" $EXTRA_ARGS "$CI_PROJECT_DIR"
+      if ! semgrep scan --config auto --sarif -o semgrep.sarif \
+        --severity "$SAST_MIN_SEVERITY" $EXTRA_ARGS "$CI_PROJECT_DIR"; then
+        echo "Semgrep scan failed. If you see HTTP 401, verify SEMGREP_APP_TOKEN has access to semgrep.dev configs."
+        exit 2
+      fi
   artifacts:
     reports:
       sast: semgrep.sarif

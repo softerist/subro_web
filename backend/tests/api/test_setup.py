@@ -60,9 +60,8 @@ async def test_setup_endpoints_forbidden_once_completed(
 
 
 @pytest.mark.asyncio
-async def test_skip_without_credentials_fails_when_signup_disabled(
-    test_client: AsyncClient, _db_session: AsyncSession
-):
+@pytest.mark.usefixtures("db_session")
+async def test_skip_without_credentials_fails_when_signup_disabled(test_client: AsyncClient):
     """Verify 400 returned when skipping without credentials and OPEN_SIGNUP is disabled."""
     with patch.object(settings, "OPEN_SIGNUP", False):
         with patch.object(settings, "FIRST_SUPERUSER_EMAIL", None):
@@ -73,7 +72,8 @@ async def test_skip_without_credentials_fails_when_signup_disabled(
 
 
 @pytest.mark.asyncio
-async def test_skip_partial_credentials_fails(test_client: AsyncClient, _db_session: AsyncSession):
+@pytest.mark.usefixtures("db_session")
+async def test_skip_partial_credentials_fails(test_client: AsyncClient):
     """Verify 400 returned when only email or password provided (not both)."""
     # Only email, no password
     response = await test_client.post(
@@ -92,7 +92,8 @@ async def test_skip_partial_credentials_fails(test_client: AsyncClient, _db_sess
 
 
 @pytest.mark.asyncio
-async def test_skip_with_env_fallback_succeeds(test_client: AsyncClient, _db_session: AsyncSession):
+@pytest.mark.usefixtures("db_session")
+async def test_skip_with_env_fallback_succeeds(test_client: AsyncClient):
     """Verify skip works when env vars are set but no credentials provided."""
     with patch.object(settings, "FIRST_SUPERUSER_EMAIL", "env_admin@example.com"):
         with patch.object(settings, "FIRST_SUPERUSER_PASSWORD", "EnvPassword123"):
