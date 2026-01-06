@@ -148,7 +148,7 @@ export default function SettingsPage() {
         // But here we just set it initially.
         setDeeplKeys(data.deepl_api_keys);
       }
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to load settings");
     } finally {
       if (!silent) setIsLoading(false);
@@ -189,7 +189,7 @@ export default function SettingsPage() {
       setFormData({});
       setSuccess("Settings saved successfully!");
       setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to save settings");
     } finally {
       setIsSaving(false);
@@ -329,7 +329,7 @@ export default function SettingsPage() {
         setSuccess(successMsg);
         setTimeout(() => setSuccess(null), 3000);
       }
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to execute removal.");
     } finally {
       setIsSaving(false);

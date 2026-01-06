@@ -47,7 +47,7 @@ export function LoginForm({
         is_superuser: user.is_superuser ?? false,
       });
       navigate("/dashboard");
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to fetch user profile.");
     }
   };

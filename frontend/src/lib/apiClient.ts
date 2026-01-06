@@ -21,7 +21,7 @@ const refreshAccessToken = async () => {
           useAuthStore.getState().setAccessToken(newAccessToken);
         }
         return newAccessToken;
-      } catch (err) {
+      } catch (_err) {
         return null;
       } finally {
         refreshPromise = null;

@@ -145,16 +145,28 @@ backend_tests:
     POSTGRES_DB_TEST: "subappdb_pytest"
   script:
     - set -euo pipefail
-    # Pull image with retry logic to handle network timeouts
     - |
-      echo "Pulling Docker image with retry..."
-      for i in $(seq 1 3); do
-        if docker pull "$DOCKER_IMAGE_API"; then
-          echo "Docker pull successful!"
-          break
-        fi
-        echo "Docker pull failed (attempt $i/3). Retrying in 5 seconds..."
-        sleep 5
+      echo "Pulling required Docker images with retry..."
+      DEPENDENCIES=(
+        "$DOCKER_IMAGE_API"
+        "postgres:16-alpine"
+        "redis:7-alpine"
+        "curlimages/curl:8.7.1"
+      )
+      for img in "${DEPENDENCIES[@]}"; do
+        echo "Pulling $img..."
+        for i in $(seq 1 3); do
+          if docker pull "$img"; then
+            echo "Successfully pulled $img"
+            break
+          fi
+          if [ $i -eq 3 ]; then
+            echo "ERROR: Failed to pull $img after 3 attempts."
+            exit 1
+          fi
+          echo "Docker pull failed (attempt $i/3). Retrying in 5 seconds..."
+          sleep 5
+        done
       done
     - docker network create testnet || true
     # Start dependencies (Production-like setup)
@@ -214,7 +226,7 @@ frontend_tests:
   image: node:20-alpine
   needs: []
   variables:
-    NPM_CONFIG_CACHE: frontend/.npm
+    NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/frontend/.npm"
     VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:8000/api/v1}"
     VITE_WS_BASE_URL: "${VITE_WS_BASE_URL:-ws://localhost:8000/api/v1}"
     VITE_SETUP_TOKEN: "${VITE_SETUP_TOKEN}"

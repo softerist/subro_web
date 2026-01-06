@@ -81,7 +81,7 @@ const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
                 is_superuser: user.is_superuser ?? false,
               });
             }
-          } catch (err) {
+          } catch (_err) {
             if (isMounted) {
               logout();
             }
@@ -90,7 +90,7 @@ const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
           // If we thought we were authenticated but backend says no -> logout
           logout();
         }
-      } catch (err) {
+      } catch (_err) {
         if (isMounted && isAuthenticated) {
           logout();
         }

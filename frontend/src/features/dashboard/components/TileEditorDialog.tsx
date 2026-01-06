@@ -64,7 +64,7 @@ export function TileEditorDialog({
         is_active: isActive,
       });
       onClose();
-    } catch (e) {
+    } catch (_e) {
       setError("Failed to save tile.");
     } finally {
       setIsSaving(false);
