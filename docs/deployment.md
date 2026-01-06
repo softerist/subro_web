@@ -218,18 +218,17 @@ The project includes a GitLab CI/CD pipeline for automated deployment. This meth
 
 Configure these variables in **Settings → CI/CD → Variables**:
 
-| Variable                | Scope         | Flags             | Value                                                         |
-| ----------------------- | ------------- | ----------------- | ------------------------------------------------------------- |
-| `REGISTRY_USER`         | production    | -                 | Your GitLab username or deploy token name                     |
-| `REGISTRY_PASSWORD`     | production    | Masked            | GitLab personal access token or deploy token password         |
-| `SSH_HOST`              | production    | Protected         | Production server hostname/IP                                 |
-| `SSH_PORT`              | production    | Protected         | SSH port (default: 22)                                        |
-| `SSH_USER`              | All (default) | -                 | SSH username for deployment (e.g., `deploy`)                  |
-| `SSH_PRIVATE_KEY`       | production    | Protected, Masked | Base64-encoded private SSH key                                |
-| `PROD_ENV_FILE`         | production    | Protected, Masked | Base64-encoded contents of `.env.prod`                        |
-| `VITE_API_BASE_URL`     | production    | -                 | Frontend API URL (e.g., `https://your-domain.com/api/v1`)     |
-| `VITE_WS_BASE_URL`      | production    | -                 | Frontend WebSocket URL (e.g., `wss://your-domain.com/api/v1`) |
-| `VITE_ONBOARDING_TOKEN` | production    | Masked            | Onboarding token for initial configuration                    |
+| Variable            | Scope         | Flags             | Value                                                 |
+| ------------------- | ------------- | ----------------- | ----------------------------------------------------- |
+| `REGISTRY_USER`     | production    | -                 | Your GitLab username or deploy token name             |
+| `REGISTRY_PASSWORD` | production    | Masked            | GitLab personal access token or deploy token password |
+| `SSH_HOST`          | production    | Protected         | Production server hostname/IP                         |
+| `SSH_PORT`          | production    | Protected         | SSH port (default: 22)                                |
+| `SSH_USER`          | All (default) | -                 | SSH username for deployment (e.g., `deploy`)          |
+| `SSH_PRIVATE_KEY`   | production    | Protected, Masked | Base64-encoded private SSH key                        |
+| `PROD_ENV_FILE`     | production    | Protected, Masked | Base64-encoded contents of `.env.prod`                |
+| `DOCKERHUB_USER`    | All (default) | -                 | Docker Hub username (for avoiding rate limits)        |
+| `DOCKERHUB_TOKEN`   | All (default) | Masked            | Docker Hub access token (for avoiding rate limits)    |
 
 #### Generate SSH Key
 
