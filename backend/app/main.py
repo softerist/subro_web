@@ -287,7 +287,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         except Exception:
             log_body = "<Could not read or decode body>"
     logger.warning(
-        f"Request validation error: {request.method} {request.url.path} - Errors: {error_details}",
+        "Request validation error: %s %s - Errors: %s",
+        request.method,
+        request.url.path,
+        error_details,
         extra={"errors": error_details, "request_body": log_body},
     )
     return JSONResponse(
@@ -322,11 +325,12 @@ async def http_exception_handler_custom(request: Request, exc: HTTPException):
                 )
                 await db.commit()
 
-    log_message = f"HTTPException: Status={exc.status_code}, Detail='{exc.detail}' for {request.method} {request.url.path}"
+    log_message = "HTTPException: Status=%s, Detail='%s' for %s %s"
+    log_args = (exc.status_code, exc.detail, request.method, request.url.path)
     if exc.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
-        logger.error(log_message, exc_info=True)
+        logger.error(log_message, *log_args, exc_info=True)
     else:
-        logger.warning(log_message)
+        logger.warning(log_message, *log_args)
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
@@ -337,7 +341,10 @@ async def http_exception_handler_custom(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def generic_exception_handler_custom(request: Request, exc: Exception):
     logger.error(
-        f"Unhandled exception during request: {request.method} {request.url.path}", exc_info=exc
+        "Unhandled exception during request: %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exc,
     )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -16,6 +16,15 @@ logger = logging.getLogger(__name__)
 
 API_KEY_PREFIX_LEN = 8
 
+
+def _sanitize_for_log(value: str) -> str:
+    """Sanitize user input for safe logging (prevent log injection)."""
+    if not value:
+        return ""
+    # Remove newlines and carriage returns that could forge log entries
+    return value.replace("\n", "[NL]").replace("\r", "[CR]").replace("\x00", "[NULL]")
+
+
 # Trusted proxy networks (Docker internal, localhost, common private ranges)
 # These are the IPs that we trust to provide accurate X-Forwarded-For headers
 TRUSTED_PROXY_NETWORKS = [
@@ -79,7 +88,7 @@ def get_real_client_ip(request: Request) -> str:
                 ipaddress.ip_address(real_ip)
                 return real_ip
             except ValueError:
-                logger.warning(f"Invalid IP in X-Forwarded-For: {real_ip}")
+                logger.warning("Invalid IP in X-Forwarded-For: %s", _sanitize_for_log(real_ip))
                 return client_ip
 
         # Check X-Real-IP header (Nginx convention)
@@ -89,7 +98,7 @@ def get_real_client_ip(request: Request) -> str:
                 ipaddress.ip_address(real_ip)
                 return real_ip
             except ValueError:
-                logger.warning(f"Invalid X-Real-IP: {real_ip}")
+                logger.warning("Invalid X-Real-IP: %s", _sanitize_for_log(real_ip))
                 return client_ip
 
     # Not from a trusted proxy or no forwarded headers - use direct connection IP

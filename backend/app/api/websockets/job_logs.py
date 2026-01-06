@@ -402,7 +402,10 @@ async def websocket_job_log_stream(
         return
 
     logger.info(
-        f"User {current_user.email} attempting WebSocket connection for job_id: {job_id} from {websocket.client}"
+        "User %s attempting WebSocket connection for job_id: %s from %s",
+        current_user.email,
+        job_id,
+        websocket.client,
     )
     await websocket.accept()
 
@@ -412,7 +415,7 @@ async def websocket_job_log_stream(
     except WebSocketFlowException as wf_exc:
         await _handle_websocket_flow_exception(websocket, wf_exc, job_id, current_user.email)
     except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for job_id: {job_id} by user {current_user.email}.")
+        logger.info("WebSocket disconnected for job_id: %s by user %s.", job_id, current_user.email)
     except (
         asyncio.CancelledError
     ):  # This would typically be caught if websocket_job_log_stream itself is cancelled
@@ -423,7 +426,10 @@ async def websocket_job_log_stream(
             )
     except Exception as e:
         logger.error(
-            f"Unexpected error in WebSocket handler for job_id {job_id} (user {current_user.email}): {e}",
+            "Unexpected error in WebSocket handler for job_id %s (user %s): %s",
+            job_id,
+            current_user.email,
+            e,
             exc_info=True,
         )
         if websocket.client_state != WebSocketState.DISCONNECTED:
@@ -439,5 +445,7 @@ async def websocket_job_log_stream(
                 pass
 
         logger.info(
-            f"Finished all cleanup for WebSocket connection for job_id: {job_id} (user {current_user.email})"
+            "Finished all cleanup for WebSocket connection for job_id: %s (user %s)",
+            job_id,
+            current_user.email,
         )
