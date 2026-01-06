@@ -373,8 +373,33 @@ deploy_staging:
         echo '$PROD_ENV_FILE' | base64 -d > infra/.env.staging
         chmod 600 infra/.env.staging
 
-        # Login to registry
-        echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY
+        # Increase Docker/Compose timeouts for registry operations
+        export DOCKER_CLIENT_TIMEOUT="${DOCKER_CLIENT_TIMEOUT:-300}"
+        export COMPOSE_HTTP_TIMEOUT="${COMPOSE_HTTP_TIMEOUT:-300}"
+
+        docker_login_with_retry() {
+          local max_attempts=3
+          local attempt=1
+          local wait_time=5
+
+          echo "Logging into Docker Registry with retry (max $max_attempts attempts)..."
+          while [ $attempt -le $max_attempts ]; do
+            if echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY; then
+              echo "Docker login successful!"
+              return 0
+            fi
+            if [ $attempt -eq $max_attempts ]; then
+              echo "ERROR: Docker login failed after $max_attempts attempts."
+              return 1
+            fi
+            echo "Docker login failed (attempt $attempt/$max_attempts). Retrying in ${wait_time}s..."
+            sleep $wait_time
+            wait_time=$((wait_time * 2))
+            attempt=$((attempt + 1))
+          done
+        }
+
+        docker_login_with_retry
 
         # Set image tags for remote environment
         export DOCKER_IMAGE_API='$DOCKER_IMAGE_API'
@@ -572,8 +597,33 @@ deploy_prod:
         echo '$PROD_ENV_FILE' | base64 -d > infra/.env.prod
         chmod 600 infra/.env.prod
 
-        # Login to registry
-        echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY
+        # Increase Docker/Compose timeouts for registry operations
+        export DOCKER_CLIENT_TIMEOUT="${DOCKER_CLIENT_TIMEOUT:-300}"
+        export COMPOSE_HTTP_TIMEOUT="${COMPOSE_HTTP_TIMEOUT:-300}"
+
+        docker_login_with_retry() {
+          local max_attempts=3
+          local attempt=1
+          local wait_time=5
+
+          echo "Logging into Docker Registry with retry (max $max_attempts attempts)..."
+          while [ $attempt -le $max_attempts ]; do
+            if echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY; then
+              echo "Docker login successful!"
+              return 0
+            fi
+            if [ $attempt -eq $max_attempts ]; then
+              echo "ERROR: Docker login failed after $max_attempts attempts."
+              return 1
+            fi
+            echo "Docker login failed (attempt $attempt/$max_attempts). Retrying in ${wait_time}s..."
+            sleep $wait_time
+            wait_time=$((wait_time * 2))
+            attempt=$((attempt + 1))
+          done
+        }
+
+        docker_login_with_retry
 
         # Set image tags for remote environment
         export DOCKER_IMAGE_API='$DOCKER_IMAGE_API'
