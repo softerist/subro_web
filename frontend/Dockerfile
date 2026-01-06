@@ -1,5 +1,5 @@
 # Base stage
-ARG BASE_IMAGE_NODE=node:20-alpine
+ARG BASE_IMAGE_NODE=public.ecr.aws/docker/library/node:20-alpine
 FROM ${BASE_IMAGE_NODE} AS base
 WORKDIR /app
 COPY package*.json ./
@@ -32,7 +32,7 @@ ENV VITE_WS_BASE_URL=${VITE_WS_BASE_URL}
 RUN npm run build
 
 # Production stage
-ARG BASE_IMAGE_NGINX=nginx:stable-alpine
+ARG BASE_IMAGE_NGINX=public.ecr.aws/docker/library/nginx:stable-alpine
 FROM ${BASE_IMAGE_NGINX} AS production
 RUN apk add --no-cache curl
 COPY --from=build /app/dist /usr/share/nginx/html

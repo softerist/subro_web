@@ -38,11 +38,27 @@ variables:
       for i in $(seq 1 3); do
         if echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"; then
           echo "Docker login successful!"
+          if [ -n "${CI_DEPENDENCY_PROXY_SERVER:-}" ] && [ "$CI_DEPENDENCY_PROXY_SERVER" != "$CI_REGISTRY" ]; then
+            echo "$CI_DEPENDENCY_PROXY_PASSWORD" | docker login -u "$CI_DEPENDENCY_PROXY_USER" --password-stdin "$CI_DEPENDENCY_PROXY_SERVER" || echo "Warning: Dependency Proxy login failed"
+          fi
           break
         fi
         echo "Docker login failed (attempt $i/3). Retrying in 5 seconds..."
         sleep 5
       done
+    - |
+      if [ -n "${DOCKERHUB_USER:-}" ] && [ -n "${DOCKERHUB_TOKEN:-}" ]; then
+        for i in $(seq 1 3); do
+          if echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USER" --password-stdin; then
+            echo "Docker Hub login successful!"
+            break
+          fi
+          echo "Docker Hub login failed (attempt $i/3). Retrying in 5 seconds..."
+          sleep 5
+        done
+      else
+        echo "Docker Hub credentials not set; skipping Docker Hub login."
+      fi
 
 # -------- DEBUG (optional) --------
 ci_debug_env:

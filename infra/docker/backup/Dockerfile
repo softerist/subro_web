@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=alpine:3.19
+ARG BASE_IMAGE=public.ecr.aws/docker/library/alpine:3.19
 FROM ${BASE_IMAGE} AS production
 
 # Install tools

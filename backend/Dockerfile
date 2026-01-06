@@ -2,7 +2,7 @@
 
 # --- Base Stage ---
 # Use Ubuntu 24.04 (Noble Numbat) - newer base image with 0 CRITICAL CVEs
-ARG BASE_IMAGE=ubuntu:24.04
+ARG BASE_IMAGE=public.ecr.aws/docker/library/ubuntu:24.04
 FROM ${BASE_IMAGE} AS base
 
 # Prevent interactive prompts during package installation
