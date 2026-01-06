@@ -4,6 +4,8 @@ import axios from "axios";
 // Types for settings API
 export interface SetupStatus {
   setup_completed: boolean;
+  setup_required: boolean;
+  setup_forced: boolean;
 }
 
 export interface SettingsUpdate {

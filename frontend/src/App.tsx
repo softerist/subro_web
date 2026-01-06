@@ -36,7 +36,7 @@ const LoadingSpinner = () => (
 // Auth Bootstrap - refresh session on initial load if possible
 const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
   const [isReady, setIsReady] = useState(false);
-  const setupCompleted = useSettingsStore((state) => state.setupCompleted);
+  const setupRequired = useSettingsStore((state) => state.setupRequired);
   const accessToken = useAuthStore((state) => state.accessToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const login = useAuthStore((state) => state.login);
@@ -55,9 +55,9 @@ const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
         return;
       }
 
-      // If setup is not completed or we don't know yet, don't try to refresh auth
+      // If setup is required, don't try to refresh auth
       // This prevents 401 errors in the console on the setup page
-      if (setupCompleted === false) {
+      if (setupRequired === true) {
         if (isMounted) {
           setIsReady(true);
         }
@@ -112,7 +112,7 @@ const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
     login,
     logout,
     setAccessToken,
-    setupCompleted,
+    setupRequired,
   ]);
 
   if (!isReady) {
@@ -122,44 +122,48 @@ const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// Setup Check Wrapper - checks if setup is completed
+// Setup Check Wrapper - checks if setup is required
 const SetupCheckWrapper = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
-  const { setupCompleted, isLoading, setSetupCompleted, setError } =
+  const { setupRequired, isLoading, setSetupState, setError } =
     useSettingsStore();
 
   useEffect(() => {
     const checkSetupStatus = async () => {
       try {
         const status = await getSetupStatus();
-        setSetupCompleted(status.setup_completed);
+        setSetupState(
+          status.setup_completed,
+          status.setup_required,
+          status.setup_forced,
+        );
       } catch (err) {
         // If we can't reach the API, assume setup might be needed
         console.error("Failed to check setup status:", err);
         setError("Failed to connect to server");
-        // Set to true to allow normal flow if API is down
-        setSetupCompleted(true);
+        // Set to completed to allow normal flow if API is down
+        setSetupState(true, false, false);
       }
     };
 
     // Only check if we haven't loaded yet
-    if (setupCompleted === null) {
+    if (setupRequired === null) {
       checkSetupStatus();
     }
-  }, [setupCompleted, setSetupCompleted, setError]);
+  }, [setupRequired, setSetupState, setError]);
 
   // Show loading while checking setup status
   if (isLoading) {
     return <LoadingSpinner />;
   }
 
-  // If setup not completed and not already on /setup, redirect
-  if (setupCompleted === false && location.pathname !== "/setup") {
+  // If setup is required and not already on /setup, redirect
+  if (setupRequired === true && location.pathname !== "/setup") {
     return <Navigate to="/setup" replace />;
   }
 
-  // If setup is completed and on /setup, redirect to login
-  if (setupCompleted === true && location.pathname === "/setup") {
+  // If setup is not required and on /setup, redirect to login
+  if (setupRequired === false && location.pathname === "/setup") {
     return <Navigate to="/login" replace />;
   }
 

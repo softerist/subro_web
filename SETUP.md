@@ -40,7 +40,18 @@ FIRST_SUPERUSER_PASSWORD=your_secure_admin_password
 DB_TEST_PASSWORD=your_test_database_password
 ```
 
-**💡 Generate secure secrets:**
+### Setup Flow Behavior
+
+The application uses a setup wizard for initial configuration:
+
+| Scenario                           | Behavior                                                          |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| Fresh DB + no env vars             | Setup wizard is shown                                             |
+| Fresh DB + `FIRST_SUPERUSER_*` set | Admin created automatically, wizard skipped                       |
+| DB reset with `FIRST_SUPERUSER_*`  | Admin created, wizard skipped (password NOT updated for existing) |
+| Set `FORCE_INITIAL_SETUP=true`     | Wizard shown even if already completed                            |
+
+**Important:** Once setup is complete, changing `FIRST_SUPERUSER_PASSWORD` in your `.env` will NOT update the admin password. This is intentional for security. Use `FORCE_INITIAL_SETUP=true` to force the wizard if you need to reset credentials.
 
 ```bash
 # Generate a 32-byte hex secret

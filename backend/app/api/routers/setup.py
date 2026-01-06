@@ -3,25 +3,28 @@
 Public endpoints for initial application setup.
 
 These endpoints are accessible WITHOUT authentication, but are protected
-by checking if setup has already been completed.
+by checking if setup has already been completed OR forced.
 """
 
 import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi_users.exceptions import UserAlreadyExists, UserNotExists
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import get_user_manager
 from app.core.users import UserManager
 from app.crud.crud_app_settings import crud_app_settings
+from app.db.models.app_settings import AppSettings
 from app.db.session import get_async_session
 from app.schemas.app_settings import (
     SetupComplete,
     SetupSkip,
     SetupStatus,
 )
-from app.schemas.user import UserCreate
+from app.schemas.user import UserCreate, UserUpdate
 from app.services.api_validation import validate_all_settings
 
 logger = logging.getLogger(__name__)
@@ -45,6 +48,183 @@ def _require_setup_token(setup_token: str | None) -> None:
         )
 
 
+def _raise_setup_not_found() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Not Found",
+    )
+
+
+async def _lock_app_settings_row(db: AsyncSession) -> None:
+    await db.execute(select(AppSettings).where(AppSettings.id == 1).with_for_update())
+
+
+async def _require_setup_state(db: AsyncSession) -> dict[str, bool]:
+    await _lock_app_settings_row(db)
+    state = await crud_app_settings.get_setup_state(db)
+    if not state["setup_required"]:
+        _raise_setup_not_found()
+    return state
+
+
+async def _save_setup_settings(db: AsyncSession, setup_data: SetupComplete) -> None:
+    if not setup_data.settings:
+        return
+
+    try:
+        await crud_app_settings.update(db, obj_in=setup_data.settings)
+        logger.info("Settings saved during setup wizard.")
+
+        if setup_data.settings.google_cloud_credentials:
+            from app.api.routers.settings import _process_google_cloud_credentials
+
+            try:
+                await _process_google_cloud_credentials(db, setup_data.settings)
+            except Exception as e:
+                logger.warning(f"Failed to process Google Cloud credentials during setup: {e}")
+    except Exception as e:
+        logger.error(f"Failed to save settings during setup: {e}")
+        # Don't fail the whole setup if settings save fails
+
+
+async def _finalize_setup(db: AsyncSession, log_message: str) -> None:
+    await crud_app_settings.populate_from_env_defaults(db)
+    try:
+        logger.info("Triggering initial validation for all settings...")
+        await validate_all_settings(db)
+    except Exception as e:
+        logger.warning(f"Settings validation warnings during setup: {e}")
+    await crud_app_settings.mark_setup_completed(db)
+    logger.info(log_message)
+
+
+def _resolve_skip_credentials(skip_data: SetupSkip | None) -> tuple[str | None, str | None]:
+    if skip_data:
+        has_email = bool(skip_data.admin_email)
+        has_password = bool(skip_data.admin_password)
+        if has_email != has_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Both email and password are required, or neither.",
+            )
+        if has_email:
+            return skip_data.admin_email, skip_data.admin_password
+
+    if settings.FIRST_SUPERUSER_EMAIL and settings.FIRST_SUPERUSER_PASSWORD:
+        logger.info(
+            f"Using FIRST_SUPERUSER_EMAIL from environment: {settings.FIRST_SUPERUSER_EMAIL}"
+        )
+        return settings.FIRST_SUPERUSER_EMAIL, settings.FIRST_SUPERUSER_PASSWORD
+
+    if not settings.OPEN_SIGNUP:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Admin credentials required when OPEN_SIGNUP is disabled. "
+            "Provide credentials or set FIRST_SUPERUSER_EMAIL/PASSWORD env vars.",
+        )
+
+    return None, None
+
+
+async def _create_admin_user(
+    user_manager: UserManager, admin_email: str, admin_password: str
+) -> None:
+    admin_user = UserCreate(
+        email=admin_email,
+        password=admin_password,
+        is_superuser=True,
+        is_active=True,
+        is_verified=True,
+        role="admin",
+    )
+    try:
+        created_user = await user_manager.create(admin_user, safe=False)
+        logger.info(f"Admin user created via setup wizard: {created_user.email}")
+    except UserAlreadyExists as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A user with email '{admin_email}' already exists.",
+        ) from e
+    except Exception as e:
+        logger.error(f"Failed to create admin user during setup: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to create admin user: {e!s}",
+        ) from e
+
+
+async def _upsert_admin_for_complete(
+    user_manager: UserManager,
+    db: AsyncSession,
+    admin_email: str,
+    admin_password: str,
+    setup_completed: bool,
+) -> None:
+    try:
+        existing_user = await user_manager.get_by_email(admin_email)
+    except UserNotExists:
+        await _create_admin_user(user_manager, admin_email, admin_password)
+        return
+
+    if setup_completed:
+        logger.info(f"Forced setup: keeping existing password for {existing_user.email}")
+        return
+
+    user_update = UserUpdate(
+        password=admin_password,
+        is_superuser=True,
+        is_active=True,
+        is_verified=True,
+    )
+    await user_manager.update(user_update, existing_user, safe=True)
+    existing_user.role = "admin"
+    db.add(existing_user)
+    logger.info(f"Updated existing admin during setup: {existing_user.email}")
+
+
+async def _upsert_admin_for_skip(
+    user_manager: UserManager,
+    db: AsyncSession,
+    admin_email: str,
+    admin_password: str,
+    setup_completed: bool,
+) -> None:
+    try:
+        existing_user = await user_manager.get_by_email(admin_email)
+    except UserNotExists:
+        try:
+            admin_user = UserCreate(
+                email=admin_email,
+                password=admin_password,
+                is_superuser=True,
+                is_active=True,
+                is_verified=True,
+                role="admin",
+            )
+            created_user = await user_manager.create(admin_user, safe=False)
+            logger.info(f"Admin user created during skip: {created_user.email}")
+        except UserAlreadyExists:
+            logger.warning(f"Admin already exists during skip: {admin_email}")
+        except Exception as e:
+            logger.warning(f"Failed to create admin during skip: {e}")
+        return
+
+    if setup_completed:
+        logger.info(f"Forced skip: keeping existing password for {existing_user.email}")
+        return
+
+    user_update = UserUpdate(
+        password=admin_password,
+        is_superuser=True,
+        is_active=True,
+        is_verified=True,
+    )
+    await user_manager.update(user_update, existing_user, safe=True)
+    existing_user.role = "admin"
+    db.add(existing_user)
+    logger.info(f"Updated existing admin during skip: {existing_user.email}")
+
+
 @router.get(
     "/status",
     response_model=SetupStatus,
@@ -59,16 +239,21 @@ async def get_setup_status(
 
     This endpoint is PUBLIC and used by the frontend to determine
     whether to show the setup wizard or the login page.
+
+    Returns:
+        setup_completed: True if wizard was completed
+        setup_required: True if wizard should be shown (forced OR not completed)
+        setup_forced: True if FORCE_INITIAL_SETUP is set
     """
-    is_completed = await crud_app_settings.get_setup_completed(db)
-    return SetupStatus(setup_completed=is_completed)
+    state = await crud_app_settings.get_setup_state(db)
+    return SetupStatus(**state)
 
 
 @router.post(
     "/complete",
     response_model=SetupStatus,
     summary="Complete the initial setup",
-    description="Create admin user and save settings. Only works if setup not completed.",
+    description="Create admin user and save settings. Only works if setup is required.",
 )
 async def complete_setup(
     setup_data: SetupComplete,
@@ -80,82 +265,29 @@ async def complete_setup(
     Complete the initial setup wizard.
 
     This endpoint:
-    1. Checks if setup is already completed (blocks if true)
-    2. Creates the admin user
-    3. Saves any provided settings
-    4. Marks setup as completed
+    1. Checks if setup is required (setup_forced OR not setup_completed)
+    2. Uses atomic locking to prevent concurrent completions
+    3. Creates or updates the admin user (password update only if not completed)
+    4. Saves settings and populates env defaults
+    5. Validates settings (warnings only, doesn't block)
+    6. Marks setup as completed
 
-    Security: This endpoint is PUBLIC but can only be called ONCE
-    (when setup_completed is False).
+    Security: This endpoint is PUBLIC but protected by setup_required state.
     """
     _require_setup_token(setup_token)
 
-    # Security check: Only allow if setup not completed
-    is_completed = await crud_app_settings.get_setup_completed(db)
-    if is_completed:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Not Found",
-        )
+    state = await _require_setup_state(db)
+    await _upsert_admin_for_complete(
+        user_manager,
+        db,
+        setup_data.admin_email,
+        setup_data.admin_password,
+        state["setup_completed"],
+    )
+    await _save_setup_settings(db, setup_data)
+    await _finalize_setup(db, "Setup wizard completed successfully.")
 
-    # Create admin user
-    try:
-        admin_user = UserCreate(
-            email=setup_data.admin_email,
-            password=setup_data.admin_password,
-            is_superuser=True,
-            is_active=True,
-            is_verified=True,
-            role="admin",
-        )
-        created_user = await user_manager.create(admin_user, safe=False)
-        logger.info(f"Admin user created via setup wizard: {created_user.email}")
-    except Exception as e:
-        error_msg = str(e).lower()
-        # Check for user already exists (fastapi-users raises this)
-        if "already exists" in error_msg or "UserAlreadyExists" in type(e).__name__:
-            logger.warning(f"Admin user already exists: {setup_data.admin_email}")
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"A user with email '{setup_data.admin_email}' already exists. Please use a different email or login with the existing account.",
-            ) from e
-        logger.error(f"Failed to create admin user during setup: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to create admin user: {e!s}",
-        ) from e
-
-    # Save settings if provided
-    if setup_data.settings:
-        try:
-            await crud_app_settings.update(db, obj_in=setup_data.settings)
-            logger.info("Settings saved during setup wizard.")
-
-            # Process Google Cloud credentials if provided
-            if setup_data.settings.google_cloud_credentials:
-                from app.api.routers.settings import _process_google_cloud_credentials
-
-                try:
-                    await _process_google_cloud_credentials(db, setup_data.settings)
-                except Exception as e:
-                    logger.warning(f"Failed to process Google Cloud credentials during setup: {e}")
-        except Exception as e:
-            logger.error(f"Failed to save settings during setup: {e}")
-            # Don't fail the whole setup if settings save fails
-            # Admin can update settings later
-
-    # Populate any empty fields with env var defaults
-    await crud_app_settings.populate_from_env_defaults(db)
-
-    # Validate settings (including defaults if not provided)
-    logger.info("Triggering initial validation for all settings...")
-    await validate_all_settings(db)
-
-    # Mark setup as completed
-    await crud_app_settings.mark_setup_completed(db)
-    logger.info("Setup wizard completed successfully.")
-
-    return SetupStatus(setup_completed=True)
+    return SetupStatus(setup_completed=True, setup_required=False, setup_forced=False)
 
 
 @router.post(
@@ -174,64 +306,30 @@ async def skip_setup(
     Skip the setup wizard and use environment variable defaults.
 
     Optionally creates an admin user if credentials are provided.
-    Otherwise, the system will rely on initial_data.py bootstrap.
+    Otherwise, falls back to FIRST_SUPERUSER_* env vars.
 
-    Security: This endpoint is PUBLIC but can only be called ONCE.
+    Security: This endpoint is PUBLIC but protected by setup_required state.
+    Fail-safe: Returns 400 if no credentials AND OPEN_SIGNUP is disabled.
     """
     _require_setup_token(setup_token)
 
-    # Security check
-    is_completed = await crud_app_settings.get_setup_completed(db)
-    if is_completed:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Not Found",
-        )
-
-    # Create admin user from provided credentials or fall back to env vars
-    admin_email = None
-    admin_password = None
-
-    if skip_data and skip_data.admin_email and skip_data.admin_password:
-        admin_email = skip_data.admin_email
-        admin_password = skip_data.admin_password
-    else:
-        # Fall back to environment variables
-        from app.core.config import settings
-
-        if settings.FIRST_SUPERUSER_EMAIL and settings.FIRST_SUPERUSER_PASSWORD:
-            admin_email = settings.FIRST_SUPERUSER_EMAIL
-            admin_password = settings.FIRST_SUPERUSER_PASSWORD
-            logger.info(f"Using FIRST_SUPERUSER_EMAIL from environment: {admin_email}")
+    state = await _require_setup_state(db)
+    admin_email, admin_password = _resolve_skip_credentials(skip_data)
 
     if admin_email and admin_password:
-        try:
-            admin_user = UserCreate(
-                email=admin_email,
-                password=admin_password,
-                is_superuser=True,
-                is_active=True,
-                is_verified=True,
-                role="admin",
-            )
-            created_user = await user_manager.create(admin_user, safe=False)
-            logger.info(f"Admin user created during skip: {created_user.email}")
-        except Exception as e:
-            logger.warning(f"Failed to create admin during skip (may already exist): {e}")
+        await _upsert_admin_for_skip(
+            user_manager,
+            db,
+            admin_email,
+            admin_password,
+            state["setup_completed"],
+        )
     else:
         logger.warning(
-            "No admin credentials provided and FIRST_SUPERUSER env vars not set. No admin user created."
+            "No admin credentials provided and FIRST_SUPERUSER env vars not set. "
+            "OPEN_SIGNUP is enabled, so skipping without admin."
         )
 
-    # Mark setup as completed (settings remain empty, system uses env defaults)
-    await crud_app_settings.mark_setup_completed(db)
+    await _finalize_setup(db, "Setup skipped. System will use environment variable defaults.")
 
-    # Populate any empty fields with env var defaults
-    await crud_app_settings.populate_from_env_defaults(db)
-
-    # Validate defaults from environment
-    await validate_all_settings(db)
-
-    logger.info("Setup skipped. System will use environment variable defaults.")
-
-    return SetupStatus(setup_completed=True)
+    return SetupStatus(setup_completed=True, setup_required=False, setup_forced=False)

@@ -18,7 +18,7 @@ async def test_mfa_setup_audit():
         await mfa_service.setup_mfa(db, user)
 
         mock_log.assert_called()
-        args, kwargs = mock_log.call_args
+        _, kwargs = mock_log.call_args
         assert kwargs["action"] == "auth.mfa.setup"
         assert kwargs["target_user_id"] == "user-123"
 

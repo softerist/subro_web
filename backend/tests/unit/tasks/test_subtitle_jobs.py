@@ -443,10 +443,8 @@ async def test_execute_subtitle_downloader_task_script_timeout(
         except asyncio.CancelledError:
             pass
 
-    async def mock_wait_for_side_effect(
-        awaitable: Any,
-        timeout: float | None = None,
-    ) -> Any:
+    async def mock_wait_for_side_effect(awaitable: Any, **kwargs: Any) -> Any:
+        timeout = kwargs.get("timeout")
         if timeout == mock_settings_env.JOB_TIMEOUT_SEC:
             await _cancel_and_drain(awaitable)
             raise TimeoutError("Simulated gather timeout")
@@ -454,7 +452,7 @@ async def test_execute_subtitle_downloader_task_script_timeout(
             # Simulate that even after terminate, process.wait() times out
             await _cancel_and_drain(awaitable)
             raise TimeoutError("Simulated grace period timeout")
-        return await original_asyncio_wait_for(awaitable, timeout=timeout)
+        return await original_asyncio_wait_for(awaitable, **kwargs)
 
     with patch.object(
         subtitle_jobs.asyncio, "wait_for", side_effect=mock_wait_for_side_effect

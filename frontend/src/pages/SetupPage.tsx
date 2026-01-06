@@ -10,7 +10,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 import {
   completeSetup,
   skipSetup,
@@ -23,9 +24,10 @@ type SetupStep = "welcome" | "admin" | "integrations" | "finish";
 
 export default function SetupPage() {
   const navigate = useNavigate();
-  const setSetupCompleted = useSettingsStore(
-    (state) => state.setSetupCompleted,
-  );
+  const { setSetupState, setupForced } = useSettingsStore((state) => ({
+    setSetupState: state.setSetupState,
+    setupForced: state.setupForced,
+  }));
 
   const [currentStep, setCurrentStep] = useState<SetupStep>("welcome");
   const [isLoading, setIsLoading] = useState(false);
@@ -35,8 +37,6 @@ export default function SetupPage() {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const setupTokenFromEnv = import.meta.env.VITE_SETUP_TOKEN || "";
-  const [setupTokenInput, setSetupTokenInput] = useState(setupTokenFromEnv);
 
   // Settings form state
   const [settings, setSettings] = useState<SettingsUpdate>({
@@ -124,9 +124,8 @@ export default function SetupPage() {
             : undefined,
       };
 
-      const effectiveSetupToken = setupTokenInput.trim() || undefined;
-      await completeSetup(data, effectiveSetupToken);
-      setSetupCompleted(true);
+      await completeSetup(data);
+      setSetupState(true, false, false);
       navigate("/login");
     } catch (err) {
       setError(getSetupErrorMessage(err, "Setup failed. Please try again."));
@@ -141,13 +140,12 @@ export default function SetupPage() {
 
     try {
       // Skip but still create admin if provided
-      const effectiveSetupToken = setupTokenInput.trim() || undefined;
       if (adminEmail && adminPassword) {
-        await skipSetup(adminEmail, adminPassword, effectiveSetupToken);
+        await skipSetup(adminEmail, adminPassword);
       } else {
-        await skipSetup(undefined, undefined, effectiveSetupToken);
+        await skipSetup();
       }
-      setSetupCompleted(true);
+      setSetupState(true, false, false);
       navigate("/login");
     } catch (err) {
       setError(getSetupErrorMessage(err, "Skip failed. Please try again."));
@@ -211,6 +209,21 @@ export default function SetupPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {setupForced && (
+                  <Alert className="border-yellow-600/50 bg-yellow-900/20">
+                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                    <AlertTitle className="text-yellow-500">
+                      Forced Setup
+                    </AlertTitle>
+                    <AlertDescription className="text-yellow-400/80">
+                      Setup is forced by server configuration. Remember to unset{" "}
+                      <code className="bg-yellow-900/30 px-1 rounded">
+                        FORCE_INITIAL_SETUP
+                      </code>{" "}
+                      after completing setup.
+                    </AlertDescription>
+                  </Alert>
+                )}
                 {error && (
                   <Alert variant="destructive">
                     <AlertDescription>{error}</AlertDescription>
@@ -224,25 +237,6 @@ export default function SetupPage() {
                     <li>✓ Google Cloud Translation credentials (optional)</li>
                     <li>✓ qBittorrent integration (optional)</li>
                   </ul>
-                </div>
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="setup-token"
-                    className="text-muted-foreground"
-                  >
-                    Setup Token (production only)
-                  </Label>
-                  <Input
-                    id="setup-token"
-                    type="password"
-                    value={setupTokenInput}
-                    onChange={(e) => setSetupTokenInput(e.target.value)}
-                    placeholder="Leave blank if not required"
-                    className="bg-background border-input text-foreground"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Required when `SETUP_TOKEN` is configured on the server.
-                  </p>
                 </div>
                 <div className="flex justify-between pt-4">
                   <Button

@@ -1,3 +1,4 @@
+import io
 import logging
 import os
 import re
@@ -240,41 +241,44 @@ def _run_sync_tool(command, tool_name, timeout_seconds):  # noqa: C901
     """Helper to run a synchronization command, log output, handle timeout."""
     try:
         logging.debug(f"Running command: {' '.join(command)}")
-        # nosemgrep: python.lang.compatibility.python36.python36-compatibility-Popen1, python.lang.compatibility.python36.python36-compatibility-Popen2
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,  # Redirect stderr to stdout
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,  # Line buffered
-            universal_newlines=True,  # Ensure text mode works consistently
         )
 
         output_lines = []
         start_time = time.monotonic()
         last_log_time = start_time
 
-        while True:
-            line = ""
-            # Check if process finished
-            process_poll = process.poll()
-            if process_poll is not None:  # Process has finished
-                # Read any remaining output
-                if process.stdout:
-                    remaining_output = process.stdout.read()
+        stdout_text = None
+        try:
+            if process.stdout is None:
+                raise RuntimeError(f"{tool_name} stdout pipe was not created.")
+            stdout_text = io.TextIOWrapper(
+                process.stdout,
+                encoding="utf-8",
+                errors="replace",
+                newline="",
+            )
+
+            while True:
+                line = ""
+                # Check if process finished
+                process_poll = process.poll()
+                if process_poll is not None:  # Process has finished
+                    # Read any remaining output
+                    remaining_output = stdout_text.read()
                     if remaining_output:
                         lines = remaining_output.splitlines()
                         for line in lines:
                             if line.strip():
                                 output_lines.append(line.strip())
-                break  # Exit loop
+                    break  # Exit loop
 
-            # Read output line if available
-            if process.stdout:
+                # Read output line if available
                 try:
-                    line = process.stdout.readline()
+                    line = stdout_text.readline()
                 except Exception as read_err:
                     logging.warning(f"Error reading stdout from {tool_name}: {read_err}")
                     # Break or continue? Let's break if reading fails consistently.
@@ -291,39 +295,46 @@ def _run_sync_tool(command, tool_name, timeout_seconds):  # noqa: C901
                             return False  # Indicate failure
                     break  # Assume process ended or reading is broken
 
-            if line:
-                line_strip = line.strip()
-                if line_strip:  # Avoid logging empty lines excessively
-                    output_lines.append(line_strip)
-                    # Log progress lines or other notable output
-                    # Be careful not to log too verbosely here
-                    if (
-                        tool_name == "alass" and "INFO" in line_strip.upper() and "%" in line_strip
-                    ) or (tool_name == "ffsubsync" and "syncing segment" in line_strip.lower()):
-                        current_time = time.monotonic()
-                        # Throttle progress logging
-                        if current_time - last_log_time > 2.0:
-                            logging.info(f"[{tool_name}-progress] {line_strip}")
-                            last_log_time = current_time
-                    # else: logging.debug(f"[{tool_name}-output] {line_strip}") # Very verbose
+                if line:
+                    line_strip = line.strip()
+                    if line_strip:  # Avoid logging empty lines excessively
+                        output_lines.append(line_strip)
+                        # Log progress lines or other notable output
+                        # Be careful not to log too verbosely here
+                        if (
+                            tool_name == "alass"
+                            and "INFO" in line_strip.upper()
+                            and "%" in line_strip
+                        ) or (tool_name == "ffsubsync" and "syncing segment" in line_strip.lower()):
+                            current_time = time.monotonic()
+                            # Throttle progress logging
+                            if current_time - last_log_time > 2.0:
+                                logging.info(f"[{tool_name}-progress] {line_strip}")
+                                last_log_time = current_time
+                        # else: logging.debug(f"[{tool_name}-output] {line_strip}") # Very verbose
 
-            # Check for timeout
-            if timeout_seconds and (time.monotonic() - start_time) > timeout_seconds:
-                logging.error(
-                    f"{tool_name} synchronization timed out after {timeout_seconds} seconds."
-                )
-                process.terminate()
-                # Give it a moment to terminate gracefully
-                try:
-                    process.wait(timeout=2.0)
-                except subprocess.TimeoutExpired:
-                    logging.warning(f"{tool_name} process did not terminate gracefully, killing.")
-                    process.kill()
-                process.wait()  # Wait for kill
-                raise subprocess.TimeoutExpired(command, timeout_seconds)
+                # Check for timeout
+                if timeout_seconds and (time.monotonic() - start_time) > timeout_seconds:
+                    logging.error(
+                        f"{tool_name} synchronization timed out after {timeout_seconds} seconds."
+                    )
+                    process.terminate()
+                    # Give it a moment to terminate gracefully
+                    try:
+                        process.wait(timeout=2.0)
+                    except subprocess.TimeoutExpired:
+                        logging.warning(
+                            f"{tool_name} process did not terminate gracefully, killing."
+                        )
+                        process.kill()
+                    process.wait()  # Wait for kill
+                    raise subprocess.TimeoutExpired(command, timeout_seconds)
 
-            if not line and process.poll() is None:  # No output but process still running
-                time.sleep(0.1)  # Prevent tight loop consuming CPU
+                if not line and process.poll() is None:  # No output but process still running
+                    time.sleep(0.1)  # Prevent tight loop consuming CPU
+        finally:
+            if stdout_text is not None:
+                stdout_text.close()
 
         # After loop, check final return code
         returncode = process.returncode

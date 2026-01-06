@@ -17,7 +17,7 @@ from app.crud.crud_app_settings import crud_app_settings
 from app.db import session as db_session
 from app.db.models.user import User as UserModel
 from app.db.session import _initialize_fastapi_db_resources_sync
-from app.schemas.user import UserCreate, UserUpdate
+from app.schemas.user import UserCreate
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -110,6 +110,12 @@ async def create_default_paths(db: AsyncSession) -> None:
     app_settings = await crud_app_settings.get(db)
     setup_completed = app_settings.setup_completed
 
+    # Only bootstrap superuser when setup is incomplete
+    # This prevents env var password changes from overwriting user-set passwords
+    if setup_completed:
+        logger.info("Setup already completed. Skipping superuser bootstrap.")
+        return
+
     # Get the SQLAlchemyUserDatabase adapter
     user_db_adapter = SQLAlchemyUserDatabase(db, UserModel)
     script_user_manager = UserManager(user_db_adapter)
@@ -124,25 +130,20 @@ async def create_default_paths(db: AsyncSession) -> None:
     try:
         # Check if user already exists
         user_obj = await script_user_manager.get_by_email(superuser_email)
-        logger.info(f"User {superuser_email} already exists. Updating credentials...")
+        logger.info(f"User {superuser_email} already exists. Ensuring admin role...")
 
-        # Update password and ensuring role is admin
-        user_update = UserUpdate(
-            password=settings.FIRST_SUPERUSER_PASSWORD,
-            is_superuser=True,
-            is_active=True,
-            is_verified=True,
-        )
-        await script_user_manager.update(user_update, user_obj, safe=True)
-        # Update role manually as it's not in UserUpdate
-        user_obj.role = "admin"
-        db.add(user_obj)
+        # Only ensure role is admin, don't update password
+        # Password updates should be controlled by the user, not env vars
+        if user_obj.role != "admin":
+            user_obj.role = "admin"
+            db.add(user_obj)
+            logger.info(f"Updated {superuser_email} role to admin.")
+        else:
+            logger.info(f"User {superuser_email} is already admin.")
 
-        logger.info(f"Superuser {superuser_email} updated successfully.")
-
-        if not setup_completed:
-            await crud_app_settings.mark_setup_completed(db)
-            logger.info("Marked setup as completed (existing user found).")
+        # Mark setup as completed since we have an admin
+        await crud_app_settings.mark_setup_completed(db)
+        logger.info("Marked setup as completed (existing user found).")
 
     except UserNotExists:
         logger.info(f"Initial superuser {superuser_email} not found. Creating...")
@@ -163,9 +164,8 @@ async def create_default_paths(db: AsyncSession) -> None:
         )
 
         # Mark setup as completed (bootstrapped via env vars)
-        if not setup_completed:
-            await crud_app_settings.mark_setup_completed(db)
-            logger.info("Bootstrapped via Environment Variables. Setup Wizard skipped.")
+        await crud_app_settings.mark_setup_completed(db)
+        logger.info("Bootstrapped via Environment Variables. Setup Wizard skipped.")
 
     await db.commit()
     logger.info("Initial data creation process finished.")

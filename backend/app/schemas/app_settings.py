@@ -10,6 +10,8 @@ class SetupStatus(BaseModel):
     """Response schema for setup status check."""
 
     setup_completed: bool
+    setup_required: bool = True
+    setup_forced: bool = False
 
 
 class SettingsBase(BaseModel):

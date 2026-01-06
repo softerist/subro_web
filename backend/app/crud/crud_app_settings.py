@@ -108,6 +108,27 @@ class CRUDAppSettings:
         settings = await self.get(db)
         return settings.setup_completed
 
+    async def get_setup_state(self, db: AsyncSession) -> dict:
+        """
+        Get unified setup state for routing decisions.
+
+        Returns:
+            setup_completed: True if wizard was completed
+            setup_required: True if wizard should be shown (forced OR not completed)
+            setup_forced: True if FORCE_INITIAL_SETUP is set
+        """
+        from app.core.config import settings as config
+
+        setup_completed = await self.get_setup_completed(db)
+        setup_forced = config.FORCE_INITIAL_SETUP
+        setup_required = setup_forced or not setup_completed
+
+        return {
+            "setup_completed": setup_completed,
+            "setup_required": setup_required,
+            "setup_forced": setup_forced,
+        }
+
     async def update(self, db: AsyncSession, *, obj_in: SettingsUpdate) -> AppSettings:
         """
         Update settings. Encrypts sensitive fields before storage.
