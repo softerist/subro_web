@@ -5,8 +5,8 @@ services:
   api:
     # Run as root in entrypoint, then drop to appuser via gosu in entrypoint.sh
     environment:
-      - PUID=1000
-      - PGID=1000
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     volumes:
       # CORRECTED PATH: Mount project's backend code into /app for hot-reloading
       - ../../backend:/app
@@ -14,42 +14,42 @@ services:
       - /app/.venv
       # Mount qBittorrent download folder for subtitle processing
       # Mounted to /downloads to avoid container's /root permission issues
-      - /root/Downloads:/downloads
+      - ${HOST_DOWNLOADS_PATH}:${CONTAINER_DOWNLOADS_PATH}
     # PYTHONPATH is inherited from the base docker-compose.yml
     # environment:
     #   - PYTHONPATH=/app
     # Command to run uvicorn with live reload
-    command: [ "poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app", "--reload-dir", "/app" ]
+    command: [ "poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "${APP_PORT}", "--reload", "--reload-dir", "/app", "--reload-dir", "/app" ]
 
   worker:
     # Run as root in entrypoint, then drop to appuser via gosu in entrypoint.sh
     environment:
-      - PUID=1000
-      - PGID=1000
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     volumes:
       # CORRECTED PATH: Mount project's backend code into /app
       - ../../backend:/app
       # Preserve the container's virtual environment even when mounting code
       - /app/.venv
-      - /mnt/usb3/Media/Movies:/mnt/usb3/Media/Movies # Media folder mount
+      - ${HOST_MEDIA_PATH}:${CONTAINER_MEDIA_PATH} # Media folder mount
       # Mount qBittorrent download folder for subtitle processing
-      - /root/Downloads:/downloads
+      - ${HOST_DOWNLOADS_PATH}:${CONTAINER_DOWNLOADS_PATH}
     # PYTHONPATH is inherited from the base docker-compose.yml
     # environment:
     #   - PYTHONPATH=/app
     # Command to run celery worker with concurrency for parallel job processing
     # Use --concurrency to control how many tasks can run simultaneously
-    command: [ "poetry", "run", "celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=info", "--concurrency=4" ]
+    command: [ "poetry", "run", "celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=info", "--concurrency=${CELERY_WORKER_CONCURRENCY:-4}" ]
 
   beat:
     environment:
-      - PUID=1000
-      - PGID=1000
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     volumes:
       - ../../backend:/app
       - /app/.venv
-      - /mnt/usb3/Media/Movies:/mnt/usb3/Media/Movies
-      - /root/Downloads:/downloads
+      - ${HOST_MEDIA_PATH}:${CONTAINER_MEDIA_PATH}
+      - ${HOST_DOWNLOADS_PATH}:${CONTAINER_DOWNLOADS_PATH}
     command: [ "poetry", "run", "celery", "-A", "app.tasks.celery_app", "beat", "--loglevel=info" ]
 
   frontend:
@@ -65,7 +65,7 @@ services:
     ports:
       # Expose Vite's port directly to the host (optional, Caddy is the primary entry)
       # Useful for direct access during debugging if Caddy has issues.
-      - "5174:5173"
+      - "${FRONTEND_PORT:-5174}:5173"
     # Healthcheck for the Vite dev server (can be slow to start)
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:5173" ]
@@ -79,9 +79,9 @@ services:
     # Your test DB service
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: Pa44w0rd
-      POSTGRES_DB: subappdb
+      POSTGRES_USER: ${DB_TEST_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_TEST_PASSWORD:-test_password}
+      POSTGRES_DB: ${DB_TEST_DB:-subappdb}
     ports:
       - "${DB_TEST_PORT:-5433}:5432"
     volumes:
@@ -96,7 +96,7 @@ services:
 
   redis:
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
 
 # Define networks used in this override file
 

@@ -4,11 +4,17 @@ import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
+import pytest
 import pytest_asyncio
+
+# Need to load .env before importing app.core.config
 from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+project_root = Path(__file__).resolve().parents[2]
+load_dotenv(project_root / ".env")
 
 # Load test env values but don't override existing env vars (CI sets them explicitly).
 load_dotenv(Path(__file__).resolve().parents[1] / ".env.test", override=False)
@@ -16,7 +22,8 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env.test", override=False)
 # Keep log output clean
 logging.getLogger("faker").setLevel(logging.WARNING)
 
-from app.core.config import settings  # noqa: E402
+
+from app.core.config import settings  # noqa: E402 clean
 from app.core.rate_limit import limiter  # noqa: E402
 from app.db.base import Base  # noqa: E402
 
@@ -50,13 +57,15 @@ else:
     TEST_DATABASE_URL = url.render_as_string(hide_password=False)
 
 
-# @pytest.fixture(scope="session")
-# def event_loop(request: pytest.FixtureRequest) -> Generator[asyncio.AbstractEventLoop, None, None]:
-#     """Create an instance of the default event loop for each test session."""
-#     loop = asyncio.get_event_loop_policy().new_event_loop()
-#     asyncio.set_event_loop(loop)
-#     yield loop
-#     loop.close()
+@pytest.fixture(scope="session")
+def event_loop(request: pytest.FixtureRequest):  # noqa: ARG001
+    """Create an instance of the default event loop for each test session."""
+    import asyncio
+
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield loop
+    loop.close()
 
 
 @pytest_asyncio.fixture(scope="function")

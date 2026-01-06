@@ -4,6 +4,7 @@ This verifies the infrastructure fixes for the integration tests.
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -13,10 +14,18 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 
 async def test_redis_connection():
-    """Test Redis connection on localhost:6379"""
-    print("Testing Redis connection on localhost:6379...")
+    """Test Redis connection using environment variables."""
+    redis_host = os.getenv("REDIS_HOST")
+    redis_port = os.getenv("REDIS_PORT")
+
+    if not redis_host or not redis_port:
+        print("❌ REDIS_HOST and REDIS_PORT must be set.")
+        return False
+
+    redis_url = f"redis://{redis_host}:{redis_port}/2"
+    print(f"Testing Redis connection on {redis_host}:{redis_port}...")
     try:
-        redis = Redis.from_url("redis://localhost:6379/2", encoding="utf-8", decode_responses=True)
+        redis = Redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
         await redis.ping()
 
         # Test pub/sub
@@ -35,12 +44,16 @@ async def test_redis_connection():
 
 
 async def test_postgres_connection():
-    """Test PostgreSQL connection on localhost:5433"""
-    print("\nTesting PostgreSQL connection on localhost:5433...")
+    """Test PostgreSQL connection using environment variables."""
+    db_url = os.getenv("DATABASE_URL") or os.getenv("ASYNC_SQLALCHEMY_DATABASE_URL")
+    if not db_url:
+        print("❌ DATABASE_URL or ASYNC_SQLALCHEMY_DATABASE_URL must be set.")
+        return False
+    # Mask password for display
+    display_url = db_url.split("@")[1] if "@" in db_url else db_url
+    print(f"\nTesting PostgreSQL connection to @{display_url}...")
     try:
-        engine = create_async_engine(
-            "postgresql+asyncpg://admin:Pa44w0rd@localhost:5433/subappdb", echo=False
-        )
+        engine = create_async_engine(db_url, echo=False)
 
         async with engine.connect() as conn:
             result = await conn.execute(text("SELECT 1 as test"))
@@ -57,7 +70,7 @@ async def test_postgres_connection():
 
 def verify_env_test_config():
     """
-    Verify .env.test file exists and has correct values.
+    Verify .env.test file exists and has required variable keys.
     Made synchronous to avoid ASYNC101 (blocking I/O in async function).
     """
     print("\nVerifying .env.test configuration...")
@@ -65,22 +78,23 @@ def verify_env_test_config():
         # Fix PTH123: Use Path.read_text instead of open()
         content = Path(".env.test").read_text(encoding="utf-8")
 
-        required_vars = [
-            "REDIS_HOST=localhost",
-            "REDIS_PORT=6379",
-            "DATABASE_URL=postgresql+asyncpg://admin:Pa44w0rd@localhost:5433/subappdb",
+        # Check for presence of key names (not specific values)
+        required_keys = [
+            "REDIS_HOST",
+            "REDIS_PORT",
+            "DATABASE_URL",
+            "POSTGRES_PASSWORD",
         ]
 
-        all_present = all(var in content for var in required_vars)
+        missing_keys = [key for key in required_keys if key not in content]
 
-        if all_present:
-            print("✅ .env.test configuration correct!")
-            print("   - REDIS_HOST=localhost ✓")
-            print("   - REDIS_PORT=6379 ✓")
-            print("   - DATABASE_URL points to localhost:5433 ✓")
+        if not missing_keys:
+            print("✅ .env.test configuration has required keys!")
+            for key in required_keys:
+                print(f"   - {key} ✓")
             return True
         else:
-            print("❌ .env.test missing required configurations")
+            print(f"❌ .env.test missing required keys: {missing_keys}")
             return False
     except FileNotFoundError:
         print("❌ .env.test file not found")

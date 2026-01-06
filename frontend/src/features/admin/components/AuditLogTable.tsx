@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -276,6 +277,9 @@ export function AuditLogTable({
               <Info className="h-5 w-5 text-primary" />
               <span>Event Details</span>
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Audit log event metadata and raw details.
+            </DialogDescription>
           </DialogHeader>
           {selectedLog && (
             <div className="space-y-4">

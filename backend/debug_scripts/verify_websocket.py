@@ -49,9 +49,8 @@ async def main():
 
     # Connect to test database
     print("1. Connecting to test database...")
-    engine = create_async_engine(
-        "postgresql+asyncpg://admin:Pa44w0rd@localhost:5433/subappdb", echo=False
-    )
+    db_url = settings.ASYNC_SQLALCHEMY_DATABASE_URL
+    engine = create_async_engine(db_url, echo=False)
 
     # Create session
     async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -127,8 +126,10 @@ async def main():
             print("   📤 Published all test messages to Redis")
 
         # Test WebSocket connection
-        print("\n4. Testing WebSocket connection to http://localhost:8000...")
-        ws_url = f"ws://localhost:8000/api/v1/ws/jobs/{job_id}/logs?token={access_token}"
+        print(
+            f"\n4. Testing WebSocket connection to {settings.SERVER_HOST}:{settings.SERVER_PORT}..."
+        )
+        ws_url = f"ws://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}/ws/jobs/{job_id}/logs?token={access_token}"
 
         try:
             # Start publisher task

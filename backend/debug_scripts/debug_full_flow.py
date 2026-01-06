@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import sys
 
 import app.db.session as session_module
@@ -14,16 +15,26 @@ from app.schemas.app_settings import SettingsUpdate
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
-# Test Credentials provided by user
-TMDB_KEY = "8a31e670984b1a2c3cc53a9a8da0fb7e"
-OMDB_KEY = "3bcb6c7b"
-OS_KEY = "a4zU1bWcOiK6yNVKpK1xP0OdAvyZs6eY"
-OS_USER = "softerist"
-OS_PASS = "codein"
+
+def _require_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"{name} is not set")
+    return value
 
 
 async def main():
     print("--- Starting Full Flow Debug ---")
+
+    try:
+        tmdb_key = _require_env("TMDB_API_KEY")
+        omdb_key = _require_env("OMDB_API_KEY")
+        os_key = _require_env("OPENSUBTITLES_API_KEY")
+        os_user = _require_env("OPENSUBTITLES_USERNAME")
+        os_pass = _require_env("OPENSUBTITLES_PASSWORD")
+    except RuntimeError as exc:
+        print(f"Missing required env var: {exc}")
+        return
 
     # Initialize DB
     _initialize_fastapi_db_resources_sync()
@@ -34,11 +45,11 @@ async def main():
     async with session_module.FastAPISessionLocal() as db:
         print("1. Updating Settings...")
         payload = SettingsUpdate(
-            tmdb_api_key=TMDB_KEY,
-            omdb_api_key=OMDB_KEY,
-            opensubtitles_api_key=OS_KEY,
-            opensubtitles_username=OS_USER,
-            opensubtitles_password=OS_PASS,
+            tmdb_api_key=tmdb_key,
+            omdb_api_key=omdb_key,
+            opensubtitles_api_key=os_key,
+            opensubtitles_username=os_user,
+            opensubtitles_password=os_pass,
         )
 
         await crud_app_settings.update(db, obj_in=payload)

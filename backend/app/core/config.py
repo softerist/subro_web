@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     )
 
     # --- Environment & Debug ---
-    ENVIRONMENT: Literal["development", "staging", "production"] = Field(
+    ENVIRONMENT: Literal["development", "staging", "test", "production"] = Field(
         default="development", validation_alias="APP_ENV"
     )
     DEBUG: bool = Field(default=False, validation_alias=AliasChoices("DEBUG_MODE", "DEBUG"))
@@ -191,11 +191,21 @@ class Settings(BaseSettings):
     ASYNC_SQLALCHEMY_DATABASE_URL_WORKER_ENV: PostgresDsn | None = Field(
         default=None, validation_alias="ASYNC_SQLALCHEMY_DATABASE_URL_WORKER"
     )
-    POSTGRES_SERVER: str = Field(default="db", validation_alias="POSTGRES_SERVER")
-    POSTGRES_USER: str = Field(default="admin", validation_alias="POSTGRES_USER")
-    POSTGRES_PASSWORD: str = Field(default="Pa44w0rd", validation_alias="POSTGRES_PASSWORD")
-    POSTGRES_DB: str = Field(default="subappdb", validation_alias="POSTGRES_DB")
-    POSTGRES_PORT: int = Field(default=5432, validation_alias="POSTGRES_PORT")
+    POSTGRES_SERVER: str = Field(
+        default="db", validation_alias=AliasChoices("POSTGRES_SERVER", "DB_TEST_SERVER")
+    )
+    POSTGRES_USER: str = Field(
+        default="admin", validation_alias=AliasChoices("POSTGRES_USER", "DB_TEST_USER")
+    )
+    POSTGRES_PASSWORD: str = Field(
+        validation_alias=AliasChoices("POSTGRES_PASSWORD", "DB_TEST_PASSWORD")
+    )
+    POSTGRES_DB: str = Field(
+        default="subappdb", validation_alias=AliasChoices("POSTGRES_DB", "DB_TEST_DB")
+    )
+    POSTGRES_PORT: int = Field(
+        default=5432, validation_alias=AliasChoices("POSTGRES_PORT", "DB_TEST_PORT")
+    )
     DB_ECHO: bool = Field(default=False, validation_alias="DB_ECHO")
     DB_ECHO_WORKER: bool = Field(default=False, validation_alias="DB_ECHO_WORKER")
 

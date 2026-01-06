@@ -138,11 +138,11 @@ backend_tests:
   extends: .default-docker
   needs: [build_api]
   variables:
-    # Database config for test container
-    POSTGRES_USER: admin
-    POSTGRES_PASSWORD: "Pa44w0rd"
-    POSTGRES_DB: subappdb
-    POSTGRES_DB_TEST: subappdb_pytest
+    # Database config for test container (hardcoded for CI)
+    POSTGRES_USER: "admin"
+    POSTGRES_PASSWORD: "ci_test_password_change_in_production"
+    POSTGRES_DB: "subappdb"
+    POSTGRES_DB_TEST: "subappdb_pytest"
   script:
     - set -euo pipefail
     - docker pull "$IMAGE_API"
@@ -208,7 +208,7 @@ frontend_tests:
     NPM_CONFIG_CACHE: frontend/.npm
     VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:8000/api/v1}"
     VITE_WS_BASE_URL: "${VITE_WS_BASE_URL:-ws://localhost:8000/api/v1}"
-    VITE_SETUP_TOKEN: "${VITE_SETUP_TOKEN:-test-setup-token}"
+    VITE_SETUP_TOKEN: "${VITE_SETUP_TOKEN}"
     VITE_API_PROXY_TARGET: "${VITE_API_PROXY_TARGET:-http://localhost:8000}"
   cache:
     key:

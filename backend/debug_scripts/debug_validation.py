@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 
 import httpx
 
@@ -7,12 +8,12 @@ import httpx
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Test Credentials provided by user
-TMDB_KEY = "8a31e670984b1a2c3cc53a9a8da0fb7e"
-OMDB_KEY = "3bcb6c7b"
-OS_KEY = "a4zU1bWcOiK6yNVKpK1xP0OdAvyZs6eY"
-OS_USER = "softerist"
-OS_PASS = "codein"
+# Test credentials are read from the environment.
+TMDB_KEY = os.getenv("TMDB_API_KEY")
+OMDB_KEY = os.getenv("OMDB_API_KEY")
+OS_KEY = os.getenv("OPENSUBTITLES_API_KEY")
+OS_USER = os.getenv("OPENSUBTITLES_USERNAME")
+OS_PASS = os.getenv("OPENSUBTITLES_PASSWORD")
 
 
 async def _validate_tmdb(api_key: str) -> bool:
@@ -103,16 +104,28 @@ async def main():
     print("--- Starting Validation Debug ---")
 
     print("\n1. TMDB Validation:")
-    tmdb_valid = await _validate_tmdb(TMDB_KEY)
-    print(f"TMDB Valid: {tmdb_valid}")
+    if TMDB_KEY:
+        tmdb_valid = await _validate_tmdb(TMDB_KEY)
+        print(f"TMDB Valid: {tmdb_valid}")
+    else:
+        print("TMDB_API_KEY not set; skipping TMDB validation.")
 
     print("\n2. OMDB Validation:")
-    omdb_valid = await _validate_omdb(OMDB_KEY)
-    print(f"OMDB Valid: {omdb_valid}")
+    if OMDB_KEY:
+        omdb_valid = await _validate_omdb(OMDB_KEY)
+        print(f"OMDB Valid: {omdb_valid}")
+    else:
+        print("OMDB_API_KEY not set; skipping OMDB validation.")
 
     print("\n3. OpenSubtitles Validation:")
-    os_valid = await _validate_opensubtitles(OS_KEY, OS_USER, OS_PASS)
-    print(f"OpenSubtitles Valid: {os_valid}")
+    if OS_KEY and OS_USER and OS_PASS:
+        os_valid = await _validate_opensubtitles(OS_KEY, OS_USER, OS_PASS)
+        print(f"OpenSubtitles Valid: {os_valid}")
+    else:
+        print(
+            "OPENSUBTITLES_API_KEY/OPENSUBTITLES_USERNAME/OPENSUBTITLES_PASSWORD not set; "
+            "skipping OpenSubtitles validation."
+        )
 
 
 if __name__ == "__main__":

@@ -1,15 +1,31 @@
 import asyncio
+import os
+from pathlib import Path
 
-import httpx
+from dotenv import load_dotenv
 
-API_URL = "http://localhost:8000/api/v1/auth/login"
+# Add backend directory to path so we can import app modules
+project_root = Path(__file__).resolve().parents[2]
+load_dotenv(project_root / ".env")
+
+import httpx  # noqa: E402
+
+from app.core.config import settings  # noqa: E402
+
+API_URL = f"http://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}/auth/login"
 
 
 async def check_cookies():
     async with httpx.AsyncClient() as client:
         print(f"Checking Cookies from {API_URL}...")
         try:
-            data = {"username": "admin@example.com", "password": "securepassword123"}
+            email = os.getenv("TEST_USER_EMAIL") or os.getenv("FIRST_SUPERUSER_EMAIL")
+            password = os.getenv("TEST_USER_PASSWORD") or os.getenv("FIRST_SUPERUSER_PASSWORD")
+            if not email or not password:
+                raise RuntimeError(
+                    "Set TEST_USER_EMAIL/TEST_USER_PASSWORD or FIRST_SUPERUSER_EMAIL/FIRST_SUPERUSER_PASSWORD."
+                )
+            data = {"username": email, "password": password}
             resp = await client.post(API_URL, data=data)
 
             print(f"Status: {resp.status_code}")

@@ -6,14 +6,14 @@ services:
   caddy:
     build:
       context: .
-      dockerfile: Caddy.Dockerfile
+      dockerfile: ${CADDY_DOCKERFILE}
     ports:
-      - "8090:8090" # Expose Caddy's HTTP port on host 8090
-      - "8444:8444" # Expose Caddy's HTTPS port on host 8444
-      - "8444:8444/udp" # For HTTP/3
+      - "${CADDY_HTTP_PORT}:${CADDY_HTTP_PORT}" # Expose Caddy's HTTP port
+      - "${CADDY_HTTPS_PORT}:${CADDY_HTTPS_PORT}" # Expose Caddy's HTTPS port
+      - "${CADDY_HTTPS_PORT}:${CADDY_HTTPS_PORT}/udp" # For HTTP/3
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile # Mount local Caddyfile for dev config
-      - /mnt/sata0/Media:/mnt/sata0/Media
+      - ${HOST_CADDYFILE}:${CONTAINER_CADDYFILE} # Mount local Caddyfile for dev config
+      - ${HOST_CADDY_MEDIA_PATH}:${CONTAINER_CADDY_MEDIA_PATH}
       - caddy_data:/data # Persist certificates and state
       - caddy_config:/config
     environment:
@@ -29,12 +29,12 @@ services:
       target: development # Use the development stage from backend/Dockerfile
     # Command is overridden in docker-compose.override.yml for hot-reloading
     ports:
-      - "8001:8000" # Host port : Container port
+      - "8001:${APP_PORT}" # Host port : Container port
     volumes:
       # Base volume mount (can be overridden) - maps built code into /app
       - ../../backend:/app # Mount source for reference, but override focuses on dev workflow
       - /tmp:/tmp # Share /tmp between host and container
-      - /mnt/usb3/Media/Movies:/mnt/usb3/Media/Movies # Media folder mount
+      - ${HOST_MEDIA_PATH}:${CONTAINER_MEDIA_PATH} # Media folder mount
       - /app/.venv
       - ../../logs:/app/logs:ro # Mount logs directory (read-only)
 
@@ -46,8 +46,8 @@ services:
       - POETRY_CACHE_DIR=/tmp/poetry_cache # Use a guaranteed writable location for cache
       - PYTHONPATH=/app # May still be needed
       - POSTGRES_SERVER=db # This would also work if devcontainer.json didn't set it
-      - FIRST_SUPERUSER_EMAIL=${FIRST_SUPERUSER_EMAIL:-admin@example.com}
-      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD:-SecurePassword123}
+      - FIRST_SUPERUSER_EMAIL=${FIRST_SUPERUSER_EMAIL}
+      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD}
     networks:
       - app_network
     depends_on:
@@ -56,8 +56,8 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      # Checks if the API is responding on its internal port 8000
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      # Checks if the API is responding on its internal port
+      test: ["CMD", "curl", "-f", "http://localhost:${APP_PORT:-8000}/health"]
       interval: 15s
       timeout: 15s
       retries: 3
@@ -77,7 +77,7 @@ services:
       - ../../backend:/app # Mount source for reference
       - /tmp:/tmp # Share /tmp between host and container
       - /app/.venv
-      - /mnt/usb3/Media/Movies:/mnt/usb3/Media/Movies # Media folder mount
+      - ${HOST_MEDIA_PATH}:${CONTAINER_MEDIA_PATH} # Media folder mount
     env_file:
       - ../../.env
     environment:
@@ -86,8 +86,8 @@ services:
       - POETRY_CACHE_DIR=/tmp/poetry_cache
       - PYTHONPATH=/app
       - POSTGRES_SERVER=db # This would also work if devcontainer.json didn't set it
-      - FIRST_SUPERUSER_EMAIL=${FIRST_SUPERUSER_EMAIL:-admin@example.com}
-      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD:-SecurePassword123}
+      - FIRST_SUPERUSER_EMAIL=${FIRST_SUPERUSER_EMAIL}
+      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD}
     networks:
       - app_network
     depends_on:
@@ -127,7 +127,7 @@ services:
       - ../../backend:/app
       - /tmp:/tmp
       - /app/.venv
-      - /mnt/usb3/Media/Movies:/mnt/usb3/Media/Movies
+      - ${HOST_MEDIA_PATH}:${CONTAINER_MEDIA_PATH}
     env_file:
       - ../../.env
     environment:
@@ -136,8 +136,8 @@ services:
       - POETRY_CACHE_DIR=/tmp/poetry_cache
       - PYTHONPATH=/app
       - POSTGRES_SERVER=db
-      - FIRST_SUPERUSER_EMAIL=${FIRST_SUPERUSER_EMAIL:-admin@example.com}
-      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD:-SecurePassword123}
+      - FIRST_SUPERUSER_EMAIL=${FIRST_SUPERUSER_EMAIL}
+      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD}
     networks:
       - app_network
     depends_on:
@@ -151,10 +151,9 @@ services:
 
   frontend:
     build:
-      context: ../../frontend # CORRECTED: Path to frontend source relative to this file
+      context: ../../frontend
       dockerfile: Dockerfile
-      target: development # Use the development stage from frontend/Dockerfile
-    # Command is overridden in docker-compose.override.yml for Vite dev server
+      target: development
     volumes:
       # Base volume mount (overridden in dev)
       - ../../frontend:/app
@@ -167,7 +166,6 @@ services:
     networks:
       - app_network
     restart: unless-stopped
-    # Base healthcheck removed, overridden in dev override file
 
   redis:
     image: redis:7-alpine

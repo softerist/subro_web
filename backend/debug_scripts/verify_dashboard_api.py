@@ -1,15 +1,31 @@
 import asyncio
+import os
 import sys
+from pathlib import Path
 
-import httpx
+from dotenv import load_dotenv
 
-API_BASE_URL = "http://localhost:8000/api/v1"
-EMAIL = "admin@example.com"
-PASSWORD = "securepassword123"
+# Add backend directory to path so we can import app modules
+project_root = Path(__file__).resolve().parents[2]
+load_dotenv(project_root / ".env")
+sys.path.append(str(project_root))
+
+import httpx  # noqa: E402
+
+from app.core.config import settings  # noqa: E402
+
+API_BASE_URL = f"http://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}"
+EMAIL = os.getenv("TEST_USER_EMAIL") or os.getenv("FIRST_SUPERUSER_EMAIL")
+PASSWORD = os.getenv("TEST_USER_PASSWORD") or os.getenv("FIRST_SUPERUSER_PASSWORD")
 
 
 async def main():
     print(">>> Verifying Dashboard API")
+    if not EMAIL or not PASSWORD:
+        print(
+            "Set TEST_USER_EMAIL/TEST_USER_PASSWORD or FIRST_SUPERUSER_EMAIL/FIRST_SUPERUSER_PASSWORD."
+        )
+        sys.exit(1)
     async with httpx.AsyncClient() as client:
         # 1. Login
         resp = await client.post(

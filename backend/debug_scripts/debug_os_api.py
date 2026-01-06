@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 
 import httpx
 
@@ -7,10 +8,10 @@ import httpx
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Test Credentials provided by user (Correct)
-OS_KEY = "a4zU1bWcOiK6yNVKpK1xP0OdAvyZs6eY"
-OS_USER = "softerist"
-OS_PASS = "codein"
+# Test credentials are read from the environment.
+OS_KEY = os.getenv("OPENSUBTITLES_API_KEY")
+OS_USER = os.getenv("OPENSUBTITLES_USERNAME")
+OS_PASS = os.getenv("OPENSUBTITLES_PASSWORD")
 
 
 async def test_key(api_key, scenario):
@@ -52,14 +53,20 @@ async def test_login(api_key, username, password, scenario):
 
 async def main():
     # 1. Test Key Validation (GET /formats)
-    await test_key(OS_KEY, "Valid Key")
+    if OS_KEY:
+        await test_key(OS_KEY, "Valid Key")
+    else:
+        print("OPENSUBTITLES_API_KEY not set; skipping valid key check.")
     await asyncio.sleep(2)
     await test_key("bad_key_12345", "Bad Key")
 
     await asyncio.sleep(2)
 
     # 2. Test Login (Bad Key)
-    await test_login("bad_key_12345", OS_USER, OS_PASS, "Bad Key, Good Creds")
+    if OS_USER and OS_PASS:
+        await test_login("bad_key_12345", OS_USER, OS_PASS, "Bad Key, Good Creds")
+    else:
+        print("OPENSUBTITLES_USERNAME/OPENSUBTITLES_PASSWORD not set; skipping login test.")
 
 
 if __name__ == "__main__":

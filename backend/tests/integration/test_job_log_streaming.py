@@ -121,12 +121,15 @@ class TestWebSocketLogStreaming:
             "Ensure /tmp is mounted in docker-compose.yml"
         )
 
-    async def _ensure_admin_user(self, email, _password):
+    async def _ensure_admin_user(self, email, password):
         """Ensure the admin user exists in the database."""
         # Initialize DB resources if not already done
         if app.db.session.FastAPISessionLocal is None:
             print("   ⚠️  Initializing FastAPISessionLocal in test process...")
             app.db.session._initialize_fastapi_db_resources_sync()
+
+        # Import password helper to hash the password
+        from app.core.users import password_helper
 
         async with app.db.session.FastAPISessionLocal() as db:
             result = await db.execute(select(User).where(User.email == email))
@@ -134,14 +137,13 @@ class TestWebSocketLogStreaming:
 
             if not user:
                 print(f"   ⚠️  Admin user {email} missing. Creating it...")
-                # Use hardcoded hash for "SecurePassword123" to avoid runtime issues with password_helper
-                # Hash generated via app.core.users.password_helper.hash("SecurePassword123") in container
-                known_hash = "$argon2id$v=19$m=65536,t=3,p=4$4zwCKFTChp7LMllUB1/S2w$pYm832HP4FEsvcJqOVZqPGcPTOr2BY3e6vJIc6L67NY"
+                # Hash the provided password
+                hashed_password = password_helper.hash(password)
 
                 new_admin = User(
                     id=uuid.uuid4(),
                     email=email,
-                    hashed_password=known_hash,
+                    hashed_password=hashed_password,
                     is_active=True,
                     is_superuser=True,
                     is_verified=True,
@@ -181,6 +183,7 @@ class TestWebSocketLogStreaming:
                 pytest.skip("Registration disabled and no admin credentials configured")
 
             # Ensure admin exists (to handle cases where DB was wiped by fixtures)
+            # Use the SAME password that's in settings, not a hardcoded one
             try:
                 await self._ensure_admin_user(admin_email, admin_password)
             except Exception as e:

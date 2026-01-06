@@ -139,6 +139,10 @@ async def get_user_manager(
 
 # --- JWT Strategies ---
 def get_access_token_jwt_strategy() -> JWTStrategy:
+    """
+    JWT strategy for access tokens.
+    Note: Bearer transport doesn't validate audience, only cookie transport does.
+    """
     return JWTStrategy(
         secret=settings.SECRET_KEY,
         lifetime_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,

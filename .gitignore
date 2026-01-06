@@ -252,3 +252,4 @@ backend/secrets/*.key
 backend/celerybeat-schedule.db
 backend/celerybeat-sc*
 backend/exports/audit/audit_export*
+backend/.local/state*

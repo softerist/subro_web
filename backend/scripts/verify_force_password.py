@@ -58,7 +58,7 @@ async def verify_force_password():
     print("User setup complete. force_password_change=True")
 
     # 2. Test API Flow via httpx
-    base_url = "http://localhost:8000"
+    base_url = f"http://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}"
 
     async with AsyncClient(base_url=base_url) as ac:
         # Login

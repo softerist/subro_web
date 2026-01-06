@@ -4,7 +4,7 @@
 PROJECT_NAME ?= subapp_dev
 BASE_COMPOSE_FILE := infra/docker/docker-compose.yml
 OVERRIDE_COMPOSE_FILE := infra/docker/docker-compose.override.yml
-COMPOSE_FILES := -f $(BASE_COMPOSE_FILE) -f $(OVERRIDE_COMPOSE_FILE)
+COMPOSE_FILES := --env-file .env -f $(BASE_COMPOSE_FILE) -f $(OVERRIDE_COMPOSE_FILE)
 UID := $(shell id -u)
 GID := $(shell id -g)
 API_PORT_HOST ?= 8001
@@ -100,8 +100,8 @@ rebuild-dev: ensure-dev-cleanup compose-down db-migrate compose-up ensure-test-d
 
 ensure-test-db: ## Ensure test database exists on db_test container
 	@echo "Ensuring test database exists..."
-	@docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) exec -T db_test psql -U admin -d subappdb -c "SELECT 1 FROM pg_database WHERE datname='subappdb_pytest'" | grep -q 1 || \
-		docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) exec -T db_test psql -U admin -d subappdb -c "CREATE DATABASE subappdb_pytest;" 2>/dev/null || true
+	@docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) exec -T db_test sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c "SELECT 1 FROM pg_database WHERE datname='\''$${POSTGRES_DB}_pytest'\''" | grep -q 1' || \
+		docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) exec -T db_test sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c "CREATE DATABASE \"$${POSTGRES_DB}_pytest\";"' 2>/dev/null || true
 	@echo "Test database ready."
 
 compose-up: ## Start the Docker Compose stack in detached mode (builds if necessary)
@@ -120,7 +120,20 @@ compose-down-keep-volumes: ## Stop and remove Docker Compose stack, but KEEP vol
 
 ensure-dev-cleanup: ## Remove conflicting containers/ports before dev/prod starts
 	@echo "Ensuring no conflicting dev containers or ports are in use..."
-	@docker rm -f $(PROJECT_NAME)_db 2>/dev/null || true
+	@conflicting=$$(docker ps -aq --filter "name=$(PROJECT_NAME)_db"); \
+	conflicting_alt=$$(docker ps -aq --filter "name=$(PROJECT_NAME)-db"); \
+	set -- $$conflicting $$conflicting_alt; \
+	if [ $$# -gt 0 ]; then \
+		echo "Removing conflicting DB containers: $$*"; \
+		docker rm -f $$@; \
+	fi
+	@conflicting_test=$$(docker ps -aq --filter "name=$(PROJECT_NAME)_db_test"); \
+	conflicting_test_alt=$$(docker ps -aq --filter "name=$(PROJECT_NAME)-db_test"); \
+	set -- $$conflicting_test $$conflicting_test_alt; \
+	if [ $$# -gt 0 ]; then \
+		echo "Removing conflicting test DB containers: $$*"; \
+		docker rm -f $$@; \
+	fi
 	@# Cleanup Redis (6379), Postgres (5432), and Test Postgres (5433)
 	@for port in 6379 5432 5433; do \
 		conflicting=$$(docker ps -q --filter "publish=$$port"); \
@@ -196,7 +209,7 @@ db-migrate-and-apply: db-makemigrations db-apply-migration ## Generate migration
 
 
 .PHONY: dev ensure-migrations stop-prod prod reset-prod add-test-statistics reset-prod-with-stats reset-dev reset-dev-db add-test-statistics-dev reset-dev-with-stats rebuild-prod rebuild-dev-with-stats rebuild-prod-with-stats
-dev: stop-prod ensure-migrations compose-up db-migrate ## Start the full stack (generates initial migration if needed, uses existing volumes)
+dev: stop-prod ensure-dev-cleanup ensure-migrations compose-up db-migrate ## Start the full stack (generates initial migration if needed, uses existing volumes)
 	@echo "Development stack is up."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8444"

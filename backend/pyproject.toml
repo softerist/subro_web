@@ -140,14 +140,11 @@ filterwarnings = [
 ]
 python_classes = "Test*"
 python_functions = "test_*"
-# Environment variables for tests (can be overridden by .env.test)
+# Environment variables for tests - loaded from .env.test
 env_files = [
-    "APP_ENV=test",
-    "DATABASE_URL=postgresql+psycopg://test_user:test_password@localhost:5433/test_db", # Example for testcontainers
-    "REDIS_URL=redis://localhost:6380/0", # Example for testcontainers
-    "JWT_SECRET_KEY=testsecretkey", # Use a dummy secret for tests
     ".env.test",
 ]
+
 
 # --- MyPy Configuration ---
 [tool.mypy]
