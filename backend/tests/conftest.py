@@ -10,8 +10,8 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-# Ensure test env values override container defaults before settings import.
-load_dotenv(Path(__file__).resolve().parents[1] / ".env.test", override=True)
+# Load test env values but don't override existing env vars (CI sets them explicitly).
+load_dotenv(Path(__file__).resolve().parents[1] / ".env.test", override=False)
 
 # Keep log output clean
 logging.getLogger("faker").setLevel(logging.WARNING)
