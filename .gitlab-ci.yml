@@ -90,6 +90,21 @@ build_api:
     TARGET: production-api
     DOCKERFILE: backend/Dockerfile
     CONTEXT: backend
+  script:
+    - |
+      set -euo pipefail
+      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
+      docker buildx inspect --bootstrap
+      docker buildx build \
+        --push \
+        -t "$DOCKER_IMAGE" \
+        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
+        --target "$TARGET" \
+        --build-arg BASE_IMAGE="${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/ubuntu:24.04" \
+        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
+        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
+        -f "$DOCKERFILE" \
+        "$CONTEXT"
 
 build_worker:
   extends: .build_template
@@ -99,6 +114,21 @@ build_worker:
     TARGET: production-worker
     DOCKERFILE: backend/Dockerfile
     CONTEXT: backend
+  script:
+    - |
+      set -euo pipefail
+      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
+      docker buildx inspect --bootstrap
+      docker buildx build \
+        --push \
+        -t "$DOCKER_IMAGE" \
+        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
+        --target "$TARGET" \
+        --build-arg BASE_IMAGE="${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/ubuntu:24.04" \
+        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
+        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
+        -f "$DOCKERFILE" \
+        "$CONTEXT"
 
 build_frontend:
   extends: .build_template
@@ -108,6 +138,22 @@ build_frontend:
     TARGET: production
     DOCKERFILE: frontend/Dockerfile
     CONTEXT: frontend
+  script:
+    - |
+      set -euo pipefail
+      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
+      docker buildx inspect --bootstrap
+      docker buildx build \
+        --push \
+        -t "$DOCKER_IMAGE" \
+        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
+        --target "$TARGET" \
+        --build-arg BASE_IMAGE_NODE="${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/node:20-alpine" \
+        --build-arg BASE_IMAGE_NGINX="${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/nginx:stable-alpine" \
+        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
+        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
+        -f "$DOCKERFILE" \
+        "$CONTEXT"
 
 build_backup:
   extends: .build_template

@@ -1,5 +1,6 @@
 # Base stage
-FROM node:20-alpine AS base
+ARG BASE_IMAGE_NODE=node:20-alpine
+FROM ${BASE_IMAGE_NODE} AS base
 WORKDIR /app
 COPY package*.json ./
 # Install dependencies including devDependencies
@@ -31,7 +32,8 @@ ENV VITE_WS_BASE_URL=${VITE_WS_BASE_URL}
 RUN npm run build
 
 # Production stage
-FROM nginx:stable-alpine AS production
+ARG BASE_IMAGE_NGINX=nginx:stable-alpine
+FROM ${BASE_IMAGE_NGINX} AS production
 RUN apk add --no-cache curl
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.main.conf /etc/nginx/nginx.conf
