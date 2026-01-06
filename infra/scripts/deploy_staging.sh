@@ -9,6 +9,8 @@ COMPOSE_IMAGES="$DOCK_DIR/compose.prod.images.yml"
 COMPOSE_DATA="$DOCK_DIR/compose.data.yml"
 COMPOSE_GATEWAY="$DOCK_DIR/compose.gateway.yml"
 ENV_FILE="$INFRA_DIR/.env.staging"
+# Production infra directory (where Caddy config and .env.prod live on the server)
+PROD_INFRA_DIR="${PROD_INFRA_DIR:-/opt/subro_web/infra}"
 
 # Ensure .env.staging exists
 if [ ! -f "$ENV_FILE" ]; then
@@ -83,14 +85,14 @@ else
 fi
 
 # Update the shared Caddyfile using the latest template from this deployment
-# Note: This assumes production is in /opt/subro_web
-PROD_CADDYFILE="/opt/subro_web/infra/docker/Caddyfile.prod"
-if [ -d "/opt/subro_web/infra/docker" ]; then
+PROD_CADDYFILE="$PROD_INFRA_DIR/docker/Caddyfile.prod"
+PROD_ENV_FILE="$PROD_INFRA_DIR/.env.prod"
+if [ -d "$PROD_INFRA_DIR/docker" ]; then
     sed "s/{{UPSTREAM_API}}/$PROD_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$PROD_COLOR-frontend-1/g" "$DOCK_DIR/Caddyfile.template" > "$PROD_CADDYFILE"
     echo "Shared Caddy configuration updated (Prod Color: $PROD_COLOR)"
 fi
 
 echo "--- Recreating Caddy (picks up env changes) ---"
-docker compose --env-file /opt/subro_web/infra/.env.prod -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --force-recreate caddy
+PROJECT_ENV_FILE="$PROD_ENV_FILE" docker compose --env-file "$PROD_ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --force-recreate caddy
 
 echo "--- Staging Deployment Complete ---"
