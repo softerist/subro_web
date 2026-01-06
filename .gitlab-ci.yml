@@ -34,7 +34,16 @@ variables:
     DOCKER_HOST: tcp://docker:2375
   before_script:
     - set -euo pipefail
-    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - |
+      echo "Logging into Docker Registry..."
+      for i in $(seq 1 3); do
+        if echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"; then
+          echo "Docker login successful!"
+          break
+        fi
+        echo "Docker login failed (attempt $i/3). Retrying in 5 seconds..."
+        sleep 5
+      done
 
 # -------- DEBUG (optional) --------
 ci_debug_env:
