@@ -54,7 +54,9 @@ async def _validate_omdb(api_key: str) -> bool:
 
             if response.status_code == 200:
                 data = response.json()
-                return data.get("Response") != "False" or "Invalid API" not in data.get("Error", "")
+                return data.get("Response") != "False" or "Invalid API" not in data.get(
+                    "Error", ""
+                )
             return False
         except Exception as e:
             logger.error(f"OMDB validation error: {e}")
@@ -85,7 +87,9 @@ async def _validate_opensubtitles(api_key: str, username: str, password: str) ->
     async with httpx.AsyncClient() as client:
         try:
             # Attempt login
-            response = await client.post(login_url, headers=headers, json=payload, timeout=10.0)
+            response = await client.post(
+                login_url, headers=headers, json=payload, timeout=10.0
+            )
             logger.info(f"OpenSubtitles Response Status: {response.status_code}")
             logger.info(f"OpenSubtitles Response Body: {response.text[:200]}")
 

@@ -5,19 +5,22 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Add backend directory to path so we can import app modules
 project_root = Path(__file__).resolve().parents[2]
 load_dotenv(project_root / ".env")
-sys.path.append(str(project_root))
+sys.path.append(str(project_root / "backend"))
 
 import httpx  # noqa: E402
 import websockets  # noqa: E402
 
 from app.core.config import settings  # noqa: E402
 
-# Constants
-API_BASE_URL = f"http://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}"
-WS_BASE_URL = f"ws://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}"
+# Dynamic protocol selection based on environment
+_http_protocol = "https" if settings.USE_HTTPS else "http"
+_ws_protocol = "wss" if settings.USE_HTTPS else "ws"
+
+API_BASE_URL = f"{_http_protocol}://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}"
+WS_BASE_URL = f"{_ws_protocol}://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}"
+
 EMAIL = os.getenv("TEST_USER_EMAIL") or os.getenv("FIRST_SUPERUSER_EMAIL")
 PASSWORD = os.getenv("TEST_USER_PASSWORD") or os.getenv("FIRST_SUPERUSER_PASSWORD")
 
@@ -71,7 +74,9 @@ async def main():  # noqa: C901
         print(f"2. Submitting Job for {target_folder}...")
         try:
             job_payload = {"folder_path": target_folder, "language": "eng"}
-            resp = await client.post(f"{API_BASE_URL}/jobs/", json=job_payload, headers=headers)
+            resp = await client.post(
+                f"{API_BASE_URL}/jobs/", json=job_payload, headers=headers
+            )
             print(f"   Submit Status: {resp.status_code}")
             if resp.status_code not in [200, 201]:
                 print(f"   Submit Failed: {resp.text}")

@@ -5,6 +5,10 @@ PROJECT_NAME ?= subapp_dev
 BASE_COMPOSE_FILE := infra/docker/docker-compose.yml
 OVERRIDE_COMPOSE_FILE := infra/docker/docker-compose.override.yml
 COMPOSE_FILES := --env-file .env -f $(BASE_COMPOSE_FILE) -f $(OVERRIDE_COMPOSE_FILE)
+
+# Test Configuration
+TEST_API_BASE_URL ?= http://localhost:8000
+TEST_WS_BASE_URL ?= ws://localhost:8000
 UID := $(shell id -u)
 GID := $(shell id -g)
 API_PORT_HOST ?= 8001
@@ -366,7 +370,7 @@ test-integration: ## Run integration tests inside dev container (requires dev st
 	@echo "Running integration tests inside dev container..."
 	docker compose $(COMPOSE_FILES) --project-name $(PROJECT_NAME) exec -T \
 		-e TEST_API_BASE_URL=http://localhost:8000 \
-		-e TEST_WS_BASE_URL=ws://localhost:8000 \
+		-e TEST_WS_BASE_URL=$(TEST_WS_BASE_URL) \
 		api poetry run pytest tests/integration/ -v --tb=short
 
 test-integration-prod: ## Run integration tests inside prod container (requires prod stack running)
@@ -378,7 +382,7 @@ test-integration-prod: ## Run integration tests inside prod container (requires 
 	@docker exec blue-api-1 pip install pytest pytest-asyncio pytest-dotenv websockets redis --quiet
 	@echo "Running integration tests inside prod container..."
 	docker exec -e TEST_API_BASE_URL=http://localhost:8000 \
-		-e TEST_WS_BASE_URL=ws://localhost:8000 \
+		-e TEST_WS_BASE_URL=$(TEST_WS_BASE_URL) \
 		blue-api-1 python -m pytest /app/tests/integration/ /app/tests/api/test_audit_integration.py -v --tb=short -o "addopts="
 
 
@@ -431,7 +435,8 @@ scan-secrets: ## Scan filesystem for secrets using Trivy
 
 scan-sast: ## Scan code for security issues using Semgrep
 	@echo "Running Semgrep SAST scan..."
-	@semgrep scan --config auto .
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	SEMGREP_APP_TOKEN="$$SEMGREP_APP_TOKEN" semgrep scan --config auto .
 
 scan-all: scan-vulns scan-secrets scan-sast ## Run all local security scans
 	@echo "All security scans completed."

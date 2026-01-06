@@ -59,7 +59,9 @@ def simulate_translations():
             )
 
         db.commit()
-        print(f"\n✅ Successfully inserted {len(simulations)} simulated translation records!")
+        print(
+            f"\n✅ Successfully inserted {len(simulations)} simulated translation records!"
+        )
         print("   Refresh the Settings page to see the statistics.")
 
 

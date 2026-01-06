@@ -266,6 +266,7 @@ sast_scan:
   variables:
     SAST_MIN_SEVERITY: "WARNING"
     SAST_FAIL_ON_FINDINGS: "false"
+    SEMGREP_APP_TOKEN: "$SEMGREP_APP_TOKEN"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       variables:

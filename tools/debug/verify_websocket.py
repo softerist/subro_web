@@ -12,16 +12,16 @@ from pathlib import Path
 
 import jwt
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+project_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(project_root / "backend"))
 
-import websockets
-from redis.asyncio import Redis
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+import websockets  # noqa: E402
+from redis.asyncio import Redis  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
 
-from app.core.config import settings
-from app.db.models.job import Job, JobStatus
-from app.db.models.user import User
+from app.core.config import settings  # noqa: E402
+from app.db.models.job import Job, JobStatus  # noqa: E402
+from app.db.models.user import User  # noqa: E402
 
 
 def create_test_token(user_id: str, email: str) -> str:
@@ -53,7 +53,9 @@ async def main():
     engine = create_async_engine(db_url, echo=False)
 
     # Create session
-    async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async_session_maker = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
 
     async with async_session_maker() as session:
         print("   ✅ Database connection successful")
@@ -99,7 +101,10 @@ async def main():
 
             # Publish messages
             messages = [
-                {"type": "status", "payload": {"status": "RUNNING", "ts": "2024-01-01T12:00:00Z"}},
+                {
+                    "type": "status",
+                    "payload": {"status": "RUNNING", "ts": "2024-01-01T12:00:00Z"},
+                },
                 {
                     "type": "log",
                     "payload": {
@@ -125,11 +130,12 @@ async def main():
             await redis.aclose()
             print("   📤 Published all test messages to Redis")
 
-        # Test WebSocket connection
+        # Test WebSocket connection - use secure protocol based on settings
+        ws_protocol = "wss" if settings.USE_HTTPS else "ws"
         print(
             f"\n4. Testing WebSocket connection to {settings.SERVER_HOST}:{settings.SERVER_PORT}..."
         )
-        ws_url = f"ws://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}/ws/jobs/{job_id}/logs?token={access_token}"
+        ws_url = f"{ws_protocol}://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}/ws/jobs/{job_id}/logs?token={access_token}"
 
         try:
             # Start publisher task
@@ -146,7 +152,9 @@ async def main():
 
                 # Receive RUNNING status
                 data = json.loads(await websocket.recv())
-                assert data["type"] == "status" and data["payload"]["status"] == "RUNNING"
+                assert (
+                    data["type"] == "status" and data["payload"]["status"] == "RUNNING"
+                )
                 print("   ✅ Received RUNNING status")
 
                 # Receive log message
@@ -156,7 +164,10 @@ async def main():
 
                 # Receive SUCCEEDED status
                 data = json.loads(await websocket.recv())
-                assert data["type"] == "status" and data["payload"]["status"] == "SUCCEEDED"
+                assert (
+                    data["type"] == "status"
+                    and data["payload"]["status"] == "SUCCEEDED"
+                )
                 print("   ✅ Received SUCCEEDED status")
 
             # Wait for publisher

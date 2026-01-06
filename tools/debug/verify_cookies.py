@@ -20,7 +20,9 @@ async def check_cookies():
         print(f"Checking Cookies from {API_URL}...")
         try:
             email = os.getenv("TEST_USER_EMAIL") or os.getenv("FIRST_SUPERUSER_EMAIL")
-            password = os.getenv("TEST_USER_PASSWORD") or os.getenv("FIRST_SUPERUSER_PASSWORD")
+            password = os.getenv("TEST_USER_PASSWORD") or os.getenv(
+                "FIRST_SUPERUSER_PASSWORD"
+            )
             if not email or not password:
                 raise RuntimeError(
                     "Set TEST_USER_EMAIL/TEST_USER_PASSWORD or FIRST_SUPERUSER_EMAIL/FIRST_SUPERUSER_PASSWORD."

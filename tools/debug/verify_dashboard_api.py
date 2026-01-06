@@ -14,7 +14,9 @@ import httpx  # noqa: E402
 
 from app.core.config import settings  # noqa: E402
 
-API_BASE_URL = f"http://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}"
+API_BASE_URL = (
+    f"http://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}"
+)
 EMAIL = os.getenv("TEST_USER_EMAIL") or os.getenv("FIRST_SUPERUSER_EMAIL")
 PASSWORD = os.getenv("TEST_USER_PASSWORD") or os.getenv("FIRST_SUPERUSER_PASSWORD")
 
@@ -45,7 +47,9 @@ async def main():
             "icon": "Frame",
             "order_index": 0,
         }
-        resp = await client.post(f"{API_BASE_URL}/dashboard/tiles", json=tile_data, headers=headers)
+        resp = await client.post(
+            f"{API_BASE_URL}/dashboard/tiles", json=tile_data, headers=headers
+        )
         if resp.status_code != 201:
             print(f"Create Tile failed: {resp.text}")
             sys.exit(1)
@@ -53,7 +57,9 @@ async def main():
         print(f"2. Created Tile: {tile_id}")
 
         # 3. List Tiles (Admin)
-        resp = await client.get(f"{API_BASE_URL}/dashboard/admin/tiles", headers=headers)
+        resp = await client.get(
+            f"{API_BASE_URL}/dashboard/admin/tiles", headers=headers
+        )
         if resp.status_code != 200:
             print(f"List Tiles failed: {resp.text}")
             sys.exit(1)
@@ -67,7 +73,9 @@ async def main():
         print("4. Public Endpoint OK")
 
         # 5. Delete Tile
-        resp = await client.delete(f"{API_BASE_URL}/dashboard/tiles/{tile_id}", headers=headers)
+        resp = await client.delete(
+            f"{API_BASE_URL}/dashboard/tiles/{tile_id}", headers=headers
+        )
         if resp.status_code != 204:
             print(f"Delete Tile failed: {resp.text}")
             sys.exit(1)

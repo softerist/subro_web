@@ -14,9 +14,7 @@ import httpx  # noqa: E402
 
 from app.core.config import settings  # noqa: E402
 
-default_url = (
-    f"http://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}/auth/login"
-)
+default_url = f"http://{settings.SERVER_HOST}:{settings.SERVER_PORT}{settings.API_V1_STR}/auth/login"
 API_URL = os.getenv("TEST_API_URL", default_url)
 
 

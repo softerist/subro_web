@@ -44,7 +44,9 @@ async def test_login(api_key, username, password, scenario):
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(login_url, headers=headers, json=payload, timeout=10.0)
+            response = await client.post(
+                login_url, headers=headers, json=payload, timeout=10.0
+            )
             print(f"Login Status: {response.status_code}")
             print(f"Login Message: {response.json().get('message')}")
         except Exception as e:
@@ -66,7 +68,9 @@ async def main():
     if OS_USER and OS_PASS:
         await test_login("bad_key_12345", OS_USER, OS_PASS, "Bad Key, Good Creds")
     else:
-        print("OPENSUBTITLES_USERNAME/OPENSUBTITLES_PASSWORD not set; skipping login test.")
+        print(
+            "OPENSUBTITLES_USERNAME/OPENSUBTITLES_PASSWORD not set; skipping login test."
+        )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,28 @@
+# Semgrep Ignore File
+# Development/debug utilities that are not part of production code
+
+# Debug scripts for local development verification
+backend/debug_scripts/
+
+# Test files (contain intentional patterns for testing)
+backend/tests/
+
+# Tools directory for developer utilities
+tools/
+
+# Test fixtures and mocks
+backend/tests/fixtures/
+
+# Virtual environment (should already be excluded, but explicit)
+.venv/
+**/node_modules/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Cache directories
+__pycache__/
+.pytest_cache/
+.ruff_cache/
