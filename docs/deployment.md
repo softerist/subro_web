@@ -28,7 +28,7 @@ This guide describes how to deploy the application to a production environment u
    Copy the template to `.env.prod`:
 
    ```bash
-   cp infra/prod.env.example .env.prod
+   cp infra/.env.prod.example .env.prod
    ```
 
    Edit `.env.prod` and set secure values:

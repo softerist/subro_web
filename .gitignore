@@ -51,6 +51,8 @@ nosetests.xml
 .env.*
 !.env.example
 !.env.test
+!.env.prod.example
+!.env.test.example
 
 # Virtualenvs
 .venv/
@@ -170,6 +172,8 @@ nosetests.xml
 .env.*
 !.env.example
 !.env.test
+!.env.prod.example
+!.env.test.example
 
 # Virtualenvs
 .venv/

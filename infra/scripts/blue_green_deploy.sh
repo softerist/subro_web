@@ -18,7 +18,7 @@ export NETWORK_EXTERNAL="true"
 
 # Ensure .env.prod exists
 if [ ! -f "$ENV_FILE" ]; then
-    echo "Error: $ENV_FILE not found. Please create it from $INFRA_DIR/prod.env.example"
+    echo "Error: $ENV_FILE not found. Please create it from $INFRA_DIR/.env.prod.example"
     exit 1
 fi
 
