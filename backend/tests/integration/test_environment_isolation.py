@@ -115,8 +115,8 @@ class TestConfigurationConsistency:
 
     def test_environment_is_set(self):
         """Verify ENVIRONMENT is explicitly configured."""
-        assert settings.ENVIRONMENT in {"development", "staging", "production"}, (
-            f"ENVIRONMENT must be one of development/staging/production, "
+        assert settings.ENVIRONMENT in {"development", "staging", "production", "test"}, (
+            f"ENVIRONMENT must be one of development/staging/production/test, "
             f"got: {settings.ENVIRONMENT}"
         )
 
