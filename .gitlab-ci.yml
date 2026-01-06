@@ -37,11 +37,7 @@ variables:
     - |
       for i in $(seq 1 3); do
         if echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"; then
-          echo "Docker login to $CI_REGISTRY successful!"
-          # Also login to Dependency Proxy server if it exists and is different
-          if [ -n "${CI_DEPENDENCY_PROXY_SERVER:-}" ] && [ "$CI_DEPENDENCY_PROXY_SERVER" != "$CI_REGISTRY" ]; then
-            echo "$CI_DEPENDENCY_PROXY_PASSWORD" | docker login -u "$CI_DEPENDENCY_PROXY_USER" --password-stdin "$CI_DEPENDENCY_PROXY_SERVER" || echo "Warning: Dependency Proxy login failed"
-          fi
+          echo "Docker login successful!"
           break
         fi
         echo "Docker login failed (attempt $i/3). Retrying in 5 seconds..."
@@ -100,7 +96,7 @@ build_api:
         -t "$DOCKER_IMAGE" \
         -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
         --target "$TARGET" \
-        --build-arg BASE_IMAGE="${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/library/ubuntu:24.04" \
+        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04" \
         --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
         --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
         -f "$DOCKERFILE" \
@@ -124,7 +120,7 @@ build_worker:
         -t "$DOCKER_IMAGE" \
         -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
         --target "$TARGET" \
-        --build-arg BASE_IMAGE="${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/library/ubuntu:24.04" \
+        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04" \
         --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
         --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
         -f "$DOCKERFILE" \
@@ -148,8 +144,8 @@ build_frontend:
         -t "$DOCKER_IMAGE" \
         -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
         --target "$TARGET" \
-        --build-arg BASE_IMAGE_NODE="${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/library/node:20-alpine" \
-        --build-arg BASE_IMAGE_NGINX="${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/library/nginx:stable-alpine" \
+        --build-arg BASE_IMAGE_NODE="public.ecr.aws/docker/library/node:20-alpine" \
+        --build-arg BASE_IMAGE_NGINX="public.ecr.aws/docker/library/nginx:stable-alpine" \
         --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
         --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
         -f "$DOCKERFILE" \
@@ -173,7 +169,7 @@ build_backup:
         -t "$DOCKER_IMAGE" \
         -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
         --target "$TARGET" \
-        --build-arg BASE_IMAGE="${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/library/alpine:3.19" \
+        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/alpine:3.19" \
         --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-/api/v1}" \
         --build-arg VITE_WS_BASE_URL="${VITE_WS_BASE_URL:-/api/v1}" \
         --build-arg VITE_ONBOARDING_TOKEN="${VITE_ONBOARDING_TOKEN:-}" \
@@ -195,16 +191,13 @@ backend_tests:
     POSTGRES_DB_TEST: "subappdb_pytest"
   script:
     - apk add --no-cache bash
-    - set -euo pipefail
     - |
-      echo "Pulling required Docker images with retry..."
-      DP_PREFIX="${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/"
-      [ -z "$CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX" ] && DP_PREFIX=""
-
-      # Define images using Dependency Proxy where possible
-      IMAGE_POSTGRES="${DP_PREFIX}library/postgres:16-alpine"
-      IMAGE_REDIS="${DP_PREFIX}library/redis:7-alpine"
-      IMAGE_CURL="${DP_PREFIX}curlimages/curl:8.7.1"
+      set -euo pipefail
+      # Define images using AWS ECR Public Gallery (reliable mirror)
+      IMAGE_POSTGRES="public.ecr.aws/docker/library/postgres:16-alpine"
+      IMAGE_REDIS="public.ecr.aws/docker/library/redis:7-alpine"
+      # curl is small enough to risk Docker Hub for now, or use alpine+curl
+      IMAGE_CURL="curlimages/curl:8.7.1"
 
       DEPENDENCIES="$DOCKER_IMAGE_API $IMAGE_POSTGRES $IMAGE_REDIS $IMAGE_CURL"
       for img in $DEPENDENCIES; do
@@ -212,11 +205,12 @@ backend_tests:
         for i in $(seq 1 3); do
           if docker pull "$img"; then
             echo "Successfully pulled $img"
-            # Tag back to standard name if it was pulled via proxy
-            if [ -n "$DP_PREFIX" ] && [ "$img" != "$DOCKER_IMAGE_API" ]; then
-              STANDARD_NAME=$(echo "$img" | sed "s|$DP_PREFIX||")
-              docker tag "$img" "$STANDARD_NAME"
-              echo "Tagged $img as $STANDARD_NAME"
+            # Tag back to standard name if it was pulled from mirror
+            if [[ "$img" == *"public.ecr.aws"* ]]; then
+               # Extract base name e.g. public.ecr.aws/docker/library/postgres:16-alpine -> postgres:16-alpine
+               STANDARD_NAME=$(echo "$img" | sed 's|public.ecr.aws/docker/library/||')
+               docker tag "$img" "$STANDARD_NAME"
+               echo "Tagged $img as $STANDARD_NAME"
             fi
             break
           fi
