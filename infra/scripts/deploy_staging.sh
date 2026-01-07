@@ -198,7 +198,12 @@ fi
 PROD_CADDYFILE="$PROD_INFRA_DIR/docker/Caddyfile.prod"
 PROD_ENV_FILE="$PROD_INFRA_DIR/.env.prod"
 if [ -d "$PROD_INFRA_DIR/docker" ]; then
-    sed "s/{{UPSTREAM_API}}/$PROD_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$PROD_COLOR-frontend-1/g" "$DOCK_DIR/Caddyfile.template" > "$PROD_CADDYFILE"
+    # Read DOMAIN_NAME from PROD_ENV_FILE for expansion
+    DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$PROD_ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    if [ -z "$DOMAIN_NAME" ]; then
+        log "Warning: DOMAIN_NAME not found in $PROD_ENV_FILE"
+    fi
+    sed "s/{{UPSTREAM_API}}/$PROD_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$PROD_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$DOCK_DIR/Caddyfile.template" > "$PROD_CADDYFILE"
     log "Shared Caddy configuration updated (Prod Color: $PROD_COLOR)"
 fi
 

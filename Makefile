@@ -95,6 +95,8 @@ stop-prod: ## Stop production stacks to free up ports
 # or you might adjust its dependencies if 'ensure-migrations' logic should also apply here.
 # For now, let's assume its current dependencies are fine.
 rebuild-dev: ensure-dev-cleanup compose-down db-migrate compose-up ensure-test-db ## Clean rebuild: stop, wipe volumes, migrate, then start fresh
+	@echo "Running migrations..."
+	@make db-migrate
 	@echo "Development stack fully rebuilt and started."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8444"
@@ -273,6 +275,10 @@ rebuild-prod: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
 	@docker volume rm infra_postgres_data || true
 	@echo "Restarting infrastructure..."
 	@docker compose -f infra/docker/compose.data.yml -f infra/docker/compose.gateway.yml -p infra up -d
+	@echo "Running migrations..."
+	@# Wait for DB to be ready before migrating
+	@sleep 5
+	@docker compose --env-file infra/.env.prod -p infra -f infra/docker/compose.prod.yml run --rm --entrypoint "" api poetry run alembic upgrade head
 	@echo "Redeploying application..."
 	@# Explicitly set --env-file to ensure build args like VITE_API_BASE_URL are picked up
 	@docker compose --env-file infra/.env.prod -p blue -f infra/docker/compose.prod.yml build --pull
