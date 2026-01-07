@@ -605,11 +605,11 @@ deploy_staging:
             echo 'Docker login successful'
             break
           fi
-          if [ \\\$i -eq 3 ]; then
+          if [ \$i -eq 3 ]; then
             echo '❌ Docker login failed after 3 attempts'
             exit 1
           fi
-          echo \"Docker login attempt \\\$i failed, retrying in 5s...\"
+          echo \"Docker login attempt \$i failed, retrying in 5s...\"
           sleep 5
         done
         echo 'Checking images...'
