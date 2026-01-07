@@ -274,7 +274,7 @@ rebuild-prod: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
 	@echo "Restarting infrastructure..."
 	@docker compose -f infra/docker/compose.data.yml -f infra/docker/compose.gateway.yml -p infra up -d
 	@echo "Redeploying application..."
-	@# Explicitly set --env-file to ensure build args like VITE_ONBOARDING_TOKEN are picked up
+	@# Explicitly set --env-file to ensure build args like VITE_API_BASE_URL are picked up
 	@docker compose --env-file infra/.env.prod -p blue -f infra/docker/compose.prod.yml build --pull
 	@docker compose --env-file infra/.env.prod -p blue -f infra/docker/compose.prod.yml up -d
 	@echo "Database reset complete. Please visit the Onboarding page."

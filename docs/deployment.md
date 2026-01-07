@@ -72,6 +72,12 @@ chmod +x infra/scripts/blue_green_deploy.sh
 
 In production, onboarding endpoints require the `X-Onboarding-Token` header.
 
+Security note:
+
+- Keep `ONBOARDING_TOKEN` server-side only (do not expose it via any `VITE_*` env vars).
+- Run onboarding from a trusted network (or SSH tunnel) and send the header manually.
+- After onboarding, rotate/remove `ONBOARDING_TOKEN` and ensure `FORCE_INITIAL_SETUP=false`.
+
 UI flow:
 
 - Open `/onboarding` in the browser.
