@@ -275,7 +275,7 @@ rebuild-prod: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
 	@docker compose -f infra/docker/compose.data.yml -f infra/docker/compose.gateway.yml -p infra up -d
 	@echo "Redeploying application..."
 	@# Explicitly set --env-file to ensure build args like VITE_ONBOARDING_TOKEN are picked up
-	@docker compose --env-file infra/.env.prod -p blue -f infra/docker/compose.prod.yml pull
+	@docker compose --env-file infra/.env.prod -p blue -f infra/docker/compose.prod.yml build --pull
 	@docker compose --env-file infra/.env.prod -p blue -f infra/docker/compose.prod.yml up -d
 	@echo "Database reset complete. Please visit the Onboarding page."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8080"

@@ -58,6 +58,15 @@ export BACKUP_PREFIX="staging_"
 
 echo "--- Pulling/Starting Staging App Stack (with isolated Data) ---"
 # We manage the app + data stack here for staging isolation.
+echo "--- Verifying Images Exist ---"
+for img in "$DOCKER_IMAGE_API" "$DOCKER_IMAGE_WORKER" "$DOCKER_IMAGE_FRONTEND" "$DOCKER_IMAGE_BACKUP"; do
+    echo "Checking for $img..."
+    if ! docker manifest inspect "$img" > /dev/null 2>&1; then
+        echo "⚠️  WARNING: Image $img not found in registry (manifest check failed)."
+        echo "    Trying to pull it directly to confirm..."
+    fi
+done
+
 docker_compose_pull_with_retry --env-file "$ENV_FILE" -p subro_staging \
     -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA"
 
