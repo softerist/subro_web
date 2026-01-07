@@ -418,12 +418,14 @@ sast_scan:
 
       # Use 'semgrep scan' with auto config (no cloud API needed)
       # --config auto: use recommended rules
+      # --error: exit with error code if findings
       # --exclude: skip lockfiles and large directories
       # --jobs: parallel scanning
       # --max-target-bytes: skip very large files
       semgrep scan \
         --config auto \
         --sarif -o semgrep.sarif \
+        --error \
         --exclude="*.lock" \
         --exclude="**/package-lock.json" \
         --exclude="**/poetry.lock" \
@@ -436,7 +438,7 @@ sast_scan:
         --timeout 120 \
         .
 
-      echo "✓ Semgrep scan complete"
+      echo "✓ Semgrep scan complete - no findings"
   artifacts:
     reports:
       sast: semgrep.sarif
@@ -513,24 +515,24 @@ deploy_staging:
         export COMPOSE_HTTP_TIMEOUT="${COMPOSE_HTTP_TIMEOUT:-300}"
 
         docker_login_with_retry() {
-          local max_attempts=3
-          local attempt=1
-          local wait_time=5
+          max_attempts=3
+          attempt=1
+          wait_time=5
 
-          echo "Logging into Docker Registry with retry (max $max_attempts attempts)..."
-          while [ $attempt -le $max_attempts ]; do
+          echo \"Logging into Docker Registry with retry (max \\$max_attempts attempts)...\"
+          while [ \\$attempt -le \\$max_attempts ]; do
             if echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY; then
-              echo "Docker login successful!"
+              echo \"Docker login successful!\"
               return 0
             fi
-            if [ $attempt -eq $max_attempts ]; then
-              echo "ERROR: Docker login failed after $max_attempts attempts."
+            if [ \\$attempt -eq \\$max_attempts ]; then
+              echo \"ERROR: Docker login failed after \\$max_attempts attempts.\"
               return 1
             fi
-            echo "Docker login failed (attempt $attempt/$max_attempts). Retrying in ${wait_time}s..."
-            sleep $wait_time
-            wait_time=$((wait_time * 2))
-            attempt=$((attempt + 1))
+            echo \"Docker login failed (attempt \\$attempt/\\$max_attempts). Retrying in \\${wait_time}s...\"
+            sleep \\$wait_time
+            wait_time=\\$((wait_time * 2))
+            attempt=\\$((attempt + 1))
           done
         }
 
@@ -737,24 +739,24 @@ deploy_prod:
         export COMPOSE_HTTP_TIMEOUT="${COMPOSE_HTTP_TIMEOUT:-300}"
 
         docker_login_with_retry() {
-          local max_attempts=3
-          local attempt=1
-          local wait_time=5
+          max_attempts=3
+          attempt=1
+          wait_time=5
 
-          echo "Logging into Docker Registry with retry (max $max_attempts attempts)..."
-          while [ $attempt -le $max_attempts ]; do
+          echo \"Logging into Docker Registry with retry (max \\$max_attempts attempts)...\"
+          while [ \\$attempt -le \\$max_attempts ]; do
             if echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY; then
-              echo "Docker login successful!"
+              echo \"Docker login successful!\"
               return 0
             fi
-            if [ $attempt -eq $max_attempts ]; then
-              echo "ERROR: Docker login failed after $max_attempts attempts."
+            if [ \\$attempt -eq \\$max_attempts ]; then
+              echo \"ERROR: Docker login failed after \\$max_attempts attempts.\"
               return 1
             fi
-            echo "Docker login failed (attempt $attempt/$max_attempts). Retrying in ${wait_time}s..."
-            sleep $wait_time
-            wait_time=$((wait_time * 2))
-            attempt=$((attempt + 1))
+            echo \"Docker login failed (attempt \\$attempt/\\$max_attempts). Retrying in \\${wait_time}s...\"
+            sleep \\$wait_time
+            wait_time=\\$((wait_time * 2))
+            attempt=\\$((attempt + 1))
           done
         }
 
