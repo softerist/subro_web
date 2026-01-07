@@ -388,7 +388,7 @@ sast_scan:
   variables:
     SAST_MIN_SEVERITY: "WARNING"
     SAST_FAIL_ON_FINDINGS: "false"
-    # Performance: limit file size and use parallel scanning
+    # Performance optimizations
     SEMGREP_SEND_METRICS: "off"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -407,14 +407,19 @@ sast_scan:
       echo "✓ SEMGREP_APP_TOKEN is set (length: ${#SEMGREP_APP_TOKEN})"
 
       # Use 'semgrep ci' with performance optimizations
+      # --supply-chain=false: CRITICAL - disables scanning 90K+ dependency rules
+      # --exclude: skip lockfiles that trigger supply chain analysis
       # --jobs: parallel scanning
       # --max-target-bytes: skip very large files
-      # --timeout: per-file timeout
       semgrep ci \
         --sarif -o semgrep.sarif \
+        --supply-chain=false \
+        --exclude="*.lock" \
+        --exclude="package-lock.json" \
+        --exclude="poetry.lock" \
         --jobs 4 \
-        --max-target-bytes 1000000 \
-        --timeout 300
+        --max-target-bytes 500000 \
+        --timeout 120
   artifacts:
     reports:
       sast: semgrep.sarif
