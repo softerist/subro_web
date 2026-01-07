@@ -346,35 +346,15 @@ scan_image_vulns:
       export TRIVY_USERNAME="$CI_REGISTRY_USER"
       export TRIVY_PASSWORD="$CI_REGISTRY_PASSWORD"
 
-      # Scan all images in parallel using background jobs
-      scan_image() {
-        local img="$1"
+      # Scan images (trivy is fast enough that sequential is fine)
+      for img in "$DOCKER_IMAGE_API" "$DOCKER_IMAGE_FRONTEND" "$DOCKER_IMAGE_WORKER"; do
         echo "Scanning $img..."
         trivy image --cache-dir .trivycache --exit-code 1 \
           --severity "$TRIVY_SEVERITY" --timeout 5m --no-progress \
           --skip-files "/app/secrets/google-api-config.json" \
           --scanners vuln \
           "$img"
-      }
-
-      # Run scans in parallel
-      scan_image "$DOCKER_IMAGE_API" &
-      PID1=$!
-      scan_image "$DOCKER_IMAGE_FRONTEND" &
-      PID2=$!
-      scan_image "$DOCKER_IMAGE_WORKER" &
-      PID3=$!
-
-      # Wait for all and check exit codes
-      FAILED=0
-      wait $PID1 || FAILED=1
-      wait $PID2 || FAILED=1
-      wait $PID3 || FAILED=1
-
-      if [ $FAILED -eq 1 ]; then
-        echo "One or more image scans failed!"
-        exit 1
-      fi
+      done
       echo "All image scans passed!"
   allow_failure: false
   retry: 1
