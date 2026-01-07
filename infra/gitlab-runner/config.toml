@@ -1,31 +1,30 @@
-# GitLab Runner Configuration
-# ============================
-# Copy this file to /etc/gitlab-runner/config.toml on the runner machine
-# After updating, restart the runner: sudo systemctl restart gitlab-runner
+# GitLab Runner Configuration - Optimized for Performance
+# =========================================================
+# Copy to /etc/gitlab-runner/config.toml and restart: sudo systemctl restart gitlab-runner
 #
-# Key settings explained:
-# - concurrent: Maximum number of jobs that can run simultaneously
-# - shutdown_timeout: Seconds to wait for jobs to complete before forcing shutdown (CRITICAL!)
-# - request_concurrency: How many jobs a single runner can request at once
-# - privileged: Required for Docker-in-Docker builds
+# Optimized for: High-performance desktop (i9-12900KF, 16GB RAM, 24 threads)
+# Adjust concurrent/cpus/memory based on your system specs
 
-concurrent = 8
-check_interval = 0
-connection_max_age = "15m0s"
-shutdown_timeout = 300  # Give jobs 5 minutes to complete on shutdown/restart
+concurrent = 6                    # Max parallel jobs (rule of thumb: CPU cores / 4)
+check_interval = 0                # Use default check interval
+connection_max_age = "15m0s"      # Keep connections alive
+shutdown_timeout = 300            # CRITICAL: Wait 5 min for jobs on restart/stop
 
 [session_server]
   session_timeout = 1800
 
 [[runners]]
   name = "MSI"
-  request_concurrency = 4
+  request_concurrency = 6         # Jobs this runner can request simultaneously
   url = "https://gitlab.com/"
   # NOTE: These values are generated when you register the runner
   # Run: gitlab-runner register
   # id = <YOUR_RUNNER_ID>
   # token = "<YOUR_RUNNER_TOKEN>"
   executor = "docker"
+
+  # Large git operations (buildkit, monorepos)
+  pre_clone_script = "git config --global http.postBuffer 524288000"
 
   [runners.cache]
     MaxUploadedArchiveSize = 0
@@ -36,10 +35,21 @@ shutdown_timeout = 300  # Give jobs 5 minutes to complete on shutdown/restart
   [runners.docker]
     tls_verify = false
     image = "alpine:latest"
-    privileged = true
+    privileged = true             # Required for Docker-in-Docker
     disable_entrypoint_overwrite = false
     oom_kill_disable = false
     disable_cache = false
     volumes = ["/cache", "/certs/client", "/certs/server"]
-    shm_size = 0
+
+    # Performance settings
+    shm_size = 268435456          # 256MB shared memory (for browsers/Playwright)
+    cpus = "4"                    # CPUs per container (prevents one job hogging all)
+    memory = "4g"                 # Memory per container
+    pull_policy = ["if-not-present"]  # Skip pulling if image exists locally
+
+    # Network optimization
+    dns = ["8.8.8.8", "1.1.1.1"]  # Fast public DNS
     network_mtu = 0
+
+    # Pin helper image version to avoid re-pulling on every job
+    helper_image = "gitlab/gitlab-runner-helper:x86_64-v18.7.1"
