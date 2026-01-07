@@ -515,7 +515,7 @@ deploy_staging:
       cat >> ~/.ssh/config <<EOF
       Host *
         ServerAliveInterval 5
-        ServerAliveCountMax 10
+        ServerAliveCountMax 60
         TCPKeepAlive yes
         ConnectTimeout 30
       EOF
@@ -838,7 +838,7 @@ deploy_prod:
   script:
     - |
       set -euo pipefail
-      ssh -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
+      ssh -o BatchMode=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=10 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
 
         # Ensure deploy directory exists (first-time setup)
@@ -878,27 +878,6 @@ deploy_prod:
         # Cleanup
         docker logout "${CI_REGISTRY}"
       DEPLOY_SCRIPT
-        chmod 600 infra/.env.prod
-
-        # Login to registry
-        echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY
-
-        # Set image tags
-        export DOCKER_IMAGE_API='$DOCKER_IMAGE_API'
-        export DOCKER_IMAGE_WORKER='$DOCKER_IMAGE_WORKER'
-        export DOCKER_IMAGE_FRONTEND='$DOCKER_IMAGE_FRONTEND'
-        export DOCKER_IMAGE_BACKUP='$DOCKER_IMAGE_BACKUP'
-        export USE_PREBUILT_IMAGES=1
-
-        # Ensure scripts are executable
-        chmod +x ./infra/scripts/*.sh
-
-        # Deploy
-        ./infra/scripts/blue_green_deploy.sh
-
-        # Cleanup
-        docker logout $CI_REGISTRY
-      "
 
 # ============ VERIFY STAGE ============
 verify_prod:
