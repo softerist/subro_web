@@ -122,4 +122,8 @@ fi
 echo "--- Recreating Caddy (picks up env changes) ---"
 PROJECT_ENV_FILE="$PROD_ENV_FILE" docker compose --env-file "$PROD_ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --force-recreate caddy
 
+# Cleanup old images to prevent disk buildup (runs in background)
+echo "--- Pruning old Docker images (background) ---"
+(docker image prune -af --filter "until=168h" >/dev/null 2>&1 &)
+
 echo "--- Staging Deployment Complete ---"
