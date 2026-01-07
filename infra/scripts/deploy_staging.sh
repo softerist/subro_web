@@ -26,7 +26,8 @@ docker_compose_pull_with_retry() {
 
     echo "Pulling Docker images with retry (max $max_attempts attempts)..."
     while [ $attempt -le $max_attempts ]; do
-        if docker compose "$@" pull; then
+        # Use --parallel for faster pulls
+        if docker compose "$@" pull --parallel; then
             echo "Docker pull successful!"
             return 0
         fi
@@ -64,22 +65,25 @@ docker_compose_pull_with_retry --env-file "$ENV_FILE" -p subro_staging \
 docker compose --env-file "$ENV_FILE" -p subro_staging \
     -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA" up -d --scale scheduler=0
 
-# Wait for Health
+# Wait for Health (faster polling)
 echo "--- Waiting for Health Checks (staging) ---"
 API_CONTAINER="subro_staging-api-1"
-MAX_RETRIES=20
+MAX_RETRIES=30  # 30 * 3s = 1.5 min max
 COUNT=0
 HEALTHY=false
 
 while [ $COUNT -lt $MAX_RETRIES ]; do
     STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$API_CONTAINER" 2>/dev/null || echo "starting")
-    echo "Container $API_CONTAINER status: $STATUS"
-
     if [ "$STATUS" == "healthy" ]; then
         HEALTHY=true
+        echo "Container $API_CONTAINER is healthy!"
         break
     fi
-    sleep 5
+    # Only print every 5th check
+    if [ $((COUNT % 5)) -eq 0 ]; then
+        echo "Container $API_CONTAINER status: $STATUS ($COUNT/$MAX_RETRIES)"
+    fi
+    sleep 3  # Faster polling
     COUNT=$((COUNT+1))
 done
 

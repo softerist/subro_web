@@ -30,7 +30,8 @@ docker_compose_pull_with_retry() {
 
     echo "Pulling Docker images with retry (max $max_attempts attempts)..."
     while [ $attempt -le $max_attempts ]; do
-        if docker compose "$@" pull; then
+        # Use --parallel for faster pulls of multiple images
+        if docker compose "$@" pull --parallel; then
             echo "Docker pull successful!"
             return 0
         fi
@@ -114,21 +115,24 @@ fi
 
 # 3. Wait for Health
 echo "--- Waiting for Health Checks ($NEW_COLOR) ---"
-# Loop to check health of api container
+# Loop to check health of api container (faster polling)
 API_CONTAINER="$NEW_COLOR-api-1"
-MAX_RETRIES=30
+MAX_RETRIES=40  # 40 * 3s = 2 min max
 COUNT=0
 HEALTHY=false
 
 while [ $COUNT -lt $MAX_RETRIES ]; do
     STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$API_CONTAINER" 2>/dev/null || echo "starting")
-    echo "Container $API_CONTAINER status: $STATUS"
-
     if [ "$STATUS" == "healthy" ]; then
         HEALTHY=true
+        echo "Container $API_CONTAINER is healthy!"
         break
     fi
-    sleep 5
+    # Only print every 5th check to reduce noise
+    if [ $((COUNT % 5)) -eq 0 ]; then
+        echo "Container $API_CONTAINER status: $STATUS ($COUNT/$MAX_RETRIES)"
+    fi
+    sleep 3  # Faster polling (was 5s)
     COUNT=$((COUNT+1))
 done
 
@@ -223,10 +227,10 @@ if [ -n "$CURRENT_COLOR" ]; then
 fi
 
 echo "--- Deployment Complete ($NEW_COLOR Active) ---"
-# 6. Conservative Pruning
-echo "--- Pruning old images (keeping recent for rollback) ---"
+# 6. Conservative Pruning (backgrounded to not block deployment)
+echo "--- Pruning old images in background ---"
 # Remove dangling images only, preserve tagged images for rollback (older than 1 week)
-docker image prune -f --filter "until=168h" || true
+(docker image prune -f --filter "until=168h" >/dev/null 2>&1 &)
 
 # 7. Post-Deployment Hooks
 echo "--- Running Post-Deployment Hooks ---"

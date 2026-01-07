@@ -174,6 +174,16 @@ EXPOSE 8000
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
+# --- CI Test Stage (API + dev deps for faster tests) ---
+FROM production-api AS ci-test
+
+# Bring in lockfile for deterministic dev dependency install
+COPY --chown=appuser:appuser --from=builder /app/poetry.lock /app/poetry.lock
+
+# Install dev/test dependencies once during build to speed up CI
+RUN poetry install --with dev --no-root --sync --no-cache && \
+    chown -R appuser:appuser /app/.venv
+
 
 # --- Production Stage (Worker) ---
 FROM production-api AS production-worker

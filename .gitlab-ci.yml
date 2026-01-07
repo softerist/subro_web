@@ -19,6 +19,7 @@ stages:
 # -------- Global Variables --------
 variables:
   DOCKER_IMAGE_API: $CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHORT_SHA
+  DOCKER_IMAGE_API_TEST: $CI_REGISTRY_IMAGE/api-test:$CI_COMMIT_SHORT_SHA
   DOCKER_IMAGE_WORKER: $CI_REGISTRY_IMAGE/worker:$CI_COMMIT_SHORT_SHA
   DOCKER_IMAGE_FRONTEND: $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHORT_SHA
   DOCKER_IMAGE_BACKUP: $CI_REGISTRY_IMAGE/backup:$CI_COMMIT_SHORT_SHA
@@ -86,6 +87,8 @@ ci_debug_env:
         -t "$DOCKER_IMAGE" \
         -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
         --target "$TARGET" \
+        --provenance=false \
+        --sbom=false \
         --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
         --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
         -f "$DOCKERFILE" \
@@ -112,6 +115,34 @@ build_api:
         -t "$DOCKER_IMAGE" \
         -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
         --target "$TARGET" \
+        --provenance=false \
+        --sbom=false \
+        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04" \
+        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
+        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
+        -f "$DOCKERFILE" \
+        "$CONTEXT"
+
+build_api_test:
+  extends: .build_template
+  variables:
+    SERVICE: api-test
+    DOCKER_IMAGE: $DOCKER_IMAGE_API_TEST
+    TARGET: ci-test
+    DOCKERFILE: backend/Dockerfile
+    CONTEXT: backend
+  script:
+    - |
+      set -euo pipefail
+      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
+      docker buildx inspect --bootstrap
+      docker buildx build \
+        --push \
+        -t "$DOCKER_IMAGE" \
+        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
+        --target "$TARGET" \
+        --provenance=false \
+        --sbom=false \
         --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04" \
         --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
         --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
@@ -136,6 +167,8 @@ build_worker:
         -t "$DOCKER_IMAGE" \
         -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
         --target "$TARGET" \
+        --provenance=false \
+        --sbom=false \
         --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04" \
         --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
         --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
@@ -160,6 +193,8 @@ build_frontend:
         -t "$DOCKER_IMAGE" \
         -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
         --target "$TARGET" \
+        --provenance=false \
+        --sbom=false \
         --build-arg BASE_IMAGE_NODE="public.ecr.aws/docker/library/node:20-alpine" \
         --build-arg BASE_IMAGE_NGINX="public.ecr.aws/docker/library/nginx:stable-alpine" \
         --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-/api/v1}" \
@@ -188,6 +223,8 @@ build_backup:
         -t "$DOCKER_IMAGE" \
         -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
         --target "$TARGET" \
+        --provenance=false \
+        --sbom=false \
         --build-arg BASE_IMAGE="public.ecr.aws/docker/library/alpine:3.19" \
         --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
         --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
@@ -387,16 +424,15 @@ sast_scan:
       echo "✓ SEMGREP_APP_TOKEN is set (length: ${#SEMGREP_APP_TOKEN})"
 
       # Use 'semgrep ci' with performance optimizations
-      # --supply-chain=false: CRITICAL - disables scanning 90K+ dependency rules
-      # --exclude: skip lockfiles that trigger supply chain analysis
+      # Exclude lockfiles to avoid supply chain scanning (very slow)
       # --jobs: parallel scanning
       # --max-target-bytes: skip very large files
       semgrep ci \
         --sarif -o semgrep.sarif \
-        --supply-chain=false \
         --exclude="*.lock" \
-        --exclude="package-lock.json" \
-        --exclude="poetry.lock" \
+        --exclude="**/package-lock.json" \
+        --exclude="**/poetry.lock" \
+        --exclude="**/node_modules" \
         --jobs 4 \
         --max-target-bytes 500000 \
         --timeout 120
