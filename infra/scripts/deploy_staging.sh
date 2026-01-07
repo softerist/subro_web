@@ -130,21 +130,21 @@ MAX_RETRIES=40  # 40 * 5s = ~3.5 min max
 COUNT=0
 HEALTHY=false
 
-wait_with_heartbeat() {
-    local total_seconds=$1
-    local interval_seconds=${2:-2}
-    local elapsed=0
-
-    while [ $elapsed -lt $total_seconds ]; do
-        sleep "$interval_seconds"
-        elapsed=$((elapsed + interval_seconds))
-        log "Waiting for containers to initialize... (${elapsed}/${total_seconds}s)"
+wait_with_keepalive() {
+    local seconds=$1
+    local i=0
+    while [ $i -lt $seconds ]; do
+        sleep 1
+        printf "."
+        i=$((i+1))
     done
+    echo ""
 }
 
 # Give containers time to initialize before first health check
+# Give containers time to initialize before first health check
 log "Waiting 10s for containers to initialize..."
-wait_with_heartbeat 10 2
+wait_with_keepalive 10
 
 while [ $COUNT -lt $MAX_RETRIES ]; do
     STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$API_CONTAINER" 2>/dev/null || echo "starting")
@@ -157,7 +157,7 @@ while [ $COUNT -lt $MAX_RETRIES ]; do
     if [ $((COUNT % 2)) -eq 0 ]; then
         log "Container $API_CONTAINER status: $STATUS ($COUNT/$MAX_RETRIES)"
     fi
-    sleep 5  # Slower polling to reduce SSH traffic
+    wait_with_keepalive 5
     COUNT=$((COUNT+1))
 done
 
