@@ -888,34 +888,120 @@ cleanup_registry:
   needs:
     - job: notify_success
       optional: true
+  variables:
+    KEEP_TAGS: "10" # Number of recent tags to keep per repository
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: on_success
   script:
     - apk add --no-cache curl jq
     - |
-      echo "Cleaning up old container images..."
-      # Keep last 10 tags, delete older ones
-      # This uses GitLab Container Registry API
-      for repo in api worker frontend; do
-        echo "Checking $repo repository..."
-        TAGS=$(curl -s --header "JOB-TOKEN: $CI_JOB_TOKEN" \
-          "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories" | \
-          jq -r ".[] | select(.name==\"$repo\") | .id" || true)
+      set -euo pipefail
+      echo "=== Container Registry Cleanup ==="
+      echo "Keeping last $KEEP_TAGS tags per repository"
 
-        if [ -n "$TAGS" ]; then
-          echo "Found repository ID: $TAGS for $repo"
-          # List tags sorted by created_at (oldest first), skip first 10, delete the rest
-          curl -s --header "JOB-TOKEN: $CI_JOB_TOKEN" \
-            "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories/$TAGS/tags?per_page=100&sort=created_at&order_by=asc" | \
-            jq -r '.[10:] | .[].name' | while read tag; do
-              echo "Deleting old tag: $tag"
-              curl -s --request DELETE --header "JOB-TOKEN: $CI_JOB_TOKEN" \
-                "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories/$TAGS/tags/$tag" || true
-            done
+      # Protected tags that should never be deleted
+      PROTECTED_TAGS="latest main develop stable"
+
+      # Helper: API call with retry
+      api_call() {
+        local url="$1"
+        local method="${2:-GET}"
+        for attempt in 1 2 3; do
+          response=$(curl -s -w "\n%{http_code}" --request "$method" \
+            --header "JOB-TOKEN: $CI_JOB_TOKEN" "$url" 2>/dev/null) || true
+          http_code=$(echo "$response" | tail -1)
+          body=$(echo "$response" | sed '$d')
+
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            echo "$body"
+            return 0
+          fi
+          echo "API call failed (attempt $attempt/3, HTTP $http_code)" >&2
+          sleep 2
+        done
+        return 1
+      }
+
+      # Helper: Check if tag is protected
+      is_protected() {
+        local tag="$1"
+        for protected in $PROTECTED_TAGS; do
+          [ "$tag" = "$protected" ] && return 0
+        done
+        return 1
+      }
+
+      # Get all repositories
+      REPOS=$(api_call "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories" | \
+        jq -r '.[] | "\(.id):\(.name)"' 2>/dev/null) || REPOS=""
+
+      if [ -z "$REPOS" ]; then
+        echo "No container repositories found or API error. Skipping cleanup."
+        exit 0
+      fi
+
+      echo "Found repositories: $(echo "$REPOS" | cut -d: -f2 | tr '\n' ' ')"
+
+      for repo_entry in $REPOS; do
+        REPO_ID=$(echo "$repo_entry" | cut -d: -f1)
+        REPO_NAME=$(echo "$repo_entry" | cut -d: -f2)
+        echo ""
+        echo "--- Processing: $REPO_NAME (ID: $REPO_ID) ---"
+
+        # Fetch all tags with pagination (up to 200 tags)
+        ALL_TAGS=""
+        for page in 1 2; do
+          PAGE_TAGS=$(api_call "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories/$REPO_ID/tags?per_page=100&page=$page") || continue
+          [ -z "$PAGE_TAGS" ] || [ "$PAGE_TAGS" = "[]" ] && break
+          ALL_TAGS="$ALL_TAGS$PAGE_TAGS"
+        done
+
+        if [ -z "$ALL_TAGS" ] || [ "$ALL_TAGS" = "[]" ]; then
+          echo "  No tags found, skipping."
+          continue
         fi
+
+        # Combine pages, sort by created_at (newest first), extract names
+        SORTED_TAGS=$(echo "$ALL_TAGS" | jq -s 'add | sort_by(.created_at) | reverse | .[].name' -r 2>/dev/null) || continue
+        TOTAL_TAGS=$(echo "$SORTED_TAGS" | wc -l)
+        echo "  Found $TOTAL_TAGS tags"
+
+        # Skip first N (keep them), delete the rest
+        TAGS_TO_DELETE=$(echo "$SORTED_TAGS" | tail -n +$((KEEP_TAGS + 1)))
+        DELETE_COUNT=$(echo "$TAGS_TO_DELETE" | grep -c . || echo 0)
+
+        if [ "$DELETE_COUNT" -eq 0 ]; then
+          echo "  Nothing to delete (only $TOTAL_TAGS tags, keeping $KEEP_TAGS)"
+          continue
+        fi
+
+        echo "  Deleting $DELETE_COUNT old tags..."
+        DELETED=0
+        SKIPPED=0
+
+        echo "$TAGS_TO_DELETE" | while read -r tag; do
+          [ -z "$tag" ] && continue
+
+          # Skip protected tags
+          if is_protected "$tag"; then
+            echo "    ⏭ Skipping protected: $tag"
+            continue
+          fi
+
+          # Delete tag
+          if api_call "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories/$REPO_ID/tags/$tag" "DELETE" >/dev/null 2>&1; then
+            echo "    ✓ Deleted: $tag"
+          else
+            echo "    ✗ Failed: $tag"
+          fi
+        done
+
+        echo "  Done with $REPO_NAME"
       done
-      echo "Cleanup complete!"
+
+      echo ""
+      echo "=== Cleanup complete! ==="
   allow_failure: true
 
 # ============ ROLLBACK (on failure) ============
