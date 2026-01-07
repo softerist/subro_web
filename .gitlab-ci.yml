@@ -574,24 +574,24 @@ deploy_staging:
         fi'
 
       # 1. Prepare Directory & Checkout
-      ssh "$SSH_HOST" "
+      ssh "$SSH_HOST" bash -s <<'CHECKOUT_SCRIPT'
         set -euo pipefail
-        mkdir -p \"${STAGING_DEPLOY_DIR}\"
-        cd \"${STAGING_DEPLOY_DIR}\"
+        mkdir -p "${STAGING_DEPLOY_DIR}"
+        cd "${STAGING_DEPLOY_DIR}"
         if [ ! -d .git ]; then
-          git clone --depth 1 \"git@${CI_SERVER_HOST}:${CI_PROJECT_PATH}.git\" .
+          git clone --depth 1 "git@${CI_SERVER_HOST}:${CI_PROJECT_PATH}.git" .
         else
-          git fetch --depth 1 origin \"${CI_COMMIT_SHA}\"
-          git checkout -f \"${CI_COMMIT_SHA}\"
+          git fetch --depth 1 origin "${CI_COMMIT_SHA}"
+          git checkout -f "${CI_COMMIT_SHA}"
           git clean -fd
         fi
-        CURRENT_COMMIT=\$(git rev-parse HEAD)
-        echo \"Checked out commit: \$CURRENT_COMMIT\"
-        if [ \"\$CURRENT_COMMIT\" != \"${CI_COMMIT_SHA}\" ]; then
-          echo \"❌ ERROR: Checkout verification failed!\"
+        CURRENT_COMMIT=$(git rev-parse HEAD)
+        echo "Checked out commit: $CURRENT_COMMIT"
+        if [ "$CURRENT_COMMIT" != "${CI_COMMIT_SHA}" ]; then
+          echo "❌ ERROR: Checkout verification failed!"
           exit 1
         fi
-      "
+      CHECKOUT_SCRIPT
 
       # 2. Verify Docker images exist before deploying
       echo ""
