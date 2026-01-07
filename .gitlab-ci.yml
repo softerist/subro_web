@@ -508,35 +508,38 @@ deploy_staging:
   script:
     - |
       set -euo pipefail
-      ssh -v -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
+
+      # 1. Prepare Directory & Checkout
+      ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
+          -o TCPKeepAlive=no -o ConnectTimeout=30 -o IPQoS=throughput \
+          -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
         set -euo pipefail
-
-        STAGING_DEPLOY_DIR="\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
-        echo "Using staging deploy dir: \$STAGING_DEPLOY_DIR"
-
-        # Ensure staging directory exists
-        mkdir -p "\$STAGING_DEPLOY_DIR"
-        cd "\$STAGING_DEPLOY_DIR"
-
-        # Clone or update repo
+        mkdir -p \"${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}\"
+        cd \"${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}\"
         if [ ! -d .git ]; then
-          git clone --depth 1 "git@${CI_SERVER_HOST}:${CI_PROJECT_PATH}.git" .
+          git clone --depth 1 \"git@${CI_SERVER_HOST}:${CI_PROJECT_PATH}.git\" .
         else
-          git fetch --depth 1 origin "${CI_COMMIT_SHA}"
-          git checkout -f "${CI_COMMIT_SHA}"
+          git fetch --depth 1 origin \"${CI_COMMIT_SHA}\"
+          git checkout -f \"${CI_COMMIT_SHA}\"
           git clean -fd
         fi
-        echo "Checked out commit: \$(git rev-parse HEAD)"
+        echo \"Checked out commit: \$(git rev-parse HEAD)\"
+      "
 
-        # Setup staging environment
+      # 2. Setup Env & Deploy
+      ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
+          -o TCPKeepAlive=no -o ConnectTimeout=30 -o IPQoS=throughput \
+          -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
+        set -euo pipefail
+        STAGING_DEPLOY_DIR="\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
+        cd "\$STAGING_DEPLOY_DIR"
+
         mkdir -p infra
         echo '${PROD_ENV_FILE}' | base64 -d > infra/.env.staging
         chmod 600 infra/.env.staging
 
-        # Login to registry
         echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin "${CI_REGISTRY}"
 
-        # Set image tags
         export DOCKER_IMAGE_API='${DOCKER_IMAGE_API}'
         export DOCKER_IMAGE_WORKER='${DOCKER_IMAGE_WORKER}'
         export DOCKER_IMAGE_FRONTEND='${DOCKER_IMAGE_FRONTEND}'
@@ -545,7 +548,6 @@ deploy_staging:
         export USE_PREBUILT_IMAGES=1
         export DEPLOY_ENV=staging
 
-        # Deploy staging
         chmod +x ./infra/scripts/*.sh
         ./infra/scripts/deploy_staging.sh
 
