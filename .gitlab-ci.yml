@@ -508,7 +508,7 @@ deploy_staging:
   script:
     - |
       set -euo pipefail
-      ssh -o BatchMode=yes -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
+      ssh -v -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
 
         STAGING_DEPLOY_DIR="\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
