@@ -386,7 +386,7 @@ scan_image_vulns:
       export TRIVY_PASSWORD="$CI_REGISTRY_PASSWORD"
 
       # Scan images (trivy is fast enough that sequential is fine)
-      for img in "$DOCKER_IMAGE_API" "$DOCKER_IMAGE_FRONTEND" "$DOCKER_IMAGE_WORKER"; do
+      for img in "$DOCKER_IMAGE_API" "$DOCKER_IMAGE_FRONTEND" "$DOCKER_IMAGE_WORKER" "$DOCKER_IMAGE_BACKUP"; do
         echo "Scanning $img..."
         trivy image --cache-dir .trivycache --exit-code 1 \
           --severity "$TRIVY_SEVERITY" --timeout 5m --no-progress \
@@ -905,9 +905,9 @@ cleanup_registry:
 
         if [ -n "$TAGS" ]; then
           echo "Found repository ID: $TAGS for $repo"
-          # List and delete old tags (keeping last 10)
+          # List tags sorted by created_at (oldest first), skip first 10, delete the rest
           curl -s --header "JOB-TOKEN: $CI_JOB_TOKEN" \
-            "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories/$TAGS/tags" | \
+            "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories/$TAGS/tags?per_page=100&sort=created_at&order_by=asc" | \
             jq -r '.[10:] | .[].name' | while read tag; do
               echo "Deleting old tag: $tag"
               curl -s --request DELETE --header "JOB-TOKEN: $CI_JOB_TOKEN" \
@@ -922,7 +922,9 @@ cleanup_registry:
 rollback_prod:
   stage: verify
   image: alpine:3.20
-  needs: [verify_prod]
+  needs:
+    - job: verify_prod
+      optional: true # Required for when: on_failure to trigger
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: on_failure
