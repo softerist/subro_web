@@ -438,6 +438,7 @@ sast_scan:
   artifacts:
     reports:
       sast: semgrep.sarif
+    expire_in: 1 days
     when: always
   allow_failure: false
   retry: 1
@@ -657,13 +658,13 @@ cleanup_staging:
         if [ -d \"\$STAGING_DIR\" ]; then
           cd \"\$STAGING_DIR\"
 
-          # Stop staging containers (app stack)
+          # Stop staging containers (app stack) and remove volumes for true ephemeral state
           docker compose -p subro_staging \
             --env-file infra/.env.staging \
             -f infra/docker/compose.prod.yml \
-            down --remove-orphans 2>/dev/null || true
+            down --remove-orphans --volumes 2>/dev/null || true
 
-          echo '✓ Staging environment stopped'
+          echo '✓ Staging environment stopped and cleaned'
         else
           echo 'Staging directory not found, nothing to clean up'
         fi

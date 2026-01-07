@@ -90,6 +90,11 @@ done
 if [ "$HEALTHY" = false ]; then
     echo "Error: Staging deployment failed health check."
     docker logs --tail 20 "$API_CONTAINER"
+
+    echo "--- Cleaning up failed deployment ---"
+    docker compose --env-file "$ENV_FILE" -p subro_staging \
+        -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA" down
+
     exit 1
 fi
 
