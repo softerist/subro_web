@@ -27,7 +27,7 @@ docker_compose_pull_with_retry() {
     echo "Pulling Docker images with retry (max $max_attempts attempts)..."
     while [ $attempt -le $max_attempts ]; do
         # Parallel is now default in modern docker compose
-        if docker compose "$@" pull; then
+        if docker compose --progress=plain "$@" pull; then
             echo "Docker pull successful!"
             return 0
         fi
@@ -61,9 +61,11 @@ echo "--- Pulling/Starting Staging App Stack (with isolated Data) ---"
 echo "--- Verifying Images Exist ---"
 for img in "$DOCKER_IMAGE_API" "$DOCKER_IMAGE_WORKER" "$DOCKER_IMAGE_FRONTEND" "$DOCKER_IMAGE_BACKUP"; do
     echo "Checking for $img..."
-    if ! docker manifest inspect "$img" > /dev/null 2>&1; then
-        echo "⚠️  WARNING: Image $img not found in registry (manifest check failed)."
-        echo "    Trying to pull it directly to confirm..."
+    # Add timeout to prevent hanging on slow registry responses
+    if ! timeout 15s docker manifest inspect "$img" > /dev/null 2>&1; then
+        echo "⚠️  WARNING: Image $img not found or registry timeout."
+    else
+        echo "✓ Image $img found"
     fi
 done
 
@@ -71,7 +73,7 @@ docker_compose_pull_with_retry --env-file "$ENV_FILE" -p subro_staging \
     -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA"
 
 # We don't use blue-green for staging to save resources
-docker compose --env-file "$ENV_FILE" -p subro_staging \
+docker compose --progress=plain --env-file "$ENV_FILE" -p subro_staging \
     -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA" up -d --scale scheduler=0
 
 # Wait for Health (faster polling)
@@ -99,7 +101,7 @@ if [ "$HEALTHY" = false ]; then
     docker logs --tail 20 "$API_CONTAINER"
 
     echo "--- Cleaning up failed deployment ---"
-    docker compose --env-file "$ENV_FILE" -p subro_staging \
+    docker compose --progress=plain --env-file "$ENV_FILE" -p subro_staging \
         -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA" down
 
     exit 1
@@ -132,7 +134,7 @@ if [ -d "$PROD_INFRA_DIR/docker" ]; then
 fi
 
 echo "--- Recreating Caddy (picks up env changes) ---"
-PROJECT_ENV_FILE="$PROD_ENV_FILE" docker compose --env-file "$PROD_ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --force-recreate caddy
+PROJECT_ENV_FILE="$PROD_ENV_FILE" docker compose --progress=plain --env-file "$PROD_ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --force-recreate caddy
 
 # Cleanup old images to prevent disk buildup (runs in background)
 echo "--- Pruning old Docker images (background) ---"
