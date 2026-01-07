@@ -574,7 +574,7 @@ deploy_staging:
         fi'
 
       # 1. Prepare Directory & Checkout
-      ssh "$SSH_HOST" bash -s <<CHECKOUT_SCRIPT
+      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=6 "$SSH_HOST" bash -s <<CHECKOUT_SCRIPT
         set -euo pipefail
         mkdir -p "${STAGING_DEPLOY_DIR}"
         cd "${STAGING_DEPLOY_DIR}"
@@ -596,7 +596,7 @@ deploy_staging:
       # 2. Verify Docker images exist before deploying
       echo ""
       echo "=== Verifying Docker Images ==="
-      ssh "$SSH_HOST" bash -s <<VERIFY_IMAGES
+      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=6 "$SSH_HOST" bash -s <<VERIFY_IMAGES
         set -euo pipefail
 
         # Docker login with retry (handles registry timeouts)
@@ -640,7 +640,7 @@ deploy_staging:
 
 
       # 3. Setup Env & Deploy (Fire and Forget)
-      ssh "$SSH_HOST" bash -s <<DEPLOY_SCRIPT
+      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=6 "$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
         STAGING_DEPLOY_DIR="${STAGING_DEPLOY_DIR}"
         cd "\$STAGING_DEPLOY_DIR"
@@ -825,7 +825,7 @@ cleanup_staging:
   extends: .ssh_setup
   script:
     - |
-      ssh -o BatchMode=yes -o ServerAliveInterval=2 -o ServerAliveCountMax=30 -o IPQoS=0x00 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<CLEANUP_SCRIPT
+      ssh -o BatchMode=yes -o TCPKeepAlive=yes -o ServerAliveInterval=2 -o ServerAliveCountMax=30 -o IPQoS=0x00 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<CLEANUP_SCRIPT
         set -euo pipefail
 
         # ANSI color codes for inline script
@@ -922,7 +922,7 @@ deploy_prod:
   script:
     - |
       # Deploy (Fire and Forget)
-      ssh -o BatchMode=yes -o TCPKeepAlive=yes -o ConnectTimeout=30 \
+      ssh -o BatchMode=yes -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=6 -o ConnectTimeout=30 \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
 
@@ -1170,7 +1170,7 @@ rollback_prod:
   script:
     - |
       echo "Rolling back to previous version..."
-      ssh "$SSH_HOST" bash -s <<'ROLLBACK_SCRIPT'
+      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=6 "$SSH_HOST" bash -s <<'ROLLBACK_SCRIPT'
         cd /opt/subro_web
         chmod +x ./infra/scripts/*.sh
         if [ -f ./infra/scripts/rollback.sh ]; then
