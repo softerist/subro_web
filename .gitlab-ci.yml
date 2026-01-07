@@ -510,7 +510,7 @@ deploy_staging:
       Host *
         ServerAliveInterval 15
         ServerAliveCountMax 5
-        TCPKeepAlive no
+        TCPKeepAlive yes
         ConnectTimeout 30
         IPQoS throughput
       EOF
@@ -520,7 +520,7 @@ deploy_staging:
 
       # 1. Prepare Directory & Checkout
       ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
-          -o TCPKeepAlive=no -o ConnectTimeout=30 -o IPQoS=throughput \
+          -o TCPKeepAlive=yes -o ConnectTimeout=30 -o IPQoS=throughput \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
         set -euo pipefail
         mkdir -p \"${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}\"
@@ -537,7 +537,7 @@ deploy_staging:
 
       # 2. Setup Env & Deploy
       ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
-          -o TCPKeepAlive=no -o ConnectTimeout=30 -o IPQoS=throughput \
+          -o TCPKeepAlive=yes -o ConnectTimeout=30 -o IPQoS=throughput \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
         STAGING_DEPLOY_DIR="\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
