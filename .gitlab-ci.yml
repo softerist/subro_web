@@ -367,7 +367,7 @@ scan_image_vulns:
   image:
     name: aquasec/trivy:0.58.0 # Updated from 0.53.0
     entrypoint: [""]
-  needs: [build_api, build_worker, build_frontend]
+  needs: [build_api, build_worker, build_frontend, build_backup]
   timeout: 15m
   variables:
     TRIVY_SEVERITY: "HIGH,CRITICAL"
