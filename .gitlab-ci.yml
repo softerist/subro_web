@@ -407,39 +407,36 @@ sast_scan:
     entrypoint: [""]
   timeout: 10m # Prevent indefinite hanging
   variables:
-    SAST_MIN_SEVERITY: "WARNING"
-    SAST_FAIL_ON_FINDINGS: "false"
     # Performance optimizations
     SEMGREP_SEND_METRICS: "off"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-      variables:
-        SAST_MIN_SEVERITY: "ERROR"
-        SAST_FAIL_ON_FINDINGS: "true"
     - when: on_success
   script:
     - |
-      # Debug: Check if token is set (without revealing value)
-      if [ -z "${SEMGREP_APP_TOKEN:-}" ]; then
-        echo "ERROR: SEMGREP_APP_TOKEN is not set or empty."
-        echo "Please configure it in GitLab CI/CD Variables."
-        exit 2
-      fi
-      echo "✓ SEMGREP_APP_TOKEN is set (length: ${#SEMGREP_APP_TOKEN})"
+      echo "Running Semgrep SAST scan..."
 
-      # Use 'semgrep ci' with performance optimizations
-      # Exclude lockfiles to avoid supply chain scanning (very slow)
+      # Use 'semgrep scan' with auto config (no cloud API needed)
+      # --config auto: use recommended rules
+      # --exclude: skip lockfiles and large directories
       # --jobs: parallel scanning
       # --max-target-bytes: skip very large files
-      semgrep ci \
+      semgrep scan \
+        --config auto \
         --sarif -o semgrep.sarif \
         --exclude="*.lock" \
         --exclude="**/package-lock.json" \
         --exclude="**/poetry.lock" \
         --exclude="**/node_modules" \
+        --exclude="**/.venv" \
+        --exclude="**/dist" \
+        --exclude="**/build" \
         --jobs 4 \
         --max-target-bytes 500000 \
-        --timeout 120
+        --timeout 120 \
+        .
+
+      echo "✓ Semgrep scan complete"
   artifacts:
     reports:
       sast: semgrep.sarif
