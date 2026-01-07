@@ -262,7 +262,12 @@ if [ ! -f "$TEMPLATE" ]; then
 fi
 
 # Prepare new Caddyfile content
-sed "s/{{UPSTREAM_API}}/$NEW_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$NEW_COLOR-frontend-1/g" "$TEMPLATE" > "$CADDYFILE_PROD"
+# Read DOMAIN_NAME from env file for expansion
+DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+if [ -z "$DOMAIN_NAME" ]; then
+    error "DOMAIN_NAME not found in $ENV_FILE"; exit 1
+fi
+sed "s/{{UPSTREAM_API}}/$NEW_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$NEW_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$TEMPLATE" > "$CADDYFILE_PROD"
 
 # Reload Caddy (in infra project)
 docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T caddy caddy reload --config /etc/caddy/Caddyfile.prod
