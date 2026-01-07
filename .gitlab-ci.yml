@@ -650,7 +650,7 @@ verify_staging:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
   script:
-    - apk add --no-cache curl bind-tools
+    - apk add --no-cache curl bind-tools openssh-client
     - |
       # Resolve SSH_HOST to IP and add staging subdomain to /etc/hosts
       SERVER_IP=$(nslookup "$SSH_HOST" | awk '/^Address: / { print $2 }' | tail -1)
