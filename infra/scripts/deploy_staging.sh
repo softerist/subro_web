@@ -102,6 +102,20 @@ export DOCKER_IMAGE_BACKUP=${DOCKER_IMAGE_BACKUP:-"subro-backup:latest"}
 export BACKUP_PREFIX="staging_"
 
 section_start "stage_pull" "Pulling and Starting Staging App Stack"
+
+# Login to GitLab Registry if credentials are provided
+if [ -n "${REGISTRY_PASSWORD:-}" ] && [ -n "${REGISTRY_USER:-}" ] && [ -n "${CI_REGISTRY:-}" ]; then
+    log "Logging into GitLab Registry..."
+    if echo "$REGISTRY_PASSWORD" | docker login -u "$REGISTRY_USER" --password-stdin "$CI_REGISTRY" 2>/dev/null; then
+        success "Docker registry login successful"
+    else
+        error "Docker registry login failed"
+        exit 1
+    fi
+else
+    warn "Registry credentials not found in .env.staging - proceeding without login"
+fi
+
 # We manage the app + data stack here for staging isolation.
 log "Verifying Images Exist..."
 for img in "$DOCKER_IMAGE_API" "$DOCKER_IMAGE_WORKER" "$DOCKER_IMAGE_FRONTEND" "$DOCKER_IMAGE_BACKUP"; do
@@ -202,6 +216,11 @@ if [ -n "${DEPLOY_COMMIT_SHA:-}" ]; then
     log "Recorded deployed commit: $DEPLOY_COMMIT_SHA"
 else
     warn "DEPLOY_COMMIT_SHA not set; deploy marker not written."
+fi
+
+# Logout from registry for security
+if [ -n "${CI_REGISTRY:-}" ]; then
+    docker logout "$CI_REGISTRY" \u003e/dev/null 2\u003e\u00261 || true
 fi
 
 success "Staging Deployment Complete"
