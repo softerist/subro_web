@@ -243,10 +243,10 @@ backend_tests:
   interruptible: false # Prevent cancellation during test/cleanup
   variables:
     # Database config for test container - use CI/CD variables with fallback defaults
-    POSTGRES_USER: "${CI_TEST_POSTGRES_USER:-admin}"
-    POSTGRES_PASSWORD: "${CI_TEST_POSTGRES_PASSWORD:-ci_test_password}"
-    POSTGRES_DB: "${CI_TEST_POSTGRES_DB:-subappdb}"
-    POSTGRES_DB_TEST: "${CI_TEST_POSTGRES_DB_TEST:-subappdb_pytest}"
+    POSTGRES_USER: "${CI_TEST_POSTGRES_USER}"
+    POSTGRES_PASSWORD: "${CI_TEST_POSTGRES_PASSWORD}"
+    POSTGRES_DB: "${CI_TEST_POSTGRES_DB}"
+    POSTGRES_DB_TEST: "${CI_TEST_POSTGRES_DB_TEST}"
   script:
     - apk add --no-cache bash
     - |
