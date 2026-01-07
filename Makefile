@@ -395,8 +395,8 @@ build: ## Build production Docker images
 	@echo "Building production Docker images..."
 	# Ensure correct build context and tagging strategy
 	# Consider parameterizing TAG=latest or TAG=$$(git rev-parse --short HEAD)
-	docker build -t subtitle-downloader-api:latest --target production-api ./backend
-	docker build -t subtitle-downloader-worker:latest --target production-worker ./backend
+	docker build --build-arg POETRY_VERSION=$$(awk '/poetry/ {print $$2}' .tool-versions) -t subtitle-downloader-api:latest --target production-api ./backend
+	docker build --build-arg POETRY_VERSION=$$(awk '/poetry/ {print $$2}' .tool-versions) -t subtitle-downloader-worker:latest --target production-worker ./backend
 	docker build -t subtitle-downloader-frontend:latest --target production ./frontend
 	@echo "Note: Production build uses 'latest' tag. Use specific tags for releases."
 
@@ -427,7 +427,7 @@ permissions: ## Fix potential file permission issues from Docker volumes
 
 scan-vulns: ## Scan production target image for CRITICAL vulnerabilities using Trivy
 	@echo "Scanning production API image for CRITICAL vulnerabilities..."
-	@docker build -t subro-api:scan --target production-api ./backend
+	@docker build --build-arg POETRY_VERSION=$$(awk '/poetry/ {print $$2}' .tool-versions) -t subro-api:scan --target production-api ./backend
 	@trivy image --severity CRITICAL subro-api:scan
 
 scan-secrets: ## Scan filesystem for secrets using Trivy

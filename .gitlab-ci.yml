@@ -38,9 +38,8 @@ stages:
 lint_backend:
   stage: lint
   image: python:3.12-slim
-  variables:
-    POETRY_VERSION: 1.8.3
   before_script:
+    - export POETRY_VERSION=$(awk '/poetry/ {print $2}' .tool-versions)
     - pip install poetry==$POETRY_VERSION
     - cd backend
     - poetry install --no-root --only dev
@@ -139,6 +138,7 @@ ci_debug_env:
   script:
     - |
       set -euo pipefail
+      export POETRY_VERSION=$(awk '/poetry/ {print $2}' .tool-versions)
       docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
       docker buildx inspect --bootstrap
       docker buildx build \
@@ -151,6 +151,7 @@ ci_debug_env:
         --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
         --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
         -f "$DOCKERFILE" \
+        --build-arg POETRY_VERSION="$POETRY_VERSION" \
         "$CONTEXT"
   rules:
     - when: on_success

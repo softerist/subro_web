@@ -9,7 +9,7 @@ FROM ${BASE_IMAGE} AS base
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Define the Poetry version as a build argument
-ARG POETRY_VERSION=2.1.2
+ARG POETRY_VERSION
 
 # Define APP_HOME early for clarity
 ENV APP_HOME=/app \
