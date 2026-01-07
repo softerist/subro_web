@@ -1170,7 +1170,7 @@ rollback_prod:
   script:
     - |
       echo "Rolling back to previous version..."
-      ssh -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+      ssh "$SSH_HOST" bash -s <<'ROLLBACK_SCRIPT'
         cd /opt/subro_web
         chmod +x ./infra/scripts/*.sh
         if [ -f ./infra/scripts/rollback.sh ]; then
@@ -1179,7 +1179,7 @@ rollback_prod:
           echo 'Rollback script not found, manual intervention required'
           exit 1
         fi
-      "
+      ROLLBACK_SCRIPT
   environment:
     name: production
     action: stop
