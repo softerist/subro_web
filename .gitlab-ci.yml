@@ -388,11 +388,23 @@ scan_image_vulns:
       # Scan images (trivy is fast enough that sequential is fine)
       for img in "$DOCKER_IMAGE_API" "$DOCKER_IMAGE_FRONTEND" "$DOCKER_IMAGE_WORKER" "$DOCKER_IMAGE_BACKUP"; do
         echo "Scanning $img..."
-        trivy image --cache-dir .trivycache --exit-code 1 \
-          --severity "$TRIVY_SEVERITY" --timeout 5m --no-progress \
-          --skip-files "/app/secrets/google-api-config.json" \
-          --scanners vuln \
-          "$img"
+        # Retry scan up to 3 times to handle eventual consistency or network flakes
+        for attempt in 1 2 3; do
+          if trivy image --cache-dir .trivycache --exit-code 1 \
+            --severity "$TRIVY_SEVERITY" --timeout 5m --no-progress \
+            --skip-files "/app/secrets/google-api-config.json" \
+            --scanners vuln \
+            "$img"; then
+            echo "✓ Scan successful for $img"
+            break
+          fi
+          if [ $attempt -eq 3 ]; then
+            echo "ERROR: Failed to scan $img after 3 attempts"
+            exit 1
+          fi
+          echo "Scan failed (attempt $attempt/3). Retrying in 10s..."
+          sleep 10
+        done
       done
       echo "All image scans passed!"
   allow_failure: false
