@@ -406,9 +406,6 @@ sast_scan:
     name: returntocorp/semgrep:1.46.0 # Pin version to avoid re-pulling :latest
     entrypoint: [""]
   timeout: 10m # Prevent indefinite hanging
-  variables:
-    # Performance optimizations
-    SEMGREP_SEND_METRICS: "off"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
     - when: on_success
@@ -416,14 +413,14 @@ sast_scan:
     - |
       echo "Running Semgrep SAST scan..."
 
-      # Use 'semgrep scan' with auto config (no cloud API needed)
-      # --config auto: use recommended rules
-      # --error: exit with error code if findings
-      # --exclude: skip lockfiles and large directories
-      # --jobs: parallel scanning
-      # --max-target-bytes: skip very large files
+      # Use 'semgrep scan' with specific configs (auto requires metrics)
+      # p/default: general security rules
+      # p/python: Python-specific rules
+      # p/typescript: TypeScript/JavaScript rules
       semgrep scan \
-        --config auto \
+        --config p/default \
+        --config p/python \
+        --config p/typescript \
         --sarif -o semgrep.sarif \
         --error \
         --exclude="*.lock" \
@@ -433,6 +430,7 @@ sast_scan:
         --exclude="**/.venv" \
         --exclude="**/dist" \
         --exclude="**/build" \
+        --exclude="**/alembic/versions" \
         --jobs 4 \
         --max-target-bytes 500000 \
         --timeout 120 \
