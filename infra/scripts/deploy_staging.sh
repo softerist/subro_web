@@ -135,10 +135,9 @@ wait_with_keepalive() {
     local i=0
     while [ $i -lt $seconds ]; do
         sleep 1
-        printf "."
+        echo "."  # Newline ensures flush
         i=$((i+1))
     done
-    echo ""
 }
 
 # Give containers time to initialize before first health check
