@@ -498,7 +498,13 @@ deploy_staging:
     - set -euo pipefail
     - apk add --no-cache bash openssh-client
     - eval "$(ssh-agent -s)"
-    - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
+    # Handle both base64-encoded and plain text SSH keys
+    - |
+      if echo "$SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
+        echo "$SSH_PRIVATE_KEY" > /tmp/ssh_key
+      else
+        echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
+      fi
     - chmod 600 /tmp/ssh_key
     - ssh-add /tmp/ssh_key
     - rm -f /tmp/ssh_key
@@ -519,15 +525,20 @@ deploy_staging:
       set -euo pipefail
 
       # 0. Ensure server-side SSH keepalives are configured (idempotent)
-      ssh -o BatchMode=yes -o ConnectTimeout=30 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" 'if [ ! -f /etc/ssh/sshd_config.d/keepalive.conf ]; then printf "%s\n" "# CI/CD keepalives" "ClientAliveInterval 15" "ClientAliveCountMax 10" "TCPKeepAlive yes" > /etc/ssh/sshd_config.d/keepalive.conf && (systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true) && echo "SSH keepalives configured"; fi'
+      ssh -o BatchMode=yes -o ConnectTimeout=30 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
+        'if [ ! -f /etc/ssh/sshd_config.d/keepalive.conf ]; then
+          printf "%s\n" "# CI/CD keepalives" "ClientAliveInterval 15" "ClientAliveCountMax 10" "TCPKeepAlive yes" > /etc/ssh/sshd_config.d/keepalive.conf &&
+          (systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true) &&
+          echo "SSH keepalives configured";
+        fi'
 
       # 1. Prepare Directory & Checkout
       ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
           -o TCPKeepAlive=yes -o ConnectTimeout=30 -o IPQoS=throughput \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
         set -euo pipefail
-        mkdir -p \"${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}\"
-        cd \"${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}\"
+        mkdir -p \"${STAGING_DEPLOY_DIR}\"
+        cd \"${STAGING_DEPLOY_DIR}\"
         if [ ! -d .git ]; then
           git clone --depth 1 \"git@${CI_SERVER_HOST}:${CI_PROJECT_PATH}.git\" .
         else
@@ -535,21 +546,75 @@ deploy_staging:
           git checkout -f \"${CI_COMMIT_SHA}\"
           git clean -fd
         fi
-        echo \"Checked out commit: \$(git rev-parse HEAD)\"
+        CURRENT_COMMIT=\$(git rev-parse HEAD)
+        echo \"Checked out commit: \$CURRENT_COMMIT\"
+        if [ \"\$CURRENT_COMMIT\" != \"${CI_COMMIT_SHA}\" ]; then
+          echo \"❌ ERROR: Checkout verification failed!\"
+          exit 1
+        fi
       "
-      # 2. Setup Env & Deploy
+
+      # 2. Verify Docker images exist before deploying
+      echo ""
+      echo "=== Verifying Docker Images ==="
+      ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
+          -o TCPKeepAlive=yes -o ConnectTimeout=30 -o IPQoS=throughput \
+          -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+        set -euo pipefail
+
+        # Docker login with retry (handles registry timeouts)
+        for i in 1 2 3; do
+          if echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin '${CI_REGISTRY}' 2>/dev/null; then
+            echo 'Docker login successful'
+            break
+          fi
+          if [ \\\$i -eq 3 ]; then
+            echo '❌ Docker login failed after 3 attempts'
+            exit 1
+          fi
+          echo \"Docker login attempt \\\$i failed, retrying in 5s...\"
+          sleep 5
+        done
+
+        echo 'Checking images...'
+        for img in '${DOCKER_IMAGE_API}' '${DOCKER_IMAGE_WORKER}' '${DOCKER_IMAGE_FRONTEND}' '${DOCKER_IMAGE_BACKUP}'; do
+          if docker manifest inspect \"\$img\" >/dev/null 2>&1; then
+            echo \"✅ Found: \$img\"
+          else
+            echo \"❌ ERROR: Image not found: \$img\"
+            docker logout '${CI_REGISTRY}'
+            exit 1
+          fi
+        done
+
+        docker logout '${CI_REGISTRY}'
+      "
+
+      # 3. Setup Env & Deploy
       ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
           -o TCPKeepAlive=yes -o ConnectTimeout=30 -o IPQoS=throughput \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
-        STAGING_DEPLOY_DIR="\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
+        STAGING_DEPLOY_DIR="${STAGING_DEPLOY_DIR}"
         cd "\$STAGING_DEPLOY_DIR"
 
         mkdir -p infra
         echo '${PROD_ENV_FILE}' | base64 -d > infra/.env.staging
         chmod 600 infra/.env.staging
 
-        echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin "${CI_REGISTRY}"
+        # Docker login with retry (handles registry timeouts)
+        for i in 1 2 3; do
+          if echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin "${CI_REGISTRY}" 2>/dev/null; then
+            echo "Docker login successful"
+            break
+          fi
+          if [ \$i -eq 3 ]; then
+            echo "❌ Docker login failed after 3 attempts"
+            exit 1
+          fi
+          echo "Docker login attempt \$i failed, retrying in 5s..."
+          sleep 5
+        done
 
         export DOCKER_IMAGE_API='${DOCKER_IMAGE_API}'
         export DOCKER_IMAGE_WORKER='${DOCKER_IMAGE_WORKER}'
@@ -560,14 +625,24 @@ deploy_staging:
         export DEPLOY_ENV=staging
 
         chmod +x ./infra/scripts/*.sh
-        ./infra/scripts/deploy_staging.sh
+
+        if ! ./infra/scripts/deploy_staging.sh; then
+          echo "❌ Deployment script failed!"
+          docker logout "${CI_REGISTRY}"
+          exit 1
+        fi
 
         docker logout "${CI_REGISTRY}"
+        echo "✅ Deployment completed successfully"
       DEPLOY_SCRIPT
   environment:
     name: staging
     url: https://staging.$SSH_HOST/
-  retry: 1
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
 
 verify_staging:
   stage: staging
@@ -576,10 +651,10 @@ verify_staging:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
   script:
-    - apk add --no-cache curl
+    - apk add --no-cache curl bind-tools
     - |
       # Resolve SSH_HOST to IP and add staging subdomain to /etc/hosts
-      SERVER_IP=$(getent hosts "$SSH_HOST" | awk '{print $1}' | head -1)
+      SERVER_IP=$(nslookup "$SSH_HOST" | awk '/^Address: / { print $2 }' | tail -1)
       if [ -z "$SERVER_IP" ]; then
         echo "ERROR: Could not resolve IP for $SSH_HOST"
         exit 1
@@ -590,8 +665,9 @@ verify_staging:
       echo "Verifying staging deployment..."
       echo ""
 
-      # Retry loop - staging containers may still be starting
-      MAX_ATTEMPTS=12  # 12 * 10s = 2 minutes
+      # Increased retry window for staging container startup
+      MAX_ATTEMPTS=24  # 24 * 10s = 4 minutes (was 2 minutes)
+
       for attempt in $(seq 1 $MAX_ATTEMPTS); do
         echo "=== Verification attempt $attempt/$MAX_ATTEMPTS ==="
 
@@ -626,12 +702,17 @@ verify_staging:
       echo "  - Staging containers failed to start"
       echo "  - Caddy not configured for staging.secure.go.ro"
       echo "  - Network/firewall issues"
+      echo ""
+      echo "Troubleshooting:"
+      echo "  1. SSH to server and run: docker ps -a"
+      echo "  2. Check API logs: docker logs subro-api-staging"
+      echo "  3. Check Caddy logs: docker logs caddy"
+      echo "  4. Test direct: curl http://localhost:8000/api/v1/"
       exit 1
   environment:
     name: staging
     url: https://staging.$SSH_HOST/
 
-# ============ E2E TESTS STAGE ============
 e2e_tests:
   stage: e2e
   image: mcr.microsoft.com/playwright:v1.40.0-jammy
