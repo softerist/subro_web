@@ -503,6 +503,7 @@ deploy_staging:
         ServerAliveCountMax 5
         TCPKeepAlive no
         ConnectTimeout 30
+        IPQoS throughput
       EOF
   script:
     - |
