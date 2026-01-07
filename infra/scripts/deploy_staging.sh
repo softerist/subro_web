@@ -107,7 +107,7 @@ log "Verifying Images Exist..."
 for img in "$DOCKER_IMAGE_API" "$DOCKER_IMAGE_WORKER" "$DOCKER_IMAGE_FRONTEND" "$DOCKER_IMAGE_BACKUP"; do
     log "Checking for $img..."
     # Add timeout to prevent hanging on slow registry responses
-    if ! timeout 15s docker manifest inspect "$img" > /dev/null 2>&1; then
+    if ! timeout 30s docker manifest inspect "$img" > /dev/null 2>&1; then
         warn "Image $img not found or registry timeout."
     else
         success "Image $img found"
