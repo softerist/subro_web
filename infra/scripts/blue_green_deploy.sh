@@ -22,24 +22,69 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
+
+# ------------------------------------------------------------------------------
+# Logging Helpers
+# ------------------------------------------------------------------------------
+
+# ANSI color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log() {
+    echo -e "${BLUE}[$(date +'%Y-%m-%dT%H:%M:%S%z')]${NC} $*"
+}
+
+success() {
+    echo -e "${GREEN}[$(date +'%Y-%m-%dT%H:%M:%S%z')] ✓ $*${NC}"
+}
+
+warn() {
+    echo -e "${YELLOW}[$(date +'%Y-%m-%dT%H:%M:%S%z')] ⚠️  $*${NC}"
+}
+
+error() {
+    echo -e "${RED}[$(date +'%Y-%m-%dT%H:%M:%S%z')] ❌ $*${NC}"
+}
+
+section_start() {
+    local section_id=$1
+    local section_title=$2
+    local collapsed=${3:-true}
+    local collapsed_str=""
+    if [ "$collapsed" = "true" ]; then
+        collapsed_str="[collapsed=true]"
+    fi
+    echo -e "\e[0Ksection_start:$(date +%s):${section_id}${collapsed_str}\r\e[0K${BLUE}>>> ${section_title}${NC}"
+    log "Starting: $section_title"
+}
+
+section_end() {
+    local section_id=$1
+    echo -e "\e[0Ksection_end:$(date +%s):${section_id}\r\e[0K"
+}
+
 # Retry helper for docker compose pull (handles registry timeouts)
 docker_compose_pull_with_retry() {
     local max_attempts=3
     local attempt=1
     local wait_time=5
 
-    echo "Pulling Docker images with retry (max $max_attempts attempts)..."
+    log "Pulling Docker images with retry (max $max_attempts attempts)..."
     while [ $attempt -le $max_attempts ]; do
         # Parallel is now default in modern docker compose
         if docker compose "$@" pull; then
-            echo "Docker pull successful!"
+            success "Docker pull successful!"
             return 0
         fi
         if [ $attempt -eq $max_attempts ]; then
-            echo "ERROR: Docker pull failed after $max_attempts attempts."
+            error "Docker pull failed after $max_attempts attempts."
             return 1
         fi
-        echo "Docker pull failed (attempt $attempt/$max_attempts). Retrying in ${wait_time}s..."
+        warn "Docker pull failed (attempt $attempt/$max_attempts). Retrying in ${wait_time}s..."
         sleep $wait_time
         wait_time=$((wait_time * 2))
         attempt=$((attempt + 1))
@@ -47,32 +92,34 @@ docker_compose_pull_with_retry() {
 }
 
 # Ensure Redis and QUIC sysctls are set on host (persistent)
+section_start "prod_sysctl" "Applying Sysctl Tweaks"
 SYSCTL_REDIS_CONF="/etc/sysctl.d/99-redis.conf"
 SYSCTL_CADDY_CONF="/etc/sysctl.d/99-caddy.conf"
 if [ -w "/etc" ]; then
     if [ ! -f "$SYSCTL_REDIS_CONF" ] || ! grep -q "^vm.overcommit_memory=1$" "$SYSCTL_REDIS_CONF"; then
-        echo "Applying vm.overcommit_memory=1 to $SYSCTL_REDIS_CONF"
+        log "Applying vm.overcommit_memory=1 to $SYSCTL_REDIS_CONF"
         echo "vm.overcommit_memory=1" > "$SYSCTL_REDIS_CONF"
     fi
     if [ ! -f "$SYSCTL_CADDY_CONF" ] \
         || ! grep -q "^net.core.rmem_max=7500000$" "$SYSCTL_CADDY_CONF" \
         || ! grep -q "^net.core.wmem_max=7500000$" "$SYSCTL_CADDY_CONF"; then
-        echo "Applying QUIC UDP buffer sysctls to $SYSCTL_CADDY_CONF"
+        log "Applying QUIC UDP buffer sysctls to $SYSCTL_CADDY_CONF"
         printf "%s\n" "net.core.rmem_max=7500000" "net.core.wmem_max=7500000" > "$SYSCTL_CADDY_CONF"
     fi
     sysctl --system >/dev/null 2>&1 || true
 else
-    echo "Warning: Cannot write to /etc/sysctl.d (insufficient permissions)."
-    echo "Please set vm.overcommit_memory=1, net.core.rmem_max=7500000, net.core.wmem_max=7500000 on the host."
+    warn "Cannot write to /etc/sysctl.d (insufficient permissions)."
+    warn "Please set vm.overcommit_memory=1, net.core.rmem_max=7500000, net.core.wmem_max=7500000 on the host."
 fi
+section_end "prod_sysctl"
 
 # 0. Clean up potential conflicting manual networks (optional, for safety)
 # 0.5 Stop Development Stack (if running)
-echo "--- Stopping Development Stack (if running) ---"
+log "Stopping Development Stack (if running)..."
 docker compose -p subapp_dev -f "$DOCK_DIR/docker-compose.yml" -f "$DOCK_DIR/docker-compose.override.yml" down 2>/dev/null || true
 
 # 1. Ensure Infrastructure (Gateway + Data) is running
-echo "--- Ensuring Infrastucture is Up ---"
+section_start "prod_infra" "Ensuring Infrastucture is Up"
 if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
     docker_compose_pull_with_retry --env-file "$ENV_FILE" -p infra \
         -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" -f "$COMPOSE_IMAGES"
@@ -82,6 +129,7 @@ else
     # Build locally if no prebuilt images
     docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --build
 fi
+section_end "prod_infra"
 
 # 1. Determine Active Color
 # We check if 'blue-api-1' is running. If so, next is green.
@@ -93,14 +141,14 @@ else
     NEW_COLOR="blue"
 fi
 
-echo "--- Deployment Started ---"
-echo "Current Color: $CURRENT_COLOR"
-echo "Deploying New Color: $NEW_COLOR"
+log "--- Deployment Started ---"
+log "Current Color: $CURRENT_COLOR"
+log "Deploying New Color: $NEW_COLOR"
 
 # 2. Deploy New Color
-echo "--- Starting $NEW_COLOR Stack ---"
+section_start "prod_deploy" "Starting $NEW_COLOR Stack"
 if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
-    echo "--- Using pre-built images from registry ---"
+    log "Using pre-built images from registry..."
     # Pull images explicitly with retry (using overlay)
     docker_compose_pull_with_retry --env-file "$ENV_FILE" -p "$NEW_COLOR" \
         -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES"
@@ -112,9 +160,10 @@ else
     # Build locally
     docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" up --build -d
 fi
+section_end "prod_deploy"
 
 # 3. Wait for Health
-echo "--- Waiting for Health Checks ($NEW_COLOR) ---"
+section_start "prod_health" "Waiting for Health Checks ($NEW_COLOR)"
 # Loop to check health of api container (faster polling)
 API_CONTAINER="$NEW_COLOR-api-1"
 MAX_RETRIES=40  # 40 * 3s = 2 min max
@@ -125,20 +174,19 @@ while [ $COUNT -lt $MAX_RETRIES ]; do
     STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$API_CONTAINER" 2>/dev/null || echo "starting")
     if [ "$STATUS" == "healthy" ]; then
         HEALTHY=true
-        echo "Container $API_CONTAINER is healthy!"
+        success "Container $API_CONTAINER is healthy!"
         break
     fi
     # Only print every 5th check to reduce noise
     if [ $((COUNT % 5)) -eq 0 ]; then
-        echo "Container $API_CONTAINER status: $STATUS ($COUNT/$MAX_RETRIES)"
+        log "Container $API_CONTAINER status: $STATUS ($COUNT/$MAX_RETRIES)"
     fi
     sleep 3  # Faster polling (was 5s)
     COUNT=$((COUNT+1))
 done
 
-
 if [ "$HEALTHY" = false ]; then
-    echo "Error: New deployment ($NEW_COLOR) failed health check. Aborting."
+    error "New deployment ($NEW_COLOR) failed health check. Aborting."
     echo "Logs:"
     docker logs --tail 50 "$API_CONTAINER"
     # Cleanup new deployment
@@ -149,20 +197,23 @@ if [ "$HEALTHY" = false ]; then
     fi
     exit 1
 fi
+section_end "prod_health"
 
-echo "--- New Color ($NEW_COLOR) is Healthy ---"
+success "New Color ($NEW_COLOR) is Healthy"
 
 # 3.4 Stop OLD worker BEFORE traffic switch (prevent job duplication)
+# We do this logic in the open, small enough not to need a section usually, but let's be cleaner
 if [ -n "$CURRENT_COLOR" ] && [ "$CURRENT_COLOR" != "$NEW_COLOR" ]; then
-    echo "--- Stopping old worker to prevent job duplication ---"
+    log "Stopping old worker to prevent job duplication..."
     docker compose --env-file "$ENV_FILE" -p "$CURRENT_COLOR" -f "$COMPOSE_APP" stop worker || true
 fi
 
 # 3.5 Run Database Migrations
-echo "--- Running Database Migrations ---"
+section_start "prod_migrate" "Running Database Maintenance"
+log "Running Database Migrations..."
 # We run migration using the new API container
 if ! docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" exec -T api poetry run alembic upgrade head; then
-    echo "Error: Database migration failed. Aborting."
+    error "Database migration failed. Aborting."
     if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
         docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" down
     else
@@ -170,17 +221,17 @@ if ! docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" exe
     fi
     exit 1
 fi
-echo "--- Migrations Completed ---"
+success "Migrations Completed"
 
 # 3.6 Re-encrypt Encrypted Fields (key rotation)
 if [ "${REENCRYPT_ON_DEPLOY:-1}" != "0" ]; then
-    echo "--- Re-encrypting Encrypted Fields (if rotation active) ---"
+    log "Re-encrypting Encrypted Fields (if rotation active)..."
     REENCRYPT_ARGS=()
     if [ "${REENCRYPT_FORCE:-0}" = "1" ]; then
         REENCRYPT_ARGS+=("--force")
     fi
     if ! docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" exec -T api python /app/scripts/reencrypt_encrypted_fields.py "${REENCRYPT_ARGS[@]}"; then
-        echo "Error: Re-encryption failed. Aborting."
+        error "Re-encryption failed. Aborting."
         if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
             docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" down
         else
@@ -188,24 +239,25 @@ if [ "${REENCRYPT_ON_DEPLOY:-1}" != "0" ]; then
         fi
         exit 1
     fi
-    echo "--- Re-encryption Step Completed ---"
+    success "Re-encryption Step Completed"
 else
-    echo "--- Re-encryption Skipped (REENCRYPT_ON_DEPLOY=0) ---"
+    log "Re-encryption Skipped (REENCRYPT_ON_DEPLOY=0)"
 fi
 
 # 3.7 Sync Database Version
-echo "--- Syncing Database Version ---"
+log "Syncing Database Version..."
 if ! docker compose --env-file "$ENV_FILE" -p "$NEW_COLOR" -f "$COMPOSE_APP" exec -T api python /app/scripts/sync_db_version.py; then
-    echo "Warning: Database version sync failed. Continuing deployment..."
+    warn "Database version sync failed. Continuing deployment..."
 fi
-echo "--- Database Version Sync Completed ---"
+success "Database Version Sync Completed"
+section_end "prod_migrate"
 
 # 4. Switch Traffic (Update Caddy)
-echo "--- Switching Traffic to $NEW_COLOR ---"
+section_start "prod_switch" "Switching Traffic to $NEW_COLOR"
 
 TEMPLATE="$DOCK_DIR/Caddyfile.template"
 if [ ! -f "$TEMPLATE" ]; then
-    echo "Creating Caddyfile.template from Caddyfile.prod..."
+    log "Creating Caddyfile.template from Caddyfile.prod..."
     cp "$CADDYFILE_PROD" "$TEMPLATE"
 fi
 
@@ -215,32 +267,34 @@ sed "s/{{UPSTREAM_API}}/$NEW_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$NEW_COLOR-f
 # Reload Caddy (in infra project)
 docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T caddy caddy reload --config /etc/caddy/Caddyfile.prod
 
-echo "--- Traffic Switched ---"
+success "Traffic Switched"
+section_end "prod_switch"
 
 # 5. Cleanup Old Color
+section_start "prod_cleanup" "Cleanup Old Color"
 if [ -n "$CURRENT_COLOR" ]; then
     # Double check we are not killing the new color
     if [ "$CURRENT_COLOR" != "$NEW_COLOR" ]; then
-        echo "--- Stopping Old Color ($CURRENT_COLOR) ---"
+        log "Stopping Old Color ($CURRENT_COLOR)..."
         docker compose --env-file "$ENV_FILE" -p "$CURRENT_COLOR" -f "$COMPOSE_APP" down
     fi
 fi
 
-echo "--- Deployment Complete ($NEW_COLOR Active) ---"
-# 6. Conservative Pruning (backgrounded to not block deployment)
-echo "--- Pruning old images in background ---"
+log "Pruning old images in background..."
 # Remove dangling images only, preserve tagged images for rollback (older than 1 week)
 (docker image prune -f --filter "until=168h" >/dev/null 2>&1 &)
+section_end "prod_cleanup"
 
 # 7. Post-Deployment Hooks
-echo "--- Running Post-Deployment Hooks ---"
+section_start "prod_hooks" "Running Post-Deployment Hooks"
 if [ -f "$INFRA_DIR/../backend/scripts/qbittorrent-nox-webhook.sh" ]; then
-    echo "Ensuring webhook script is executable..."
+    log "Ensuring webhook script is executable..."
     chmod +x "$INFRA_DIR/../backend/scripts/qbittorrent-nox-webhook.sh"
-    echo "Ensuring log permissions for qbittorrent-nox..."
+    log "Ensuring log permissions for qbittorrent-nox..."
     mkdir -p "$INFRA_DIR/../logs"
     chown -R qbittorrent-nox:qbittorrent-nox "$INFRA_DIR/../logs" 2>/dev/null || true
     chmod -R 775 "$INFRA_DIR/../logs"
 fi
+section_end "prod_hooks"
 
-echo "--- Deployment Complete ($NEW_COLOR Active) ---"
+success "Deployment Complete ($NEW_COLOR Active)"

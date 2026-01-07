@@ -496,42 +496,51 @@ deploy_staging:
     - rm -f /tmp/ssh_key
     - mkdir -p ~/.ssh
     - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+    # SSH config for robust long-running connections
+    - |
+      cat >> ~/.ssh/config <<EOF
+      Host *
+        ServerAliveInterval 30
+        ServerAliveCountMax 5
+        TCPKeepAlive yes
+        ConnectionTimeout 10
+      EOF
   script:
     - |
       set -euo pipefail
-      ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+      ssh -o BatchMode=yes -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<'DEPLOY_SCRIPT'
         set -euo pipefail
 
-        STAGING_DEPLOY_DIR=\"\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}\"
-        echo \"Using staging deploy dir: \$STAGING_DEPLOY_DIR\"
+        STAGING_DEPLOY_DIR="${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
+        echo "Using staging deploy dir: $STAGING_DEPLOY_DIR"
 
         # Ensure staging directory exists
-        mkdir -p \"\$STAGING_DEPLOY_DIR\"
-        cd \"\$STAGING_DEPLOY_DIR\"
+        mkdir -p "$STAGING_DEPLOY_DIR"
+        cd "$STAGING_DEPLOY_DIR"
 
         # Clone or update repo
         if [ ! -d .git ]; then
-          git clone --depth 1 git@$CI_SERVER_HOST:$CI_PROJECT_PATH.git .
+          git clone --depth 1 "git@${CI_SERVER_HOST}:${CI_PROJECT_PATH}.git" .
         else
-          git fetch --depth 1 origin $CI_COMMIT_SHA
-          git checkout -f $CI_COMMIT_SHA
+          git fetch --depth 1 origin "${CI_COMMIT_SHA}"
+          git checkout -f "${CI_COMMIT_SHA}"
           git clean -fd
         fi
-        echo \"Checked out commit: \$(git rev-parse HEAD)\"
+        echo "Checked out commit: $(git rev-parse HEAD)"
 
         # Setup staging environment
         mkdir -p infra
-        echo '$PROD_ENV_FILE' | base64 -d > infra/.env.staging
+        echo '${PROD_ENV_FILE}' | base64 -d > infra/.env.staging
         chmod 600 infra/.env.staging
 
         # Login to registry
-        echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY
+        echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin "${CI_REGISTRY}"
 
         # Set image tags
-        export DOCKER_IMAGE_API='$DOCKER_IMAGE_API'
-        export DOCKER_IMAGE_WORKER='$DOCKER_IMAGE_WORKER'
-        export DOCKER_IMAGE_FRONTEND='$DOCKER_IMAGE_FRONTEND'
-        export DOCKER_IMAGE_BACKUP='$DOCKER_IMAGE_BACKUP'
+        export DOCKER_IMAGE_API='${DOCKER_IMAGE_API}'
+        export DOCKER_IMAGE_WORKER='${DOCKER_IMAGE_WORKER}'
+        export DOCKER_IMAGE_FRONTEND='${DOCKER_IMAGE_FRONTEND}'
+        export DOCKER_IMAGE_BACKUP='${DOCKER_IMAGE_BACKUP}'
         export BACKUP_PREFIX=staging_
         export USE_PREBUILT_IMAGES=1
         export DEPLOY_ENV=staging
@@ -540,8 +549,8 @@ deploy_staging:
         chmod +x ./infra/scripts/*.sh
         ./infra/scripts/deploy_staging.sh
 
-        docker logout $CI_REGISTRY
-      "
+        docker logout "${CI_REGISTRY}"
+      DEPLOY_SCRIPT
   environment:
     name: staging
     url: https://staging.$SSH_HOST/
@@ -628,6 +637,10 @@ cleanup_staging:
   needs:
     - job: e2e_tests
       artifacts: false
+    - job: deploy_staging
+      artifacts: false
+    - job: verify_staging
+      artifacts: false
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: always # Run even if e2e_tests fail
@@ -643,13 +656,24 @@ cleanup_staging:
     - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
   script:
     - |
-      echo "Stopping staging environment..."
-      ssh -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+      ssh -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<'CLEANUP_SCRIPT'
         set -euo pipefail
-        STAGING_DIR=\"\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}\"
 
-        if [ -d \"\$STAGING_DIR\" ]; then
-          cd \"\$STAGING_DIR\"
+        # ANSI color codes for inline script
+        BLUE='\033[0;34m'
+        GREEN='\033[0;32m'
+        NC='\033[0m'
+
+        log() { echo -e "${BLUE}[$(date +'%Y-%m-%dT%H:%M:%S%z')]${NC} $*"; }
+        success() { echo -e "${GREEN}[$(date +'%Y-%m-%dT%H:%M:%S%z')] ✓ $*${NC}"; }
+
+        STAGING_DIR="${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
+
+        log "Starting cleanup for staging environment..."
+        log "Target directory: $STAGING_DIR"
+
+        if [ -d "$STAGING_DIR" ]; then
+          cd "$STAGING_DIR"
 
           # Stop staging containers (app stack) and remove volumes for true ephemeral state
           docker compose -p subro_staging \
@@ -657,11 +681,11 @@ cleanup_staging:
             -f infra/docker/compose.prod.yml \
             down --remove-orphans --volumes 2>/dev/null || true
 
-          echo '✓ Staging environment stopped and cleaned'
+          success 'Staging environment stopped and cleaned'
         else
-          echo 'Staging directory not found, nothing to clean up'
+          log 'Staging directory not found, nothing to clean up'
         fi
-      "
+      CLEANUP_SCRIPT
   allow_failure: true # Don't block pipeline if cleanup fails
 
 # ============ DEPLOY STAGE ============
