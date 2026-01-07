@@ -335,7 +335,7 @@ backend_tests:
 
 frontend_tests:
   stage: test
-  image: node:20.18-alpine # Pin version for reproducibility
+  image: node:22.13-alpine
   needs: []
   timeout: 10m
   variables:
