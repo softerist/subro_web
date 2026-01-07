@@ -616,7 +616,7 @@ deploy_staging:
 
         # Docker login with retry (handles registry timeouts)
         for i in 1 2 3; do
-          if echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin '${CI_REGISTRY}' 2>/dev/null; then
+          if echo "${REGISTRY_PASSWORD}" | docker login -u "${REGISTRY_USER}" --password-stdin "${CI_REGISTRY}" 2>/dev/null; then
             echo 'Docker login successful'
             break
           fi
@@ -633,7 +633,7 @@ deploy_staging:
         echo 'Waiting 10 seconds for registry propagation...'
         sleep 10
 
-        for img in '${DOCKER_IMAGE_API}' '${DOCKER_IMAGE_WORKER}' '${DOCKER_IMAGE_FRONTEND}' '${DOCKER_IMAGE_BACKUP}'; do
+        for img in "${DOCKER_IMAGE_API}" "${DOCKER_IMAGE_WORKER}" "${DOCKER_IMAGE_FRONTEND}" "${DOCKER_IMAGE_BACKUP}"; do
           echo "Verifying: \$img"
           for attempt in 1 2 3; do
             if docker manifest inspect "\$img" > /dev/null 2>&1; then
@@ -642,7 +642,7 @@ deploy_staging:
             fi
             if [ \$attempt -eq 3 ]; then
               echo "❌ ERROR: Image not found after 3 attempts: \$img"
-              docker logout '${CI_REGISTRY}'
+              docker logout "${CI_REGISTRY}"
               exit 1
             fi
             echo "Image not found yet (attempt \$attempt/3), retrying in 10s..."
@@ -650,7 +650,7 @@ deploy_staging:
           done
         done
 
-        docker logout '${CI_REGISTRY}'
+        docker logout "${CI_REGISTRY}"
       VERIFY_IMAGES
 
 
