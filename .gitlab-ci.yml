@@ -438,7 +438,7 @@ sast_scan:
   artifacts:
     reports:
       sast: semgrep.sarif
-    expire_in: 1 days
+    expire_in: 2 days
     when: always
   allow_failure: false
   retry: 1
