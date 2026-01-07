@@ -587,34 +587,43 @@ verify_staging:
     - |
       echo "Verifying staging deployment..."
       echo ""
-      echo "=== DEBUG: Testing different endpoints ==="
 
-      # Test 1: /api/v1/ with verbose output
-      echo "--- Test: /api/v1/ ---"
-      curl -k -v --max-time 10 "https://staging.$SSH_HOST/api/v1/" 2>&1 | head -50 || true
-      echo ""
+      # Retry loop - staging containers may still be starting
+      MAX_ATTEMPTS=12  # 12 * 10s = 2 minutes
+      for attempt in $(seq 1 $MAX_ATTEMPTS); do
+        echo "=== Verification attempt $attempt/$MAX_ATTEMPTS ==="
 
-      # Test 2: Try a simple curl to see HTTP response
-      echo "--- Test: Simple response check ---"
-      HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "000")
-      RESPONSE=$(curl -k -s --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "")
-      echo "HTTP Code: $HTTP_CODE"
-      echo "Response length: ${#RESPONSE}"
-      echo "Response: >>$RESPONSE<<"
-      echo ""
+        HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "000")
+        RESPONSE=$(curl -k -s --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "")
 
-      # Check if API is responding with valid content
-      if echo "$RESPONSE" | grep -qE '"(version|message)"'; then
-        echo "✅ Staging API is responding correctly!"
-        exit 0
-      fi
+        echo "HTTP Code: $HTTP_CODE"
+        echo "Response: >>$RESPONSE<<"
+
+        # Check if API is responding with valid content
+        if echo "$RESPONSE" | grep -qE '"(version|message)"'; then
+          echo "✅ Staging API is responding correctly!"
+          exit 0
+        fi
+
+        # Check for common error conditions
+        if [ "$HTTP_CODE" = "502" ] || [ "$HTTP_CODE" = "503" ]; then
+          echo "Containers not ready yet (HTTP $HTTP_CODE), waiting 10s..."
+        elif [ "$HTTP_CODE" = "200" ] && [ -z "$RESPONSE" ]; then
+          echo "Empty response - Caddy may not be routing to staging yet, waiting 10s..."
+        else
+          echo "Unexpected response, waiting 10s..."
+        fi
+
+        sleep 10
+      done
 
       echo ""
-      echo "⚠️  WARNING: External Nginx is intercepting requests and returning empty 200."
-      echo "    The staging containers may be running fine, but requests don't reach them."
-      echo "    Please check your external Nginx config for staging.secure.go.ro"
+      echo "❌ Staging verification failed after $MAX_ATTEMPTS attempts"
       echo ""
-      echo "    To fix: Update Nginx to proxy_pass to Caddy (port 8080)"
+      echo "Possible causes:"
+      echo "  - Staging containers failed to start"
+      echo "  - Caddy not configured for staging.secure.go.ro"
+      echo "  - Network/firewall issues"
       exit 1
   environment:
     name: staging
