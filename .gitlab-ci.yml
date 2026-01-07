@@ -401,9 +401,9 @@ scan_image_vulns:
 sast_scan:
   stage: scan
   image:
-    name: returntocorp/semgrep:1.46.0 # Pin version to avoid re-pulling :latest
+    name: returntocorp/semgrep:1.90.0
     entrypoint: [""]
-  timeout: 10m # Prevent indefinite hanging
+  timeout: 10m
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
     - when: on_success
