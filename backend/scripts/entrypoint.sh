@@ -17,14 +17,14 @@ echo "Entrypoint: Setting appuser UID to $PUID and GID to $PGID..."
 if ! getent group appuser > /dev/null 2>&1; then
     groupadd -g "$PGID" appuser
 else
-    groupmod -o -g "$PGID" appuser
+    groupmod -o -g "$PGID" appuser || true
 fi
 
 # Ensure user exists with correct UID
 if ! getent passwd appuser > /dev/null 2>&1; then
     useradd -u "$PUID" -g "$PGID" -d /app appuser
 else
-    usermod -o -u "$PUID" appuser
+    usermod -o -u "$PUID" appuser || true
 fi
 
 # Ensure critical directories are owned by appuser
