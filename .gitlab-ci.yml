@@ -511,20 +511,20 @@ deploy_staging:
         export COMPOSE_HTTP_TIMEOUT="${COMPOSE_HTTP_TIMEOUT:-300}"
 
         # Docker login with retry (3 attempts)
-        echo \\\"Logging into Docker Registry...\\\"
+        echo \"Logging into Docker Registry...\"
         if ! echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY; then
-          echo \\\"Login failed, retrying (2/3)...\\\"
+          echo \"Login failed, retrying (2/3)...\"
           sleep 5
           if ! echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY; then
-            echo \\\"Login failed, retrying (3/3)...\\\"
+            echo \"Login failed, retrying (3/3)...\"
             sleep 5
             if ! echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY; then
-              echo \\\"ERROR: Docker login failed after 3 attempts.\\\"
+              echo \"ERROR: Docker login failed after 3 attempts.\"
               exit 1
             fi
           fi
         fi
-        echo \\\"Docker login successful!\\\"
+        echo \"Docker login successful!\"
 
         # Set image tags for remote environment
         export DOCKER_IMAGE_API='$DOCKER_IMAGE_API'
