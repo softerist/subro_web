@@ -473,7 +473,7 @@ deploy_staging:
   stage: staging
   image: alpine:3.20
   resource_group: staging
-  timeout: 10m
+  timeout: 15m
   variables:
     STAGING_DEPLOY_DIR: /opt/subro_web_staging
   needs:

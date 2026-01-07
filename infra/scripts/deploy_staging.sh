@@ -88,10 +88,8 @@ while [ $COUNT -lt $MAX_RETRIES ]; do
         echo "Container $API_CONTAINER is healthy!"
         break
     fi
-    # Only print every 5th check
-    if [ $((COUNT % 5)) -eq 0 ]; then
-        echo "Container $API_CONTAINER status: $STATUS ($COUNT/$MAX_RETRIES)"
-    fi
+    # Print every iteration for better debugging
+    echo "Container $API_CONTAINER status: $STATUS ($COUNT/$MAX_RETRIES)"
     sleep 3  # Faster polling
     COUNT=$((COUNT+1))
 done
