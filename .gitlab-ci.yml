@@ -574,7 +574,7 @@ deploy_staging:
         fi'
 
       # 1. Prepare Directory & Checkout
-      ssh "$SSH_HOST" bash -s <<'CHECKOUT_SCRIPT'
+      ssh "$SSH_HOST" bash -s <<CHECKOUT_SCRIPT
         set -euo pipefail
         mkdir -p "${STAGING_DEPLOY_DIR}"
         cd "${STAGING_DEPLOY_DIR}"
@@ -585,9 +585,9 @@ deploy_staging:
           git checkout -f "${CI_COMMIT_SHA}"
           git clean -fd
         fi
-        CURRENT_COMMIT=$(git rev-parse HEAD)
-        echo "Checked out commit: $CURRENT_COMMIT"
-        if [ "$CURRENT_COMMIT" != "${CI_COMMIT_SHA}" ]; then
+        CURRENT_COMMIT=\$(git rev-parse HEAD)
+        echo "Checked out commit: \$CURRENT_COMMIT"
+        if [ "\$CURRENT_COMMIT" != "${CI_COMMIT_SHA}" ]; then
           echo "❌ ERROR: Checkout verification failed!"
           exit 1
         fi
