@@ -514,11 +514,10 @@ deploy_staging:
     - |
       cat >> ~/.ssh/config <<EOF
       Host *
-        ServerAliveInterval 15
-        ServerAliveCountMax 5
+        ServerAliveInterval 5
+        ServerAliveCountMax 10
         TCPKeepAlive yes
         ConnectTimeout 30
-        IPQoS throughput
       EOF
   script:
     - |
@@ -533,8 +532,8 @@ deploy_staging:
         fi'
 
       # 1. Prepare Directory & Checkout
-      ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
-          -o TCPKeepAlive=yes -o ConnectTimeout=30 -o IPQoS=throughput \
+      ssh -o BatchMode=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=10 \
+          -o TCPKeepAlive=yes -o ConnectTimeout=30 \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
         set -euo pipefail
         mkdir -p \"${STAGING_DEPLOY_DIR}\"
@@ -557,8 +556,8 @@ deploy_staging:
       # 2. Verify Docker images exist before deploying
       echo ""
       echo "=== Verifying Docker Images ==="
-      ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
-          -o TCPKeepAlive=yes -o ConnectTimeout=30 -o IPQoS=throughput \
+      ssh -o BatchMode=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=10 \
+          -o TCPKeepAlive=yes -o ConnectTimeout=30 \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
         set -euo pipefail
 
@@ -591,8 +590,8 @@ deploy_staging:
       "
 
       # 3. Setup Env & Deploy
-      ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
-          -o TCPKeepAlive=yes -o ConnectTimeout=30 -o IPQoS=throughput \
+      ssh -o BatchMode=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=10 \
+          -o TCPKeepAlive=yes -o ConnectTimeout=30 \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
         STAGING_DEPLOY_DIR="${STAGING_DEPLOY_DIR}"
@@ -765,7 +764,7 @@ cleanup_staging:
     - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
   script:
     - |
-      ssh -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<CLEANUP_SCRIPT
+      ssh -o BatchMode=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=10 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<CLEANUP_SCRIPT
         set -euo pipefail
 
         # ANSI color codes for inline script
