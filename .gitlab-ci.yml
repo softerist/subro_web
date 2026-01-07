@@ -297,8 +297,9 @@ backend_tests:
 
 frontend_tests:
   stage: test
-  image: node:20-alpine
+  image: node:20.18-alpine # Pin version for reproducibility
   needs: []
+  timeout: 10m
   variables:
     NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/frontend/.npm"
     VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:8000/api/v1}"
@@ -319,15 +320,16 @@ frontend_tests:
     - npm config set cache .npm
   script:
     - npm ci --prefer-offline --no-audit --no-fund
-    - npm test
+    - npm test -- --maxWorkers=4 --coverage=false
 
 # ============ SCAN STAGE ============
 scan_image_vulns:
   stage: scan
   image:
-    name: aquasec/trivy:0.53.0
+    name: aquasec/trivy:0.58.0 # Updated from 0.53.0
     entrypoint: [""]
   needs: [build_api, build_worker, build_frontend]
+  timeout: 15m
   variables:
     TRIVY_SEVERITY: "HIGH,CRITICAL"
   rules:
@@ -336,20 +338,44 @@ scan_image_vulns:
         TRIVY_SEVERITY: "CRITICAL"
     - when: on_success
   cache:
-    key: trivy-cache
+    key: trivy-cache-v2
     paths: [.trivycache/]
   script:
     - |
       set -euo pipefail
       export TRIVY_USERNAME="$CI_REGISTRY_USER"
       export TRIVY_PASSWORD="$CI_REGISTRY_PASSWORD"
-      for img in "$DOCKER_IMAGE_API" "$DOCKER_IMAGE_FRONTEND" "$DOCKER_IMAGE_WORKER"; do
+
+      # Scan all images in parallel using background jobs
+      scan_image() {
+        local img="$1"
         echo "Scanning $img..."
         trivy image --cache-dir .trivycache --exit-code 1 \
-          --severity "$TRIVY_SEVERITY" --timeout 10m --no-progress \
+          --severity "$TRIVY_SEVERITY" --timeout 5m --no-progress \
           --skip-files "/app/secrets/google-api-config.json" \
+          --scanners vuln \
           "$img"
-      done
+      }
+
+      # Run scans in parallel
+      scan_image "$DOCKER_IMAGE_API" &
+      PID1=$!
+      scan_image "$DOCKER_IMAGE_FRONTEND" &
+      PID2=$!
+      scan_image "$DOCKER_IMAGE_WORKER" &
+      PID3=$!
+
+      # Wait for all and check exit codes
+      FAILED=0
+      wait $PID1 || FAILED=1
+      wait $PID2 || FAILED=1
+      wait $PID3 || FAILED=1
+
+      if [ $FAILED -eq 1 ]; then
+        echo "One or more image scans failed!"
+        exit 1
+      fi
+      echo "All image scans passed!"
   allow_failure: false
   retry: 1
 
