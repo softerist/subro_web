@@ -518,6 +518,9 @@ deploy_staging:
     - |
       set -euo pipefail
 
+      # 0. Ensure server-side SSH keepalives are configured (idempotent)
+      ssh -o BatchMode=yes -o ConnectTimeout=30 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" 'if [ ! -f /etc/ssh/sshd_config.d/keepalive.conf ]; then printf "%s\n" "# CI/CD keepalives" "ClientAliveInterval 15" "ClientAliveCountMax 10" "TCPKeepAlive yes" > /etc/ssh/sshd_config.d/keepalive.conf && (systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true) && echo "SSH keepalives configured"; fi'
+
       # 1. Prepare Directory & Checkout
       ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
           -o TCPKeepAlive=yes -o ConnectTimeout=30 -o IPQoS=throughput \
@@ -534,7 +537,6 @@ deploy_staging:
         fi
         echo \"Checked out commit: \$(git rev-parse HEAD)\"
       "
-
       # 2. Setup Env & Deploy
       ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
           -o TCPKeepAlive=yes -o ConnectTimeout=30 -o IPQoS=throughput \
