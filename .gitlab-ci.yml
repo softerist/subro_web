@@ -242,11 +242,11 @@ backend_tests:
   timeout: 20m
   interruptible: false # Prevent cancellation during test/cleanup
   variables:
-    # Database config for test container (hardcoded for CI)
-    POSTGRES_USER: "admin"
-    POSTGRES_PASSWORD: "ci_test_password_change_in_production"
-    POSTGRES_DB: "subappdb"
-    POSTGRES_DB_TEST: "subappdb_pytest"
+    # Database config for test container - use CI/CD variables with fallback defaults
+    POSTGRES_USER: "${CI_TEST_POSTGRES_USER:-admin}"
+    POSTGRES_PASSWORD: "${CI_TEST_POSTGRES_PASSWORD:-ci_test_password}"
+    POSTGRES_DB: "${CI_TEST_POSTGRES_DB:-subappdb}"
+    POSTGRES_DB_TEST: "${CI_TEST_POSTGRES_DB_TEST:-subappdb_pytest}"
   script:
     - apk add --no-cache bash
     - |
@@ -254,8 +254,8 @@ backend_tests:
       # Define images using AWS ECR Public Gallery (reliable mirror)
       IMAGE_POSTGRES="public.ecr.aws/docker/library/postgres:16-alpine"
       IMAGE_REDIS="public.ecr.aws/docker/library/redis:7-alpine"
-      # curl is small enough to risk Docker Hub for now, or use alpine+curl
-      IMAGE_CURL="curlimages/curl:8.7.1"
+      # Use alpine with curl to avoid Docker Hub rate limits
+      IMAGE_CURL="public.ecr.aws/docker/library/alpine:3.20"
 
       DEPENDENCIES="$DOCKER_IMAGE_API_TEST $IMAGE_POSTGRES $IMAGE_REDIS $IMAGE_CURL"
       for img in $DEPENDENCIES; do
@@ -319,7 +319,7 @@ backend_tests:
     # Wait for API to be healthy
     - |
       for i in $(seq 1 30); do
-        if docker run --rm --network testnet curlimages/curl:8.7.1 -fsS http://api:8000/health 2>/dev/null; then
+        if docker run --rm --network testnet alpine:3.20 sh -c 'apk add --no-cache -q curl && curl -fsS http://api:8000/health' 2>/dev/null; then
           echo "API healthy!"
           break
         fi
@@ -444,7 +444,7 @@ sast_scan:
 secret_scan:
   stage: scan
   image:
-    name: aquasec/trivy:0.53.0
+    name: aquasec/trivy:0.58.0
     entrypoint: [""]
   script:
     - |
@@ -452,6 +452,7 @@ secret_scan:
         --skip-dirs ".git,__pycache__,.venv,venv,node_modules,.ruff_cache,.pytest_cache" \
         --exit-code 1 --no-progress --timeout 5m .
   allow_failure: false
+  retry: 1
 
 # ============ STAGING STAGE ============
 deploy_staging:
@@ -462,9 +463,13 @@ deploy_staging:
     STAGING_DEPLOY_DIR: /opt/subro_web_staging
   needs:
     - job: backend_tests
+      artifacts: false
     - job: scan_image_vulns
+      artifacts: false
     - job: sast_scan
+      artifacts: false
     - job: secret_scan
+      artifacts: false
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: on_success
@@ -670,9 +675,13 @@ cleanup_staging:
   resource_group: $CI_ENVIRONMENT_NAME # Serializes deploys per environment
   needs:
     - job: backend_tests
+      artifacts: false
     - job: scan_image_vulns
+      artifacts: false
     - job: sast_scan
+      artifacts: false
     - job: secret_scan
+      artifacts: false
   before_script:
     - set -euo pipefail
     - apk add --no-cache bash openssh-client
@@ -856,6 +865,11 @@ notify_success:
 notify_failure:
   stage: notify
   image: alpine:3.20
+  needs:
+    - job: deploy_prod
+      artifacts: false
+    - job: verify_prod
+      artifacts: false
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $SLACK_WEBHOOK_URL'
       when: on_failure
@@ -885,18 +899,18 @@ cleanup_registry:
       # This uses GitLab Container Registry API
       for repo in api worker frontend; do
         echo "Checking $repo repository..."
-        TAGS=$(curl -s --header "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
+        TAGS=$(curl -s --header "JOB-TOKEN: $CI_JOB_TOKEN" \
           "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories" | \
           jq -r ".[] | select(.name==\"$repo\") | .id" || true)
 
         if [ -n "$TAGS" ]; then
           echo "Found repository ID: $TAGS for $repo"
           # List and delete old tags (keeping last 10)
-          curl -s --header "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
+          curl -s --header "JOB-TOKEN: $CI_JOB_TOKEN" \
             "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories/$TAGS/tags" | \
             jq -r '.[10:] | .[].name' | while read tag; do
               echo "Deleting old tag: $tag"
-              curl -s --request DELETE --header "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
+              curl -s --request DELETE --header "JOB-TOKEN: $CI_JOB_TOKEN" \
                 "$CI_API_V4_URL/projects/$CI_PROJECT_ID/registry/repositories/$TAGS/tags/$tag" || true
             done
         fi
