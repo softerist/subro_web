@@ -197,4 +197,11 @@ section_start "stage_cleanup" "Pruning old Docker images (background)"
 (docker image prune -af --filter "until=168h" >/dev/null 2>&1 &)
 section_end "stage_cleanup"
 
+if [ -n "${DEPLOY_COMMIT_SHA:-}" ]; then
+    echo "$DEPLOY_COMMIT_SHA" > "$INFRA_DIR/.deploy_sha"
+    log "Recorded deployed commit: $DEPLOY_COMMIT_SHA"
+else
+    warn "DEPLOY_COMMIT_SHA not set; deploy marker not written."
+fi
+
 success "Staging Deployment Complete"
