@@ -43,6 +43,8 @@ stages:
 
 # ============ LINT STAGE ============
 lint_backend:
+  retry: 1
+  timeout: 5m
   stage: lint
   image: python:3.12-slim
   before_script:
@@ -58,6 +60,8 @@ lint_backend:
     - if: $CI_COMMIT_BRANCH == "main"
 
 lint_frontend:
+  retry: 1
+  timeout: 5m
   stage: lint
   image: node:20-alpine
   before_script:
@@ -166,6 +170,8 @@ ci_debug_env:
 
 build_api:
   extends: .build_template
+  retry: 1
+  timeout: 15m
   variables:
     SERVICE: api
     DOCKER_IMAGE: $DOCKER_IMAGE_API
@@ -191,6 +197,8 @@ build_api:
         "$CONTEXT"
 
 build_api_test:
+  retry: 1
+  timeout: 15m
   extends: .build_template
   variables:
     SERVICE: api-test
@@ -217,6 +225,8 @@ build_api_test:
         "$CONTEXT"
 
 build_worker:
+  retry: 1
+  timeout: 15m
   extends: .build_template
   variables:
     SERVICE: worker
@@ -243,6 +253,8 @@ build_worker:
         "$CONTEXT"
 
 build_frontend:
+  retry: 1
+  timeout: 15m
   extends: .build_template
   variables:
     SERVICE: frontend
@@ -272,6 +284,8 @@ build_frontend:
         "$CONTEXT"
 
 build_backup:
+  retry: 1
+  timeout: 15m
   extends: .build_template
   variables:
     SERVICE: backup
@@ -291,7 +305,7 @@ build_backup:
         --target "$TARGET" \
         --provenance=false \
         --sbom=false \
-        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/alpine:3.19" \
+        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/alpine:3.20" \
         --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
         --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
         -f "$DOCKERFILE" \
@@ -518,6 +532,7 @@ sast_scan:
   retry: 1
 
 secret_scan:
+  timeout: 5m
   stage: scan
   image:
     name: aquasec/trivy:0.58.0
@@ -574,7 +589,7 @@ deploy_staging:
         fi'
 
       # 1. Prepare Directory & Checkout
-      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=6 "$SSH_HOST" bash -s <<CHECKOUT_SCRIPT
+      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=30 "$SSH_HOST" bash -s <<CHECKOUT_SCRIPT
         set -euo pipefail
         mkdir -p "${STAGING_DEPLOY_DIR}"
         cd "${STAGING_DEPLOY_DIR}"
@@ -596,7 +611,7 @@ deploy_staging:
       # 2. Verify Docker images exist before deploying
       echo ""
       echo "=== Verifying Docker Images ==="
-      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=6 "$SSH_HOST" bash -s <<VERIFY_IMAGES
+      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=30 "$SSH_HOST" bash -s <<VERIFY_IMAGES
         set -euo pipefail
 
         # Docker login with retry (handles registry timeouts)
@@ -640,7 +655,7 @@ deploy_staging:
 
 
       # 3. Setup Env & Deploy (Fire and Forget)
-      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=6 "$SSH_HOST" bash -s <<DEPLOY_SCRIPT
+      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=30 "$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
         STAGING_DEPLOY_DIR="${STAGING_DEPLOY_DIR}"
         cd "\$STAGING_DEPLOY_DIR"
@@ -677,6 +692,8 @@ deploy_staging:
       DEPLOY_SCRIPT
 
 verify_staging:
+  retry: 1
+  timeout: 10m
   stage: staging
   image: alpine:3.20
   needs: [deploy_staging]
@@ -806,6 +823,8 @@ e2e_tests:
 
 # Cleanup staging after E2E tests (ephemeral staging)
 cleanup_staging:
+  retry: 1
+  timeout: 15m
   stage: e2e
   image: alpine:3.20
   resource_group: staging
@@ -922,7 +941,7 @@ deploy_prod:
   script:
     - |
       # Deploy (Fire and Forget)
-      ssh -o BatchMode=yes -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=6 -o ConnectTimeout=30 \
+      ssh -o BatchMode=yes -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=30 -o ConnectTimeout=30 \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
 
@@ -970,6 +989,8 @@ deploy_prod:
 
 # ============ VERIFY STAGE ============
 verify_prod:
+  retry: 1
+  timeout: 10m
   stage: verify
   image: alpine:3.20
   needs: [deploy_prod]
@@ -1000,6 +1021,8 @@ verify_prod:
 
 # ============ RELEASE STAGE ============
 release_version:
+  retry: 1
+  timeout: 5m
   stage: release
   image: alpine:3.20
   variables:
@@ -1038,6 +1061,8 @@ release_version:
 
 # ============ CLEANUP STAGE ============
 cleanup_registry:
+  retry: 1
+  timeout: 15m
   stage: cleanup
   image: alpine:3.20
   variables:
@@ -1158,6 +1183,8 @@ cleanup_registry:
 
 # ============ ROLLBACK (on failure) ============
 rollback_prod:
+  retry: 1
+  timeout: 10m
   stage: verify
   image: alpine:3.20
   needs:
@@ -1170,7 +1197,7 @@ rollback_prod:
   script:
     - |
       echo "Rolling back to previous version..."
-      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=6 "$SSH_HOST" bash -s <<'ROLLBACK_SCRIPT'
+      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=30 "$SSH_HOST" bash -s <<'ROLLBACK_SCRIPT'
         cd /opt/subro_web
         chmod +x ./infra/scripts/*.sh
         if [ -f ./infra/scripts/rollback.sh ]; then
