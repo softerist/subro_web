@@ -568,11 +568,11 @@ deploy_staging:
             echo 'Docker login successful'
             break
           fi
-          if [ \$i -eq 3 ]; then
+          if [ \\\$i -eq 3 ]; then
             echo '❌ Docker login failed after 3 attempts'
             exit 1
           fi
-          echo \"Docker login attempt \$i failed, retrying in 5s...\"
+          echo \"Docker login attempt \\\$i failed, retrying in 5s...\"
           sleep 5
         done
 
@@ -651,10 +651,10 @@ verify_staging:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
   script:
-    - apk add --no-cache curl openssh-client
+    - apk add --no-cache curl bind-tools
     - |
       # Resolve SSH_HOST to IP and add staging subdomain to /etc/hosts
-      SERVER_IP=$(getent hosts "$SSH_HOST" | awk '{print $1}' | head -1)
+      SERVER_IP=$(nslookup "$SSH_HOST" | awk '/^Address: / { print $2 }' | tail -1)
       if [ -z "$SERVER_IP" ]; then
         echo "ERROR: Could not resolve IP for $SSH_HOST"
         exit 1
@@ -664,7 +664,6 @@ verify_staging:
     - |
       echo "Verifying staging deployment..."
       echo ""
-
       # Quick container status check
       echo "=== Checking Container Status ==="
       ssh -o BatchMode=yes -o ConnectTimeout=10 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
