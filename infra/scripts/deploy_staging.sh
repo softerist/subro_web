@@ -130,20 +130,9 @@ MAX_RETRIES=40  # 40 * 5s = ~3.5 min max
 COUNT=0
 HEALTHY=false
 
-wait_with_keepalive() {
-    local seconds=$1
-    local i=0
-    while [ $i -lt $seconds ]; do
-        sleep 1
-        echo "."  # Newline ensures flush
-        i=$((i+1))
-    done
-}
-
-# Give containers time to initialize before first health check
 # Give containers time to initialize before first health check
 log "Waiting 10s for containers to initialize..."
-wait_with_keepalive 10
+sleep 10
 
 while [ $COUNT -lt $MAX_RETRIES ]; do
     STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$API_CONTAINER" 2>/dev/null || echo "starting")
@@ -152,11 +141,11 @@ while [ $COUNT -lt $MAX_RETRIES ]; do
         success "Container $API_CONTAINER is healthy!"
         break
     fi
-    # Print every 2nd iteration to keep SSH output flowing
-    if [ $((COUNT % 2)) -eq 0 ]; then
+    # Print every 5th iteration to reduce log noise
+    if [ $((COUNT % 5)) -eq 0 ]; then
         log "Container $API_CONTAINER status: $STATUS ($COUNT/$MAX_RETRIES)"
     fi
-    wait_with_keepalive 5
+    sleep 5
     COUNT=$((COUNT+1))
 done
 

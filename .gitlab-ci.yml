@@ -485,6 +485,14 @@ deploy_staging:
   needs:
     - job: backend_tests
       artifacts: false
+    - job: build_api
+      artifacts: false
+    - job: build_worker
+      artifacts: false
+    - job: build_frontend
+      artifacts: false
+    - job: build_backup
+      artifacts: false
     - job: scan_image_vulns
       artifacts: false
     - job: sast_scan
@@ -590,59 +598,41 @@ deploy_staging:
         docker logout '${CI_REGISTRY}'
       "
 
-      # 3. Setup Env & Deploy
-      ssh -o BatchMode=yes -o ServerAliveInterval=2 -o ServerAliveCountMax=30 \
-          -o TCPKeepAlive=yes -o ConnectTimeout=30 -o IPQoS=0x00 \
+      # 3. Setup Env & Deploy (Fire and Forget)
+      ssh -o BatchMode=yes -o TCPKeepAlive=yes -o ConnectTimeout=30 \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
         STAGING_DEPLOY_DIR="${STAGING_DEPLOY_DIR}"
         cd "\$STAGING_DEPLOY_DIR"
 
         mkdir -p infra
+        # Write base secrets
         echo '${PROD_ENV_FILE}' | base64 -d > infra/.env.staging
+
+        # Append CI-specific variables to .env.staging so the detached script can use them
+        cat >> infra/.env.staging <<EOF
+        REGISTRY_PASSWORD=${REGISTRY_PASSWORD}
+        REGISTRY_USER=${REGISTRY_USER}
+        CI_REGISTRY=${CI_REGISTRY}
+        DOCKER_IMAGE_API=${DOCKER_IMAGE_API}
+        DOCKER_IMAGE_WORKER=${DOCKER_IMAGE_WORKER}
+        DOCKER_IMAGE_FRONTEND=${DOCKER_IMAGE_FRONTEND}
+        DOCKER_IMAGE_BACKUP=${DOCKER_IMAGE_BACKUP}
+        BACKUP_PREFIX=staging_
+        USE_PREBUILT_IMAGES=1
+        DEPLOY_ENV=staging
+        EOF
         chmod 600 infra/.env.staging
-
-        # Docker login with retry (handles registry timeouts)
-        for i in 1 2 3; do
-          if echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin "${CI_REGISTRY}" 2>/dev/null; then
-            echo "Docker login successful"
-            break
-          fi
-          if [ \$i -eq 3 ]; then
-            echo "❌ Docker login failed after 3 attempts"
-            exit 1
-          fi
-          echo "Docker login attempt \$i failed, retrying in 5s..."
-          sleep 5
-        done
-
-        export DOCKER_IMAGE_API='${DOCKER_IMAGE_API}'
-        export DOCKER_IMAGE_WORKER='${DOCKER_IMAGE_WORKER}'
-        export DOCKER_IMAGE_FRONTEND='${DOCKER_IMAGE_FRONTEND}'
-        export DOCKER_IMAGE_BACKUP='${DOCKER_IMAGE_BACKUP}'
-        export BACKUP_PREFIX=staging_
-        export USE_PREBUILT_IMAGES=1
-        export DEPLOY_ENV=staging
-
         chmod +x ./infra/scripts/*.sh
 
-        if ! ./infra/scripts/deploy_staging.sh; then
-          echo "❌ Deployment script failed!"
-          docker logout "${CI_REGISTRY}"
-          exit 1
-        fi
+        # Trigger detached deployment
+        nohup ./infra/scripts/ci_deploy_trigger.sh \
+            "./infra/.env.staging" \
+            "./infra/scripts/deploy_staging.sh" \
+            "last_deploy.log" > /dev/null 2>&1 &
 
-        docker logout "${CI_REGISTRY}"
-        echo "✅ Deployment completed successfully"
+        echo "✅ Deployment triggered in background. Check 'last_deploy.log' on server for details."
       DEPLOY_SCRIPT
-  environment:
-    name: staging
-    url: https://staging.$SSH_HOST/
-  retry:
-    max: 2
-    when:
-      - runner_system_failure
-      - stuck_or_timeout_failure
 
 verify_staging:
   stage: staging
@@ -828,6 +818,14 @@ deploy_prod:
   needs:
     - job: e2e_tests
       artifacts: false
+    - job: build_api
+      artifacts: false
+    - job: build_worker
+      artifacts: false
+    - job: build_frontend
+      artifacts: false
+    - job: build_backup
+      artifacts: false
   environment:
     name: production
     url: https://$SSH_HOST/
@@ -838,15 +836,16 @@ deploy_prod:
     - when: never
   script:
     - |
-      set -euo pipefail
-      ssh -o BatchMode=yes -o ServerAliveInterval=2 -o ServerAliveCountMax=30 -o IPQoS=0x00 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
+      # Deploy (Fire and Forget)
+      ssh -o BatchMode=yes -o TCPKeepAlive=yes -o ConnectTimeout=30 \
+          -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
 
-        # Ensure deploy directory exists (first-time setup)
+        # Ensure deploy directory exists
         mkdir -p /opt/subro_web
         cd /opt/subro_web
 
-        # Clone repo if first deploy (infra scripts needed)
+        # Clone/Fetch repo (Synchronous part)
         if [ ! -d .git ]; then
           git clone --depth 1 "git@${CI_SERVER_HOST}:${CI_PROJECT_PATH}.git" .
         else
@@ -855,29 +854,32 @@ deploy_prod:
           git clean -fd
         fi
 
-        # Ensure infra directory exists and decode .env.prod
+        # Ensure infra directory exists
         mkdir -p infra
+        # Write base secrets
         echo '${PROD_ENV_FILE}' | base64 -d > infra/.env.prod
+
+        # Append CI-specific variables
+        cat >> infra/.env.prod <<EOF
+        REGISTRY_PASSWORD=${REGISTRY_PASSWORD}
+        REGISTRY_USER=${REGISTRY_USER}
+        CI_REGISTRY=${CI_REGISTRY}
+        DOCKER_IMAGE_API=${DOCKER_IMAGE_API}
+        DOCKER_IMAGE_WORKER=${DOCKER_IMAGE_WORKER}
+        DOCKER_IMAGE_FRONTEND=${DOCKER_IMAGE_FRONTEND}
+        DOCKER_IMAGE_BACKUP=${DOCKER_IMAGE_BACKUP}
+        USE_PREBUILT_IMAGES=1
+        EOF
         chmod 600 infra/.env.prod
-
-        # Login to registry
-        echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin "${CI_REGISTRY}"
-
-        # Set image tags
-        export DOCKER_IMAGE_API='${DOCKER_IMAGE_API}'
-        export DOCKER_IMAGE_WORKER='${DOCKER_IMAGE_WORKER}'
-        export DOCKER_IMAGE_FRONTEND='${DOCKER_IMAGE_FRONTEND}'
-        export DOCKER_IMAGE_BACKUP='${DOCKER_IMAGE_BACKUP}'
-        export USE_PREBUILT_IMAGES=1
-
-        # Ensure scripts are executable
         chmod +x ./infra/scripts/*.sh
 
-        # Deploy
-        ./infra/scripts/blue_green_deploy.sh
+        # Trigger detached deployment
+        nohup ./infra/scripts/ci_deploy_trigger.sh \
+            "./infra/.env.prod" \
+            "./infra/scripts/blue_green_deploy.sh" \
+            "last_deploy_prod.log" > /dev/null 2>&1 &
 
-        # Cleanup
-        docker logout "${CI_REGISTRY}"
+        echo "✅ Production Deployment triggered in background."
       DEPLOY_SCRIPT
 
 # ============ VERIFY STAGE ============
