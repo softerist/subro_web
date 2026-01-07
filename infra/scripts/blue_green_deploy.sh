@@ -30,8 +30,8 @@ docker_compose_pull_with_retry() {
 
     echo "Pulling Docker images with retry (max $max_attempts attempts)..."
     while [ $attempt -le $max_attempts ]; do
-        # Use --parallel for faster pulls of multiple images
-        if docker compose "$@" pull --parallel; then
+        # Parallel is now default in modern docker compose
+        if docker compose "$@" pull; then
             echo "Docker pull successful!"
             return 0
         fi

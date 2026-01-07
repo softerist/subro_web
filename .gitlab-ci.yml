@@ -440,6 +440,7 @@ sast_scan:
       sast: semgrep.sarif
     when: always
   allow_failure: false
+  retry: 1
 
 secret_scan:
   stage: scan
@@ -459,6 +460,7 @@ deploy_staging:
   stage: staging
   image: alpine:3.20
   resource_group: staging
+  timeout: 5m
   variables:
     STAGING_DEPLOY_DIR: /opt/subro_web_staging
   needs:
