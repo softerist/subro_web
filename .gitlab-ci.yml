@@ -527,7 +527,7 @@ deploy_staging:
 
         # Setup staging environment
         mkdir -p infra
-        echo '$PROD_ENV_FILE' | base64 -d > infra/.env.staging
+        echo "$PROD_ENV_FILE" | base64 -d > infra/.env.staging
         chmod 600 infra/.env.staging
 
         # Increase Docker/Compose timeouts for registry operations
@@ -562,10 +562,10 @@ deploy_staging:
         done
 
         # Set image tags for remote environment
-        export DOCKER_IMAGE_API='$DOCKER_IMAGE_API'
-        export DOCKER_IMAGE_WORKER='$DOCKER_IMAGE_WORKER'
-        export DOCKER_IMAGE_FRONTEND='$DOCKER_IMAGE_FRONTEND'
-        export DOCKER_IMAGE_BACKUP='$DOCKER_IMAGE_BACKUP'
+        export DOCKER_IMAGE_API="$DOCKER_IMAGE_API"
+        export DOCKER_IMAGE_WORKER="$DOCKER_IMAGE_WORKER"
+        export DOCKER_IMAGE_FRONTEND="$DOCKER_IMAGE_FRONTEND"
+        export DOCKER_IMAGE_BACKUP="$DOCKER_IMAGE_BACKUP"
         export BACKUP_PREFIX=staging_
         export USE_PREBUILT_IMAGES=1
         export DEPLOY_ENV=staging
@@ -762,7 +762,7 @@ deploy_prod:
 
         # Ensure infra directory exists and decode .env.prod
         mkdir -p infra
-        echo '$PROD_ENV_FILE' | base64 -d > infra/.env.prod
+        echo "$PROD_ENV_FILE" | base64 -d > infra/.env.prod
         chmod 600 infra/.env.prod
 
         # Increase Docker/Compose timeouts for registry operations
@@ -797,10 +797,10 @@ deploy_prod:
         done
 
         # Set image tags for remote environment
-        export DOCKER_IMAGE_API='$DOCKER_IMAGE_API'
-        export DOCKER_IMAGE_WORKER='$DOCKER_IMAGE_WORKER'
-        export DOCKER_IMAGE_FRONTEND='$DOCKER_IMAGE_FRONTEND'
-        export DOCKER_IMAGE_BACKUP='$DOCKER_IMAGE_BACKUP'
+        export DOCKER_IMAGE_API="$DOCKER_IMAGE_API"
+        export DOCKER_IMAGE_WORKER="$DOCKER_IMAGE_WORKER"
+        export DOCKER_IMAGE_FRONTEND="$DOCKER_IMAGE_FRONTEND"
+        export DOCKER_IMAGE_BACKUP="$DOCKER_IMAGE_BACKUP"
         export USE_PREBUILT_IMAGES=1
 
         # Ensure scripts are executable
