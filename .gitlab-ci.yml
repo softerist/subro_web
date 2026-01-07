@@ -499,19 +499,15 @@ deploy_staging:
   script:
     - |
       set -euo pipefail
-      REGISTRY_PASSWORD_B64="$(printf '%s' "$REGISTRY_PASSWORD" | base64 | tr -d '\n')"
-      CI_REGISTRY_HOST="$CI_REGISTRY"
-      REGISTRY_USER_NAME="$REGISTRY_USER"
-      ssh -tt -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
-        "REGISTRY_PASSWORD_B64=\"$REGISTRY_PASSWORD_B64\" CI_REGISTRY_HOST=\"$CI_REGISTRY_HOST\" REGISTRY_USER_NAME=\"$REGISTRY_USER_NAME\" CI_SERVER_HOST=\"$CI_SERVER_HOST\" CI_PROJECT_PATH=\"$CI_PROJECT_PATH\" CI_COMMIT_SHA=\"$CI_COMMIT_SHA\" PROD_ENV_FILE=\"$PROD_ENV_FILE\" DOCKER_IMAGE_API=\"$DOCKER_IMAGE_API\" DOCKER_IMAGE_WORKER=\"$DOCKER_IMAGE_WORKER\" DOCKER_IMAGE_FRONTEND=\"$DOCKER_IMAGE_FRONTEND\" DOCKER_IMAGE_BACKUP=\"$DOCKER_IMAGE_BACKUP\" bash -s" <<'EOF'
+      ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
         set -euo pipefail
 
-        STAGING_DEPLOY_DIR="${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
-        echo "Using staging deploy dir: $STAGING_DEPLOY_DIR"
+        STAGING_DEPLOY_DIR=\"\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}\"
+        echo \"Using staging deploy dir: \$STAGING_DEPLOY_DIR\"
 
         # Ensure staging directory exists
-        mkdir -p "$STAGING_DEPLOY_DIR"
-        cd "$STAGING_DEPLOY_DIR"
+        mkdir -p \"\$STAGING_DEPLOY_DIR\"
+        cd \"\$STAGING_DEPLOY_DIR\"
 
         # Clone or update repo
         if [ ! -d .git ]; then
@@ -521,49 +517,21 @@ deploy_staging:
           git checkout -f $CI_COMMIT_SHA
           git clean -fd
         fi
-        echo "Checked out commit: $(git rev-parse HEAD)"
+        echo \"Checked out commit: \$(git rev-parse HEAD)\"
 
         # Setup staging environment
         mkdir -p infra
-        echo "$PROD_ENV_FILE" | base64 -d > infra/.env.staging
+        echo '$PROD_ENV_FILE' | base64 -d > infra/.env.staging
         chmod 600 infra/.env.staging
 
-        # Increase Docker/Compose timeouts for registry operations
-        export DOCKER_CLIENT_TIMEOUT="${DOCKER_CLIENT_TIMEOUT:-300}"
-        export COMPOSE_HTTP_TIMEOUT="${COMPOSE_HTTP_TIMEOUT:-300}"
+        # Login to registry
+        echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY
 
-        # Docker login with retry (3 attempts) and timeout
-        echo "Logging into Docker Registry..."
-        REGISTRY_PASSWORD="$(printf '%s' "$REGISTRY_PASSWORD_B64" | base64 -d)"
-        curl -I -s --connect-timeout 5 --max-time 5 -o /dev/null -w "registry_preflight_http=%{http_code} namelookup=%{time_namelookup} connect=%{time_connect} appconnect=%{time_appconnect} total=%{time_total}\n" "https://$CI_REGISTRY_HOST/v2/" || true
-        if command -v timeout >/dev/null 2>&1; then
-          DOCKER_LOGIN_CMD="timeout 15s docker login -u \"$REGISTRY_USER_NAME\" --password-stdin \"$CI_REGISTRY_HOST\""
-        else
-          DOCKER_LOGIN_CMD="docker login -u \"$REGISTRY_USER_NAME\" --password-stdin \"$CI_REGISTRY_HOST\""
-        fi
-        for i in 1 2 3; do
-          LOGIN_START=$(date +%s)
-          if printf '%s' "$REGISTRY_PASSWORD" | sh -c "$DOCKER_LOGIN_CMD"; then
-            LOGIN_END=$(date +%s)
-            echo "Docker login timing: $((LOGIN_END-LOGIN_START))s"
-            echo "Docker login successful!"
-            break
-          fi
-          LOGIN_END=$(date +%s)
-          echo "Docker login timing: $((LOGIN_END-LOGIN_START))s"
-          if [ "$i" -eq 3 ]; then
-            echo "ERROR: Docker login failed after 3 attempts."
-            exit 1
-          fi
-          echo "Login failed (attempt $i/3). Retrying in 5 seconds..."
-          sleep 5
-        done
-
-        # Set image tags for remote environment
-        export DOCKER_IMAGE_API="$DOCKER_IMAGE_API"
-        export DOCKER_IMAGE_WORKER="$DOCKER_IMAGE_WORKER"
-        export DOCKER_IMAGE_FRONTEND="$DOCKER_IMAGE_FRONTEND"
-        export DOCKER_IMAGE_BACKUP="$DOCKER_IMAGE_BACKUP"
+        # Set image tags
+        export DOCKER_IMAGE_API='$DOCKER_IMAGE_API'
+        export DOCKER_IMAGE_WORKER='$DOCKER_IMAGE_WORKER'
+        export DOCKER_IMAGE_FRONTEND='$DOCKER_IMAGE_FRONTEND'
+        export DOCKER_IMAGE_BACKUP='$DOCKER_IMAGE_BACKUP'
         export BACKUP_PREFIX=staging_
         export USE_PREBUILT_IMAGES=1
         export DEPLOY_ENV=staging
@@ -572,8 +540,8 @@ deploy_staging:
         chmod +x ./infra/scripts/*.sh
         ./infra/scripts/deploy_staging.sh
 
-        docker logout "$CI_REGISTRY_HOST"
-      EOF
+        docker logout $CI_REGISTRY
+      "
   environment:
     name: staging
     url: https://staging.$SSH_HOST/
