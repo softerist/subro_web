@@ -507,15 +507,15 @@ deploy_staging:
   script:
     - |
       set -euo pipefail
-      ssh -o BatchMode=yes -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<'DEPLOY_SCRIPT'
+      ssh -o BatchMode=yes -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
 
-        STAGING_DEPLOY_DIR="${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
-        echo "Using staging deploy dir: $STAGING_DEPLOY_DIR"
+        STAGING_DEPLOY_DIR="\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
+        echo "Using staging deploy dir: \$STAGING_DEPLOY_DIR"
 
         # Ensure staging directory exists
-        mkdir -p "$STAGING_DEPLOY_DIR"
-        cd "$STAGING_DEPLOY_DIR"
+        mkdir -p "\$STAGING_DEPLOY_DIR"
+        cd "\$STAGING_DEPLOY_DIR"
 
         # Clone or update repo
         if [ ! -d .git ]; then
@@ -525,7 +525,7 @@ deploy_staging:
           git checkout -f "${CI_COMMIT_SHA}"
           git clean -fd
         fi
-        echo "Checked out commit: $(git rev-parse HEAD)"
+        echo "Checked out commit: \$(git rev-parse HEAD)"
 
         # Setup staging environment
         mkdir -p infra
@@ -655,7 +655,7 @@ cleanup_staging:
     - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
   script:
     - |
-      ssh -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<'CLEANUP_SCRIPT'
+      ssh -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<CLEANUP_SCRIPT
         set -euo pipefail
 
         # ANSI color codes for inline script
@@ -663,16 +663,16 @@ cleanup_staging:
         GREEN='\033[0;32m'
         NC='\033[0m'
 
-        log() { echo -e "${BLUE}[$(date +'%Y-%m-%dT%H:%M:%S%z')]${NC} $*"; }
-        success() { echo -e "${GREEN}[$(date +'%Y-%m-%dT%H:%M:%S%z')] ✓ $*${NC}"; }
+        log() { echo -e "\${BLUE}[\$(date +'%Y-%m-%dT%H:%M:%S%z')]\${NC} \$*"; }
+        success() { echo -e "\${GREEN}[\$(date +'%Y-%m-%dT%H:%M:%S%z')] ✓ \$*\${NC}"; }
 
-        STAGING_DIR="${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
+        STAGING_DIR="\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
 
         log "Starting cleanup for staging environment..."
-        log "Target directory: $STAGING_DIR"
+        log "Target directory: \$STAGING_DIR"
 
-        if [ -d "$STAGING_DIR" ]; then
-          cd "$STAGING_DIR"
+        if [ -d "\$STAGING_DIR" ]; then
+          cd "\$STAGING_DIR"
 
           # Stop staging containers (app stack) and remove volumes for true ephemeral state
           docker compose -p subro_staging \
@@ -729,7 +729,7 @@ deploy_prod:
   script:
     - |
       set -euo pipefail
-      ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+      ssh -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
 
         # Ensure deploy directory exists (first-time setup)
@@ -738,16 +738,37 @@ deploy_prod:
 
         # Clone repo if first deploy (infra scripts needed)
         if [ ! -d .git ]; then
-          git clone --depth 1 git@$CI_SERVER_HOST:$CI_PROJECT_PATH.git .
+          git clone --depth 1 "git@${CI_SERVER_HOST}:${CI_PROJECT_PATH}.git" .
         else
-          git fetch --depth 1 origin $CI_COMMIT_SHA
-          git checkout -f $CI_COMMIT_SHA
+          git fetch --depth 1 origin "${CI_COMMIT_SHA}"
+          git checkout -f "${CI_COMMIT_SHA}"
           git clean -fd
         fi
 
         # Ensure infra directory exists and decode .env.prod
         mkdir -p infra
-        echo '$PROD_ENV_FILE' | base64 -d > infra/.env.prod
+        echo '${PROD_ENV_FILE}' | base64 -d > infra/.env.prod
+        chmod 600 infra/.env.prod
+
+        # Login to registry
+        echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin "${CI_REGISTRY}"
+
+        # Set image tags
+        export DOCKER_IMAGE_API='${DOCKER_IMAGE_API}'
+        export DOCKER_IMAGE_WORKER='${DOCKER_IMAGE_WORKER}'
+        export DOCKER_IMAGE_FRONTEND='${DOCKER_IMAGE_FRONTEND}'
+        export DOCKER_IMAGE_BACKUP='${DOCKER_IMAGE_BACKUP}'
+        export USE_PREBUILT_IMAGES=1
+
+        # Ensure scripts are executable
+        chmod +x ./infra/scripts/*.sh
+
+        # Deploy
+        ./infra/scripts/blue_green_deploy.sh
+
+        # Cleanup
+        docker logout "${CI_REGISTRY}"
+      DEPLOY_SCRIPT
         chmod 600 infra/.env.prod
 
         # Login to registry
