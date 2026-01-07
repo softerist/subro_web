@@ -4,6 +4,7 @@
 # ============================================================
 
 stages:
+  - lint
   - pre
   - build
   - test
@@ -14,6 +15,53 @@ stages:
   - verify
   - release
   - cleanup
+
+# -------- Templates --------
+.ssh_setup:
+  before_script:
+    - set -euo pipefail
+    - apk add --no-cache bash openssh-client
+    - eval "$(ssh-agent -s)"
+    - |
+      if echo "$SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
+        echo "$SSH_PRIVATE_KEY" > /tmp/ssh_key
+      else
+        echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
+      fi
+    - chmod 600 /tmp/ssh_key
+    - ssh-add /tmp/ssh_key
+    - rm -f /tmp/ssh_key
+    - mkdir -p ~/.ssh
+    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+
+# ============ LINT STAGE ============
+lint_backend:
+  stage: lint
+  image: python:3.12-slim
+  variables:
+    POETRY_VERSION: 1.8.3
+  before_script:
+    - pip install poetry==$POETRY_VERSION
+    - cd backend
+    - poetry install --no-root --only dev
+  script:
+    - poetry run ruff check .
+    - poetry run ruff format --check .
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+lint_frontend:
+  stage: lint
+  image: node:20-alpine
+  before_script:
+    - cd frontend
+    - npm ci --prefer-offline
+  script:
+    - npm run lint
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
 
 workflow:
   rules:
@@ -504,32 +552,7 @@ deploy_staging:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: on_success
-  before_script:
-    - set -euo pipefail
-    - apk add --no-cache bash openssh-client
-    - eval "$(ssh-agent -s)"
-    # Handle both base64-encoded and plain text SSH keys
-    - |
-      if echo "$SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
-        echo "$SSH_PRIVATE_KEY" > /tmp/ssh_key
-      else
-        echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
-      fi
-    - chmod 600 /tmp/ssh_key
-    - ssh-add /tmp/ssh_key
-    - rm -f /tmp/ssh_key
-    - mkdir -p ~/.ssh
-    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
-    # SSH config for robust long-running connections
-    - |
-      cat >> ~/.ssh/config <<EOF
-      Host *
-        ServerAliveInterval 2
-        ServerAliveCountMax 30
-        TCPKeepAlive yes
-        ConnectTimeout 30
-        IPQoS 0x00
-      EOF
+  extends: .ssh_setup
   script:
     - |
       set -euo pipefail
@@ -777,21 +800,7 @@ cleanup_staging:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: always # Run even if e2e_tests fail
-  before_script:
-    - set -euo pipefail
-    - apk add --no-cache bash openssh-client
-    - eval "$(ssh-agent -s)"
-    - |
-      if echo "$SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
-        echo "$SSH_PRIVATE_KEY" > /tmp/ssh_key
-      else
-        echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
-      fi
-    - chmod 600 /tmp/ssh_key
-    - ssh-add /tmp/ssh_key
-    - rm -f /tmp/ssh_key
-    - mkdir -p ~/.ssh
-    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+  extends: .ssh_setup
   script:
     - |
       ssh -o BatchMode=yes -o ServerAliveInterval=2 -o ServerAliveCountMax=30 -o IPQoS=0x00 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<CLEANUP_SCRIPT
@@ -979,22 +988,11 @@ release_version:
   environment:
     name: production
     action: access
+  extends: .ssh_setup
   before_script:
-    - set -euo pipefail
-    - apk add --no-cache git openssh-client openssh-keygen bash python3 py3-pip
+    - !reference [.ssh_setup, before_script]
+    - apk add --no-cache git python3 py3-pip
     - pip install --break-system-packages tomlkit
-    - eval "$(ssh-agent -s)"
-    - |
-      if echo "$SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
-        echo "$SSH_PRIVATE_KEY" > /tmp/ssh_key
-      else
-        echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
-      fi
-    - chmod 600 /tmp/ssh_key
-    - ssh-add /tmp/ssh_key
-    - rm -f /tmp/ssh_key
-    - mkdir -p ~/.ssh
-    - ssh-keyscan "$CI_SERVER_HOST" >> ~/.ssh/known_hosts
     - git config --global user.email "ci-bot@gitlab.com"
     - git config --global user.name "CI Bot"
     - git remote set-url origin git@$CI_SERVER_HOST:$CI_PROJECT_PATH.git
@@ -1146,21 +1144,7 @@ rollback_prod:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: on_failure
-  before_script:
-    - set -euo pipefail
-    - apk add --no-cache bash openssh-client
-    - eval "$(ssh-agent -s)"
-    - |
-      if echo "$SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
-        echo "$SSH_PRIVATE_KEY" > /tmp/ssh_key
-      else
-        echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
-      fi
-    - chmod 600 /tmp/ssh_key
-    - ssh-add /tmp/ssh_key
-    - rm -f /tmp/ssh_key
-    - mkdir -p ~/.ssh
-    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+  extends: .ssh_setup
   script:
     - |
       echo "Rolling back to previous version..."
