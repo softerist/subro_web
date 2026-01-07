@@ -24,6 +24,9 @@ variables:
   DOCKER_IMAGE_FRONTEND: $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHORT_SHA
   DOCKER_IMAGE_BACKUP: $CI_REGISTRY_IMAGE/backup:$CI_COMMIT_SHORT_SHA
   DOCKER_TLS_CERTDIR: ""
+  GIT_STRATEGY: fetch
+  GIT_DEPTH: "20"
+  GIT_SUBMODULE_STRATEGY: none
 
 # -------- Docker-in-Docker Helper --------
 .default-docker:
@@ -61,11 +64,13 @@ variables:
         echo "Docker Hub credentials not set; skipping Docker Hub login."
       fi
 
-# -------- DEBUG (optional) --------
+# -------- DEBUG (optional, skipped on main for speed) --------
 ci_debug_env:
   stage: pre
   image: alpine:3.20
   rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: never
     - when: always
   allow_failure: true
   script:
@@ -235,7 +240,7 @@ build_backup:
 backend_tests:
   stage: test
   extends: .default-docker
-  needs: [build_api]
+  needs: [build_api_test]
   timeout: 20m
   interruptible: false # Prevent cancellation during test/cleanup
   variables:
@@ -254,7 +259,7 @@ backend_tests:
       # curl is small enough to risk Docker Hub for now, or use alpine+curl
       IMAGE_CURL="curlimages/curl:8.7.1"
 
-      DEPENDENCIES="$DOCKER_IMAGE_API $IMAGE_POSTGRES $IMAGE_REDIS $IMAGE_CURL"
+      DEPENDENCIES="$DOCKER_IMAGE_API_TEST $IMAGE_POSTGRES $IMAGE_REDIS $IMAGE_CURL"
       for img in $DEPENDENCIES; do
         echo "Pulling $img..."
         for i in $(seq 1 3); do
@@ -280,7 +285,7 @@ backend_tests:
     - docker network create testnet || true
     # Start dependencies (Production-like setup)
     - docker run -d --name db --network testnet -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=$POSTGRES_DB postgres:16-alpine
-    - docker run --rm --network testnet --entrypoint python $DOCKER_IMAGE_API -c "import kombu, redis; print('DEBUG VERSIONS kombu', kombu.__version__, 'redis', redis.__version__)"
+    - docker run --rm --network testnet --entrypoint python $DOCKER_IMAGE_API_TEST -c "import kombu, redis; print('DEBUG VERSIONS kombu', kombu.__version__, 'redis', redis.__version__)"
     - docker run -d --name db_test --network testnet -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=$POSTGRES_DB_TEST postgres:16-alpine
     - docker run -d --name redis --network testnet redis:7-alpine
 
@@ -311,7 +316,7 @@ backend_tests:
         -e TEST_API_BASE_URL="http://localhost:8000" \
         -e TEST_WS_BASE_URL="ws://localhost:8000" \
         -v "$(pwd)/backend/tests:/app/tests" \
-        "$DOCKER_IMAGE_API"
+        "$DOCKER_IMAGE_API_TEST"
 
     # Wait for API to be healthy
     - |
@@ -324,7 +329,6 @@ backend_tests:
       done
 
     # Install test dependencies and run tests
-    - docker exec api poetry install --with dev
     - docker exec api poetry run pytest -p no:cacheprovider tests/
   after_script:
     - docker logs api 2>&1 | tail -50 || true

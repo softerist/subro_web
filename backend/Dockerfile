@@ -73,9 +73,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy dependency definition files FIRST, ensuring correct ownership
 COPY --chown=appuser:appuser pyproject.toml poetry.lock ./
 
-# CACHE-BUST: Force fresh install for Redis >=5.3.0 compatibility (2026-01-04)
-# Install ALL dependencies including main
-RUN poetry install --no-root --sync --no-cache
+# Install ALL dependencies including main (cache enabled for faster rebuilds)
+RUN poetry install --no-root --sync
 
 # --- Development Stage ---
 # Optimized for local development with hot-reloading
@@ -100,7 +99,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --chown=appuser:appuser pyproject.toml poetry.lock ./
 
 # Install ALL dependencies including dev group
-RUN poetry install --verbose --sync --no-cache
+RUN poetry install --verbose --sync
 
 # Install ffsubsync for subtitle synchronization
 RUN pip install ffsubsync --break-system-packages || pip install ffsubsync

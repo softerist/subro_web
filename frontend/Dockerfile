@@ -5,8 +5,9 @@ ARG BASE_IMAGE_NGINX=public.ecr.aws/docker/library/nginx:stable-alpine
 FROM ${BASE_IMAGE_NODE} AS base
 WORKDIR /app
 COPY package*.json ./
-# Install dependencies including devDependencies
-RUN apk add --no-cache curl && npm ci
+# Install dependencies with cache mount for faster rebuilds
+RUN apk add --no-cache curl
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Development stage
 FROM base AS development
