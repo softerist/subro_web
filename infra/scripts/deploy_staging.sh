@@ -123,12 +123,16 @@ docker compose --progress=plain --env-file "$ENV_FILE" -p subro_staging \
     -f "$COMPOSE_APP" -f "$COMPOSE_IMAGES" -f "$COMPOSE_DATA" up -d --scale scheduler=0
 section_end "stage_pull"
 
-# Wait for Health (faster polling)
+# Wait for Health
 section_start "stage_health" "Waiting for Health Checks (staging)"
 API_CONTAINER="subro_staging-api-1"
-MAX_RETRIES=30  # 30 * 3s = 1.5 min max
+MAX_RETRIES=40  # 40 * 5s = ~3.5 min max
 COUNT=0
 HEALTHY=false
+
+# Give containers time to initialize before first health check
+log "Waiting 10s for containers to initialize..."
+sleep 10
 
 while [ $COUNT -lt $MAX_RETRIES ]; do
     STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$API_CONTAINER" 2>/dev/null || echo "starting")
@@ -137,9 +141,11 @@ while [ $COUNT -lt $MAX_RETRIES ]; do
         success "Container $API_CONTAINER is healthy!"
         break
     fi
-    # Print every iteration for better debugging
-    log "Container $API_CONTAINER status: $STATUS ($COUNT/$MAX_RETRIES)"
-    sleep 3  # Faster polling
+    # Print every 5th iteration to reduce SSH output traffic
+    if [ $((COUNT % 5)) -eq 0 ]; then
+        log "Container $API_CONTAINER status: $STATUS ($COUNT/$MAX_RETRIES)"
+    fi
+    sleep 5  # Slower polling to reduce SSH traffic
     COUNT=$((COUNT+1))
 done
 
