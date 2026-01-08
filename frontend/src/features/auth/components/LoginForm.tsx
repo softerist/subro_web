@@ -83,6 +83,8 @@ export function LoginForm({
 
       if (detail === "LOGIN_BAD_CREDENTIALS") {
         setError("Invalid email or password.");
+      } else if (detail === "LOGIN_ACCOUNT_SUSPENDED") {
+        setError("Account suspended. Please contact support.");
       } else if (detail === "LOGIN_USER_INACTIVE") {
         setError("This account has been deactivated.");
       } else if (typeof detail === "string" && detail.includes("locked")) {

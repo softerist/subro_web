@@ -580,17 +580,18 @@ deploy_staging:
     - |
       set -euo pipefail
 
-      # 0. Ensure server-side SSH keepalives are configured (idempotent)
-      ssh "$SSH_HOST" \
-        'if [ ! -f /etc/ssh/sshd_config.d/keepalive.conf ]; then
+      echo "=== Starting Consolidated Staging Deployment ==="
+      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=30 "$SSH_HOST" bash -s <<DEPLOY_ALL_STAGING
+        set -euo pipefail
+
+        # 0. Ensure server-side SSH keepalives are configured (idempotent)
+        if [ ! -f /etc/ssh/sshd_config.d/keepalive.conf ]; then
           printf "%s\n" "# CI/CD keepalives" "ClientAliveInterval 15" "ClientAliveCountMax 10" "TCPKeepAlive yes" > /etc/ssh/sshd_config.d/keepalive.conf &&
           (systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true) &&
           echo "SSH keepalives configured";
-        fi'
+        fi
 
-      # 1. Prepare Directory & Checkout
-      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=30 "$SSH_HOST" bash -s <<CHECKOUT_SCRIPT
-        set -euo pipefail
+        # 1. Prepare Directory & Checkout
         mkdir -p "${STAGING_DEPLOY_DIR}"
         cd "${STAGING_DEPLOY_DIR}"
         if [ ! -d .git ]; then
@@ -606,17 +607,15 @@ deploy_staging:
           echo "❌ ERROR: Checkout verification failed!"
           exit 1
         fi
-      CHECKOUT_SCRIPT
 
-      # 2. Verify Docker images exist before deploying
-      echo ""
-      echo "=== Verifying Docker Images ==="
-      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=30 "$SSH_HOST" bash -s <<VERIFY_IMAGES
-        set -euo pipefail
+        # 2. Verify Docker images exist before deploying
+        echo ""
+        echo "=== Verifying Docker Images ==="
 
         # Docker login with retry (handles registry timeouts)
+        # Use single quotes around secrets to prevent remote shell expansion
         for i in 1 2 3; do
-          if echo "${REGISTRY_PASSWORD}" | docker login -u "${REGISTRY_USER}" --password-stdin "${CI_REGISTRY}" 2>/dev/null; then
+          if echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin "${CI_REGISTRY}" 2>/dev/null; then
             echo 'Docker login successful'
             break
           fi
@@ -651,33 +650,25 @@ deploy_staging:
         done
 
         docker logout "${CI_REGISTRY}"
-      VERIFY_IMAGES
 
-
-      # 3. Setup Env & Deploy (Fire and Forget)
-      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=30 "$SSH_HOST" bash -s <<DEPLOY_SCRIPT
-        set -euo pipefail
-        STAGING_DEPLOY_DIR="${STAGING_DEPLOY_DIR}"
-        cd "\$STAGING_DEPLOY_DIR"
-
+        # 3. Setup Env & Deploy (Fire and Forget)
         mkdir -p infra
         # Write base secrets
         echo '${PROD_ENV_FILE}' | base64 -d > infra/.env.staging
 
-        # Append CI-specific variables to .env.staging so the detached script can use them
-        # Append CI-specific variables using grouped echo to avoid heredoc indentation issues
+        # Append CI-specific variables using single quotes to protect values from remote shell expansion
         {
-          echo "REGISTRY_PASSWORD=${REGISTRY_PASSWORD}"
-          echo "REGISTRY_USER=${REGISTRY_USER}"
-          echo "CI_REGISTRY=${CI_REGISTRY}"
-          echo "DOCKER_IMAGE_API=${DOCKER_IMAGE_API}"
-          echo "DOCKER_IMAGE_WORKER=${DOCKER_IMAGE_WORKER}"
-          echo "DOCKER_IMAGE_FRONTEND=${DOCKER_IMAGE_FRONTEND}"
-          echo "DOCKER_IMAGE_BACKUP=${DOCKER_IMAGE_BACKUP}"
-          echo "DEPLOY_COMMIT_SHA=${CI_COMMIT_SHA}"
-          echo "BACKUP_PREFIX=staging_"
-          echo "USE_PREBUILT_IMAGES=1"
-          echo "DEPLOY_ENV=staging"
+          echo "REGISTRY_PASSWORD='${REGISTRY_PASSWORD}'"
+          echo "REGISTRY_USER='${REGISTRY_USER}'"
+          echo "CI_REGISTRY='${CI_REGISTRY}'"
+          echo "DOCKER_IMAGE_API='${DOCKER_IMAGE_API}'"
+          echo "DOCKER_IMAGE_WORKER='${DOCKER_IMAGE_WORKER}'"
+          echo "DOCKER_IMAGE_FRONTEND='${DOCKER_IMAGE_FRONTEND}'"
+          echo "DOCKER_IMAGE_BACKUP='${DOCKER_IMAGE_BACKUP}'"
+          echo "DEPLOY_COMMIT_SHA='${CI_COMMIT_SHA}'"
+          echo "BACKUP_PREFIX='staging_'"
+          echo "USE_PREBUILT_IMAGES='1'"
+          echo "DEPLOY_ENV='staging'"
         } >> infra/.env.staging
         chmod 600 infra/.env.staging
         chmod +x ./infra/scripts/*.sh
@@ -689,7 +680,7 @@ deploy_staging:
             "last_deploy.log" > /dev/null 2>&1 &
 
         echo "✅ Deployment triggered in background. Check 'last_deploy.log' on server for details."
-      DEPLOY_SCRIPT
+      DEPLOY_ALL_STAGING
 
 verify_staging:
   retry: 1
@@ -941,7 +932,7 @@ deploy_prod:
   script:
     - |
       # Deploy (Fire and Forget)
-      ssh -o BatchMode=yes -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=30 -o ConnectTimeout=30 \
+      ssh -o BatchMode=yes -o TCPKeepAlive=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o ConnectTimeout=30 \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
         set -euo pipefail
 
@@ -963,17 +954,16 @@ deploy_prod:
         # Write base secrets
         echo '${PROD_ENV_FILE}' | base64 -d > infra/.env.prod
 
-        # Append CI-specific variables
-        # Append CI-specific variables
+        # Append CI-specific variables using single quotes to protect values from remote shell expansion
         {
-          echo "REGISTRY_PASSWORD=${REGISTRY_PASSWORD}"
-          echo "REGISTRY_USER=${REGISTRY_USER}"
-          echo "CI_REGISTRY=${CI_REGISTRY}"
-          echo "DOCKER_IMAGE_API=${DOCKER_IMAGE_API}"
-          echo "DOCKER_IMAGE_WORKER=${DOCKER_IMAGE_WORKER}"
-          echo "DOCKER_IMAGE_FRONTEND=${DOCKER_IMAGE_FRONTEND}"
-          echo "DOCKER_IMAGE_BACKUP=${DOCKER_IMAGE_BACKUP}"
-          echo "USE_PREBUILT_IMAGES=1"
+          echo "REGISTRY_PASSWORD='${REGISTRY_PASSWORD}'"
+          echo "REGISTRY_USER='${REGISTRY_USER}'"
+          echo "CI_REGISTRY='${CI_REGISTRY}'"
+          echo "DOCKER_IMAGE_API='${DOCKER_IMAGE_API}'"
+          echo "DOCKER_IMAGE_WORKER='${DOCKER_IMAGE_WORKER}'"
+          echo "DOCKER_IMAGE_FRONTEND='${DOCKER_IMAGE_FRONTEND}'"
+          echo "DOCKER_IMAGE_BACKUP='${DOCKER_IMAGE_BACKUP}'"
+          echo "USE_PREBUILT_IMAGES='1'"
         } >> infra/.env.prod
         chmod 600 infra/.env.prod
         chmod +x ./infra/scripts/*.sh

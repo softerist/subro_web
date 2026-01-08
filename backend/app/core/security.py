@@ -109,7 +109,8 @@ def get_password_hash(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifies a plain password against a hashed password."""
-    return password_helper.verify(plain_password, hashed_password)
+    verified, _ = password_helper.verify_and_update(plain_password, hashed_password)
+    return verified
 
 
 # END ADDED CODE

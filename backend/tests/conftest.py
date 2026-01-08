@@ -70,19 +70,15 @@ def event_loop(request: pytest.FixtureRequest):  # noqa: ARG001
 
 @pytest_asyncio.fixture(scope="function")
 async def test_engine():
-    """Creates/Disposes an async engine FOR EACH TEST FUNCTION."""
-    # Use TEST_DATABASE_URL which should be derived from settings.ASYNC_SQLALCHEMY_DATABASE_URL
-    engine = create_async_engine(
-        TEST_DATABASE_URL, echo=getattr(settings, "DB_ECHO_TESTS", False)
-    )  # Allow specific test echo
+    """Ensures a clean database state for each test function."""
+    engine = create_async_engine(TEST_DATABASE_URL, echo=getattr(settings, "DB_ECHO_TESTS", False))
     async with engine.begin() as conn:
-        # Use CASCADE to handle foreign key dependencies
+        await conn.run_sync(Base.metadata.create_all)
         from sqlalchemy import text
 
-        # Drop all tables with CASCADE to avoid FK constraint errors
+        # Fast way to clean all tables: TRUNCATE
         for table in reversed(Base.metadata.sorted_tables):
-            await conn.execute(text(f'DROP TABLE IF EXISTS "{table.name}" CASCADE'))
-        await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(text(f'TRUNCATE TABLE "{table.name}" RESTART IDENTITY CASCADE'))
     try:
         yield engine
     finally:
