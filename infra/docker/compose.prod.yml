@@ -53,6 +53,30 @@ services:
       retries: 3
       start_period: 20s
 
+  scheduler:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+      target: production-worker
+    restart: always
+    entrypoint: []
+    command: ["celery", "-A", "app.tasks.celery_app", "beat", "--loglevel=INFO"]
+    volumes:
+      - ../../logs:/app/logs
+      - celery_beat_schedule:/app/state
+    env_file:
+      - ${PROJECT_ENV_FILE:-../.env.prod}
+    environment:
+      - CELERY_BEAT_SCHEDULE_FILENAME=/app/state/celerybeat-schedule
+    networks:
+      - internal_net
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "celery.*beat"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   frontend:
     build:
       context: ../../frontend
@@ -74,6 +98,9 @@ services:
       interval: 15s
       timeout: 3s
       retries: 3
+
+volumes:
+  celery_beat_schedule:
 
 networks:
   internal_net:

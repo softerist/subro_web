@@ -3,6 +3,7 @@ from pathlib import Path
 
 import nest_asyncio
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import worker_process_init, worker_process_shutdown
 
 from app.core.config import settings
@@ -19,7 +20,12 @@ celery_app = Celery(
     "worker",
     broker=str(settings.CELERY_BROKER_URL),
     backend=str(settings.CELERY_RESULT_BACKEND),
-    include=["app.tasks.subtitle_jobs", "app.tasks.audit_export", "app.tasks.audit_worker"],
+    include=[
+        "app.tasks.subtitle_jobs",
+        "app.tasks.audit_export",
+        "app.tasks.audit_worker",
+        "app.tasks.maintenance",
+    ],
 )
 
 # Robust configuration using pydantic settings object directly.
@@ -35,6 +41,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.audit_worker_batch",
         "schedule": 15.0,
         "args": (100,),
+    },
+    "audit_partition_maintenance": {
+        "task": "app.tasks.maintenance.manage_audit_partitions",
+        "schedule": crontab(hour=3, minute=0),
     },
 }
 
