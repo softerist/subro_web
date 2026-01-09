@@ -619,25 +619,35 @@ deploy_staging:
         echo ""
         echo "=== Verifying Docker Images ==="
 
+        # Start background keepalive to prevent SSH timeout during slow docker operations
+        (while true; do echo -n "."; sleep 5; done) &
+        KEEPALIVE_PID=\$!
+        trap "kill \$KEEPALIVE_PID 2>/dev/null" EXIT
+
         # Docker login with retry (handles registry timeouts)
         # Use single quotes around secrets to prevent remote shell expansion
         for i in 1 2 3; do
           if echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin "${CI_REGISTRY}" 2>/dev/null; then
+            echo ""
             echo 'Docker login successful'
             break
           fi
           if [ \$i -eq 3 ]; then
+            kill \$KEEPALIVE_PID 2>/dev/null
+            echo ""
             echo '❌ Docker login failed after 3 attempts'
             exit 1
           fi
+          echo ""
           echo "Docker login attempt \$i failed, retrying in 5s..."
           sleep 5
         done
 
         echo 'Checking images...'
-        # Wait for registry to propagate newly pushed images
-        echo 'Waiting 10 seconds for registry propagation...'
-        sleep 10
+        # Wait for registry to propagate newly pushed images (with progress)
+        echo -n 'Waiting for registry propagation'
+        for j in 1 2 3 4 5 6 7 8 9 10; do echo -n "."; sleep 1; done
+        echo " done"
 
         for img in "${DOCKER_IMAGE_API}" "${DOCKER_IMAGE_WORKER}" "${DOCKER_IMAGE_FRONTEND}" "${DOCKER_IMAGE_BACKUP}"; do
           echo "Verifying: \$img"
@@ -665,6 +675,7 @@ deploy_staging:
 
         # Append CI-specific variables using single quotes to protect values from remote shell expansion
         {
+          echo "DOMAIN_NAME='${SSH_HOST}'"
           echo "REGISTRY_PASSWORD='${REGISTRY_PASSWORD}'"
           echo "REGISTRY_USER='${REGISTRY_USER}'"
           echo "CI_REGISTRY='${CI_REGISTRY}'"
@@ -716,7 +727,11 @@ verify_staging:
       Host *
         User $SSH_USER
         Port ${SSH_PORT:-22}
-        ServerAliveInterval 15
+        ServerAliveInterval 10
+        ServerAliveCountMax 30
+        TCPKeepAlive yes
+        ConnectTimeout 30
+        ConnectionAttempts 3
         IdentityFile ~/.ssh/id_rsa
       EOF
     - chmod 600 ~/.ssh/config
