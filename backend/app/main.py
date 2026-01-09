@@ -110,40 +110,57 @@ async def lifespan(_app_instance: FastAPI):
         and settings.FIRST_SUPERUSER_PASSWORD
     ):
         logger.info(
-            f"LIFESPAN_HOOK: Attempting to create/ensure initial superuser: {settings.FIRST_SUPERUSER_EMAIL}"
+            f"LIFESPAN_HOOK: Checking for existing superusers before creating: {settings.FIRST_SUPERUSER_EMAIL}"
         )
         # Use the FastAPISessionLocal from the db_session_module
         async with db_session_module.FastAPISessionLocal() as session:
             try:
-                user_db_adapter = SQLAlchemyUserDatabase(session, UserModel)
-                user_manager = UserManager(user_db_adapter)
+                # First, check if ANY active superuser already exists
+                existing_superuser_stmt = select(UserModel).where(
+                    UserModel.is_superuser == True,  # noqa: E712
+                    UserModel.is_active == True,  # noqa: E712
+                )
+                existing_superuser_result = await session.execute(existing_superuser_stmt)
+                existing_superuser = existing_superuser_result.scalar_one_or_none()
 
-                try:
-                    existing_user = await user_manager.get_by_email(settings.FIRST_SUPERUSER_EMAIL)
-                    if existing_user:
-                        logger.info(
-                            f"LIFESPAN_HOOK: Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {existing_user.id}) already exists."
+                if existing_superuser:
+                    logger.info(
+                        f"LIFESPAN_HOOK: Active superuser already exists: {existing_superuser.email} (ID: {existing_superuser.id}). "
+                        f"Skipping creation of {settings.FIRST_SUPERUSER_EMAIL}."
+                    )
+                else:
+                    # No active superuser exists, create one
+                    user_db_adapter = SQLAlchemyUserDatabase(session, UserModel)
+                    user_manager = UserManager(user_db_adapter)
+
+                    try:
+                        existing_user = await user_manager.get_by_email(
+                            settings.FIRST_SUPERUSER_EMAIL
                         )
-                except UserNotExists:
-                    logger.info(
-                        f"LIFESPAN_HOOK: Initial superuser {settings.FIRST_SUPERUSER_EMAIL} not found, creating..."
-                    )
-                    user_create_data = UserCreate(
-                        email=settings.FIRST_SUPERUSER_EMAIL,
-                        password=settings.FIRST_SUPERUSER_PASSWORD,
-                        is_superuser=True,
-                        is_active=True,
-                        is_verified=True,
-                        role="admin",
-                    )
-                    created_user_orm_instance = await user_manager.create(
-                        user_create_data, safe=False
-                    )
-                    await session.commit()
-                    await session.refresh(created_user_orm_instance)
-                    logger.info(
-                        f"LIFESPAN_HOOK: Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {created_user_orm_instance.id}) created."
-                    )
+                        if existing_user:
+                            logger.info(
+                                f"LIFESPAN_HOOK: Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {existing_user.id}) already exists."
+                            )
+                    except UserNotExists:
+                        logger.info(
+                            f"LIFESPAN_HOOK: No superusers found. Creating initial superuser: {settings.FIRST_SUPERUSER_EMAIL}"
+                        )
+                        user_create_data = UserCreate(
+                            email=settings.FIRST_SUPERUSER_EMAIL,
+                            password=settings.FIRST_SUPERUSER_PASSWORD,
+                            is_superuser=True,
+                            is_active=True,
+                            is_verified=True,
+                            role="admin",
+                        )
+                        created_user_orm_instance = await user_manager.create(
+                            user_create_data, safe=False
+                        )
+                        await session.commit()
+                        await session.refresh(created_user_orm_instance)
+                        logger.info(
+                            f"LIFESPAN_HOOK: Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {created_user_orm_instance.id}) created."
+                        )
             except Exception as e:
                 await session.rollback()
                 logger.error(
