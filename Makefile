@@ -324,8 +324,8 @@ lint: ## Run all linters via pre-commit on staged files
 lint-all: ## Run all linters via pre-commit on all files
 	pre-commit run --all-files
 
-lint-py: ## Run Python linters (Ruff) on the backend
-	cd backend && poetry run ruff check .
+lint-py: ## Run Python linters (Ruff) and type checker (Mypy) on the backend
+	cd backend && poetry run ruff check . && poetry run mypy .
 
 lint-ts: ## Run TypeScript/JS linters (ESLint) on the frontend
 	cd frontend && npm run lint -- --fix
@@ -343,7 +343,8 @@ format-ts: ## Run TypeScript/JS formatter (Prettier)
 # Testing & Coverage (Run inside Docker)
 # ==============================================================================
 .PHONY: test test-py test-ts test-integration test-integration-prod coverage coverage-py coverage-ts test-audit
-test: test-py scan-all ## Run backend Python tests and all security scans
+test: test-py scan-all ## Run backend Python tests, security scans, and type checks
+	cd backend && poetry run mypy .
 
 test-py: ## Run backend Python tests
 	@echo "Running backend tests..."

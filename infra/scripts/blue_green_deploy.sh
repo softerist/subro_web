@@ -174,8 +174,6 @@ else
 fi
 section_end "prod_infra"
 
-# 1. Determine Active Color
-# We check if 'blue-api-1' is running. If so, next is green.
 if docker ps --format '{{.Names}}' | grep -q "blue-api-1"; then
     CURRENT_COLOR="blue"
     NEW_COLOR="green"
@@ -325,15 +323,16 @@ docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T cad
 success "Traffic Switched"
 section_end "prod_switch"
 
-# 5. Cleanup Old Color
-section_start "prod_cleanup" "Cleanup Old Color"
-if [ -n "$CURRENT_COLOR" ]; then
-    # Double check we are not killing the new color
-    if [ "$CURRENT_COLOR" != "$NEW_COLOR" ]; then
-        log "Stopping Old Color ($CURRENT_COLOR)..."
-        docker compose --env-file "$ENV_FILE" -p "$CURRENT_COLOR" -f "$COMPOSE_APP" down
+# 5. Cleanup Inactive Color (and any orphaned containers)
+section_start "prod_cleanup" "Cleanup Inactive Color"
+for color in blue green; do
+    if [ "$color" != "$NEW_COLOR" ]; then
+        if docker ps -a --format '{{.Names}}' | grep -q "^$color-"; then
+            log "Cleaning up old/orphaned $color containers..."
+            docker compose --env-file "$ENV_FILE" -p "$color" -f "$COMPOSE_APP" down || true
+        fi
     fi
-fi
+done
 
 log "Pruning old images in background..."
 # Remove dangling images only, preserve tagged images for rollback (older than 1 week)

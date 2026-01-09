@@ -89,15 +89,18 @@ def file_lock(file_path: Path, timeout: int = 30):
 
 @dataclass
 class Version:
-    """Represents a semantic version number."""
+    """Represents a semantic version number with an optional environment suffix."""
 
     major: int
     minor: int
     patch: int
     suffix: str | None = None
 
+    def base(self) -> str:
+        return f"{self.major}.{self.minor}.{self.patch}"
+
     def __str__(self) -> str:
-        base = f"{self.major}.{self.minor}.{self.patch}"
+        base = self.base()
         return f"{base}-{self.suffix}" if self.suffix else base
 
     def __eq__(self, other) -> bool:
@@ -112,9 +115,12 @@ class Version:
 
     @classmethod
     def from_string(cls, version_str: str) -> "Version":
-        # Handle suffix matching (e.g., 0.1.0-PROD)
-        # Regex captures: (major).(minor).(patch)(optional -suffix)
-        match = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:-([a-zA-Z0-9]+))?", version_str)
+        # Handle suffix matching (e.g., 0.1.0-PROD or 0.1.0+prod)
+        # Regex captures: (major).(minor).(patch)(optional -/+suffix)
+        match = re.match(
+            r"^(\d+)\.(\d+)\.(\d+)(?:[-+]([a-zA-Z0-9]+(?:[._-][a-zA-Z0-9]+)*))?$",
+            version_str,
+        )
         if not match:
             raise ValueError(f"Invalid version format: {version_str}")
 
@@ -243,12 +249,14 @@ class VersionBumper:
             with self.pyproject_path.open("r", encoding="utf-8") as f:
                 doc = tomlkit.load(f)
 
+            # Keep pyproject version PEP 440 compatible by storing the base only.
+            pyproject_version = new_version.base()
             updated = False
             if "tool" in doc and "poetry" in doc["tool"] and "version" in doc["tool"]["poetry"]:
-                doc["tool"]["poetry"]["version"] = str(new_version)
+                doc["tool"]["poetry"]["version"] = pyproject_version
                 updated = True
             if "project" in doc and "version" in doc["project"]:
-                doc["project"]["version"] = str(new_version)
+                doc["project"]["version"] = pyproject_version
                 updated = True
 
             if not updated:
@@ -256,7 +264,7 @@ class VersionBumper:
                 return False
 
             if self.dry_run:
-                logger.info(f"[DRY-RUN] Update pyproject.toml to {new_version}")
+                logger.info(f"[DRY-RUN] Update pyproject.toml to {pyproject_version}")
                 return True
 
             new_content = tomlkit.dumps(doc)
@@ -264,7 +272,7 @@ class VersionBumper:
             self.updaters.append(updater)
             with updater:
                 if updater.update(new_content):
-                    logger.info(f"✓ Updated pyproject.toml to {new_version}")
+                    logger.info(f"✓ Updated pyproject.toml to {pyproject_version}")
                     return True
         except Exception as e:
             logger.error(f"Failed to update pyproject.toml: {e}")
@@ -316,7 +324,7 @@ class VersionBumper:
             # Match "version": "x.y.z" or "version": "x.y.z-suffix"
             pattern = r'"version":\s*"[^"]+"'
             # Use base version without suffix for npm compatibility
-            base_version = f"{new_version.major}.{new_version.minor}.{new_version.patch}"
+            base_version = new_version.base()
             new_content = re.sub(pattern, f'"version": "{base_version}"', content, count=1)
 
             if self.dry_run:

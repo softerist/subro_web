@@ -1,4 +1,5 @@
 import enum
+import logging
 import uuid
 from datetime import datetime
 from typing import (  # Using Optional for broader Python compatibility if needed
@@ -6,11 +7,13 @@ from typing import (  # Using Optional for broader Python compatibility if neede
 )
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
+    event,
     func,  # For server_default and onupdate
 )
 from sqlalchemy import Enum as SQLAlchemyEnum  # Renamed to avoid conflict with Python's enum
@@ -21,6 +24,8 @@ from app.db.base_class import Base  # Assuming Base is correctly imported
 
 if TYPE_CHECKING:
     from app.db.models.user import User  # For type hinting relationship
+
+logger = logging.getLogger(__name__)
 
 
 class JobStatus(str, enum.Enum):
@@ -34,6 +39,12 @@ class JobStatus(str, enum.Enum):
 
 class Job(Base):
     __tablename__ = "jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "(status NOT IN ('RUNNING', 'CANCELLING')) OR (celery_task_id IS NOT NULL)",
+            name="check_job_running_has_task_id",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -113,3 +124,40 @@ class Job(Base):
 
     def __repr__(self) -> str:
         return f"<Job(id={self.id}, status='{self.status.value}', user_id='{self.user_id}')>"
+
+    def validate_state_consistency(self) -> None:
+        """
+        Validates that the job's state is consistent.
+
+        Rules:
+        - RUNNING and CANCELLING jobs must have a celery_task_id
+        - Logs a warning if inconsistencies are detected
+
+        Raises:
+            ValueError: If critical state inconsistencies are detected
+        """
+        if self.status in (JobStatus.RUNNING, JobStatus.CANCELLING):
+            if not self.celery_task_id:
+                error_msg = (
+                    f"Job {self.id} has status '{self.status.value}' but no celery_task_id. "
+                    f"This is an inconsistent state. Jobs in RUNNING or CANCELLING status "
+                    f"must have a celery_task_id assigned."
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+
+# SQLAlchemy event listener to validate before insert/update
+@event.listens_for(Job, "before_insert")
+@event.listens_for(Job, "before_update")
+def validate_job_before_save(_mapper, _connection, target: Job):
+    """
+    Event listener that validates job state before saving to database.
+    This ensures we catch inconsistent states before they're persisted.
+    """
+    try:
+        target.validate_state_consistency()
+    except ValueError as e:
+        # Re-raise as a more specific exception that SQLAlchemy can handle
+        logger.error(f"Job validation failed: {e}")
+        raise

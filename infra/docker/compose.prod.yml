@@ -29,6 +29,9 @@ services:
       dockerfile: Dockerfile
       target: production-worker
     restart: always
+    group_add:
+      - "1000"
+      - "1002"
     volumes:
       - /mnt/sata0/Media:/mnt/sata0/Media
       - /mnt/usb3/Media:/mnt/usb3/Media
@@ -51,6 +54,8 @@ services:
       dockerfile: Dockerfile
       target: production-worker
     restart: always
+    group_add:
+      - "1000"
     entrypoint: []
     command: ["celery", "-A", "app.tasks.celery_app", "beat", "--loglevel=INFO"]
     volumes:
