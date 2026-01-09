@@ -8,34 +8,40 @@ WAIT_TIMEOUT="${WAIT_TIMEOUT:-60}"
 MAX_MIGRATION_ATTEMPTS="${MAX_MIGRATION_ATTEMPTS:-5}" # Increase attempts
 MIGRATION_RETRY_SLEEP="${MIGRATION_RETRY_SLEEP:-5}"   # Seconds between retries
 
-# --- User/Group ID Management ---
-PUID="${PUID:-1000}"
-PGID="${PGID:-1000}"
+# --- User/Group ID Management (development only) ---
+# In production, appuser is already created in the Dockerfile with correct UID/GID.
+# These privileged operations require capabilities that production containers don't have.
+if [ "${APP_ENV}" != "production" ]; then
+    PUID="${PUID:-1000}"
+    PGID="${PGID:-1000}"
 
-echo "Entrypoint: Setting appuser UID to $PUID and GID to $PGID..."
-# Ensure group exists with correct GID
-if ! getent group appuser > /dev/null 2>&1; then
-    groupadd -g "$PGID" appuser
+    echo "Entrypoint: Setting appuser UID to $PUID and GID to $PGID..."
+    # Ensure group exists with correct GID
+    if ! getent group appuser > /dev/null 2>&1; then
+        groupadd -g "$PGID" appuser
+    else
+        groupmod -o -g "$PGID" appuser || true
+    fi
+
+    # Ensure user exists with correct UID
+    if ! getent passwd appuser > /dev/null 2>&1; then
+        useradd -u "$PUID" -g "$PGID" -d /app appuser
+    else
+        usermod -o -u "$PUID" appuser || true
+    fi
+
+    # Ensure critical directories are owned by appuser
+    echo "Entrypoint: Ensuring ownership for appuser..."
+    chown appuser:appuser /app
+    # We only chown the top-level of mapped media folders to avoid long recursions
+    chown appuser:appuser /mnt/sata0/Media 2>/dev/null || true
+    chown appuser:appuser /app/logs 2>/dev/null || true
+    # Ensure translation log directory exists and is writable
+    mkdir -p /app/app/modules/subtitle/services/logs 2>/dev/null || true
+    chown -R appuser:appuser /app/app/modules/subtitle/services/logs 2>/dev/null || true
 else
-    groupmod -o -g "$PGID" appuser || true
+    echo "Entrypoint: Production mode - skipping user/group management (using image defaults)"
 fi
-
-# Ensure user exists with correct UID
-if ! getent passwd appuser > /dev/null 2>&1; then
-    useradd -u "$PUID" -g "$PGID" -d /app appuser
-else
-    usermod -o -u "$PUID" appuser || true
-fi
-
-# Ensure critical directories are owned by appuser
-echo "Entrypoint: Ensuring ownership for appuser..."
-chown appuser:appuser /app
-# We only chown the top-level of mapped media folders to avoid long recursions
-chown appuser:appuser /mnt/sata0/Media 2>/dev/null || true
-chown appuser:appuser /app/logs 2>/dev/null || true
-# Ensure translation log directory exists and is writable
-mkdir -p /app/app/modules/subtitle/services/logs 2>/dev/null || true
-chown -R appuser:appuser /app/app/modules/subtitle/services/logs 2>/dev/null || true
 
 # --- Wait for Database ---
 echo "Entrypoint: Waiting for database $DB_HOST:$DB_PORT..."
