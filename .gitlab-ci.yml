@@ -644,7 +644,55 @@ deploy_staging:
       # Use -T (no pseudo-TTY) and explicit options for resilient connection
       # BatchMode=yes prevents password prompts that could hang
       # RequestTTY=no skips TTY allocation which can trigger slow login scripts
-      ssh $SSH_OPTS "$SSH_HOST" bash -s <<DEPLOY_STA
+      ssh $SSH_OPTS "$SSH_HOST" bash -s <<DEPLOY_STAGE
+        set -euo pipefail
+
+        # 0. Ensure server-side SSH keepalives are configured (idempotent)
+        if [ ! -f /etc/ssh/sshd_config.d/keepalive.conf ]; then
+          printf "%s\n" "# CI/CD keepalives" "ClientAliveInterval 15" "ClientAliveCountMax 10" "TCPKeepAlive yes" > /etc/ssh/sshd_config.d/keepalive.conf &&
+          (systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true) &&
+          echo "SSH keepalives configured";
+        fi
+
+        # 1. Verify Docker images exist before deploying
+        echo ""
+        echo "=== Verifying Docker Images ==="
+
+        # Start background keepalive to prevent SSH timeout during slow docker operations
+        (while true; do echo -n "."; sleep 5; done) &
+        KEEPALIVE_PID=\$!
+        trap "kill \$KEEPALIVE_PID 2>/dev/null || true" EXIT
+
+        # Docker login with retry (handles registry timeouts)
+        for i in 1 2 3; do
+          if echo "${REGISTRY_PASSWORD}" | docker login -u "${REGISTRY_USER}" --password-stdin "${CI_REGISTRY}" 2>/dev/null; then
+            echo ""
+            echo 'Docker login successful'
+            break
+          fi
+          if [ \$i -eq 3 ]; then
+            kill \$KEEPALIVE_PID 2>/dev/null
+            echo ""
+            echo '❌ Docker login failed after 3 attempts'
+            exit 1
+          fi
+          echo ""
+          echo "Docker login attempt \$i failed, retrying in 5s..."
+          sleep 5
+        done
+
+        # Skip slow manifest verification - images were just pushed by build stage
+        # If they somehow don't exist, the docker pull in deploy will fail fast
+        echo 'Images built and pushed by CI - skipping slow manifest verification'
+        echo "Will deploy: ${DOCKER_IMAGE_API}"
+        echo "Will deploy: ${DOCKER_IMAGE_FRONTEND}"
+
+        # Kill keepalive before continuing
+        kill \$KEEPALIVE_PID 2>/dev/null || true
+        echo ""
+
+        docker logout "${CI_REGISTRY}"
+
         export DEPLOY_HOST_DIR="${STAGING_DEPLOY_DIR}"
         export ENV_FILE_NAME=".env.staging"
         export TRIGGER_SCRIPT="deploy_staging.sh"
@@ -653,7 +701,7 @@ deploy_staging:
         export DEPLOY_ENV="staging"
 
         $REMOTE_DEPLOY_SCRIPT
-      DEPLOY_STA
+      DEPLOY_STAGE
 
 verify_staging:
   retry: 1
@@ -790,7 +838,7 @@ cleanup_staging:
   extends: .ssh_setup
   script:
     - |
-      ssh -o BatchMode=yes -o TCPKeepAlive=yes -o ServerAliveInterval=2 -o ServerAliveCountMax=30 -o IPQoS=0x00 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<CLEANUP_SCRIPT
+      ssh $SSH_OPTS -o IPQoS=0x00 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<CLEANUP_SCRIPT
         set -euo pipefail
 
         # ANSI color codes for inline script
@@ -801,13 +849,13 @@ cleanup_staging:
         log() { echo -e "\${BLUE}[\$(date +'%Y-%m-%dT%H:%M:%S%z')]\${NC} \$*"; }
         success() { echo -e "\${GREEN}[\$(date +'%Y-%m-%dT%H:%M:%S%z')] ✓ \$*\${NC}"; }
 
-        STAGING_DIR="\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
+        STAGING_DIR="${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
 
         log "Starting cleanup for staging environment..."
-        log "Target directory: \$STAGING_DIR"
+        log "Target directory: $STAGING_DIR"
 
-        if [ -d "\$STAGING_DIR" ]; then
-          cd "\$STAGING_DIR"
+        if [ -d "$STAGING_DIR" ]; then
+          cd "$STAGING_DIR"
 
           # Stop staging containers (app stack) and remove volumes for true ephemeral state
           docker compose -p subro_staging \
