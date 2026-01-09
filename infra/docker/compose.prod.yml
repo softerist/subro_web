@@ -5,8 +5,6 @@ services:
       dockerfile: Dockerfile
       target: production-api
     restart: always
-    # ports:
-    #   - "8000:8000" # Only for debugging/external testing if needed # For integration tests
     expose:
       - "8000"
     volumes:
@@ -18,11 +16,6 @@ services:
       - ${PROJECT_ENV_FILE:-../.env.prod}
     networks:
       - internal_net
-    # Depends on DB/Redis which are external now (in Data stack)
-    # We can't use 'depends_on' for external services easily without 'external_links' or just network reachability.
-    # We remove explicit depends_on service condition, or keep it if we merge stacks.
-    # For independent stacks, we remove it and rely on healthcheck of the App itself fail/wait.
-    # Entrypoint script checks for DB anyway.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 5s
@@ -45,7 +38,6 @@ services:
       - ${PROJECT_ENV_FILE:-../.env.prod}
     networks:
       - internal_net
-    # Entrypoint waits for DB.
     healthcheck:
       test: ["CMD", "celery", "-A", "app.tasks.celery_app", "status"]
       interval: 20s
@@ -63,11 +55,11 @@ services:
     command: ["celery", "-A", "app.tasks.celery_app", "beat", "--loglevel=INFO"]
     volumes:
       - ../../logs:/app/logs
-      - celery_beat_schedule:/app/state
+      - celery_beat_schedule:/app/.local/state/subro-web
     env_file:
       - ${PROJECT_ENV_FILE:-../.env.prod}
     environment:
-      - CELERY_BEAT_SCHEDULE_FILENAME=/app/state/celerybeat-schedule
+      - CELERY_BEAT_SCHEDULE_FILENAME=/app/.local/state/subro-web/celerybeat-schedule
     networks:
       - internal_net
     healthcheck:
@@ -87,8 +79,7 @@ services:
         - VITE_WS_BASE_URL=${VITE_WS_BASE_URL}
     restart: always
     expose:
-      - "8080" # Nginx default port
-    # No volume needed
+      - "8080"
     env_file:
       - ${PROJECT_ENV_FILE:-../.env.prod}
     networks:
