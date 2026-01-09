@@ -942,12 +942,18 @@ release_version:
     action: access
   extends: .ssh_setup
   before_script:
-    - apk add --no-cache git python3 py3-pip openssh-client
+    - apk add --no-cache git python3 py3-pip bash openssh-client
     - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - |
+      if echo "$SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+      else
+        echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/id_rsa
+      fi
+    - chmod 600 ~/.ssh/id_rsa
     - ssh-keyscan $CI_SERVER_HOST >> ~/.ssh/known_hosts
     - chmod 644 ~/.ssh/known_hosts
-    - eval $(ssh-agent -s)
-    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
     - pip install --break-system-packages tomlkit
     - git config --global user.email "ci-bot@gitlab.com"
     - git config --global user.name "CI Bot"
