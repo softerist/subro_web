@@ -549,7 +549,7 @@ scan_image_vulns:
 sast_scan:
   stage: scan
   image:
-    name: returntocorp/semgrep:1.90.0
+    name: semgrep/semgrep:1.147.0
     entrypoint: [""]
   timeout: 10m
   rules:
