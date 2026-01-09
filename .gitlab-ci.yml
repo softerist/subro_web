@@ -105,12 +105,17 @@ variables:
   GIT_STRATEGY: fetch
   GIT_DEPTH: "20"
   GIT_SUBMODULE_STRATEGY: none
-  SSH_OPTS: "-T -o BatchMode=yes -o RequestTTY=no -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=30"
-
-  # Shared Remote Deploy Script Template (Intermediate Templating)
-  # Uses variables: DEPLOY_HOST_DIR, ENV_FILE_NAME, TRIGGER_SCRIPT, LOG_FILE, BACKUP_PREFIX, DEPLOY_ENV
+  SSH_OPTS: "-T -o IPQoS=0x00 -o BatchMode=yes -o RequestTTY=no -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=30"
   REMOTE_DEPLOY_SCRIPT: |
     set -euo pipefail
+
+    # Export deploy variables (passed via heredoc from CI runner)
+    export DEPLOY_HOST_DIR="$${DEPLOY_HOST_DIR}"
+    export ENV_FILE_NAME="$${ENV_FILE_NAME}"
+    export TRIGGER_SCRIPT="$${TRIGGER_SCRIPT}"
+    export LOG_FILE="$${LOG_FILE}"
+    export BACKUP_PREFIX="$${BACKUP_PREFIX:-}"
+    export DEPLOY_ENV="$${DEPLOY_ENV:-production}"
 
     # Ensure deploy directory exists
     mkdir -p "$${DEPLOY_HOST_DIR}"
@@ -226,6 +231,7 @@ ci_debug_env:
         --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
         -f "$DOCKERFILE" \
         --build-arg POETRY_VERSION="$POETRY_VERSION" \
+        ${BUILD_ARGS:-} \
         "$CONTEXT"
   rules:
     - when: on_success
@@ -240,23 +246,7 @@ build_api:
     TARGET: production-api
     DOCKERFILE: backend/Dockerfile
     CONTEXT: backend
-  script:
-    - |
-      set -euo pipefail
-      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
-      docker buildx inspect --bootstrap
-      docker buildx build \
-        --push \
-        -t "$DOCKER_IMAGE" \
-        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
-        --target "$TARGET" \
-        --provenance=false \
-        --sbom=false \
-        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04" \
-        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
-        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
-        -f "$DOCKERFILE" \
-        "$CONTEXT"
+    BUILD_ARGS: --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04"
 
 build_api_test:
   extends: .build_template
@@ -267,23 +257,7 @@ build_api_test:
     TARGET: ci-test
     DOCKERFILE: backend/Dockerfile
     CONTEXT: backend
-  script:
-    - |
-      set -euo pipefail
-      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
-      docker buildx inspect --bootstrap
-      docker buildx build \
-        --push \
-        -t "$DOCKER_IMAGE" \
-        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
-        --target "$TARGET" \
-        --provenance=false \
-        --sbom=false \
-        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04" \
-        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
-        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
-        -f "$DOCKERFILE" \
-        "$CONTEXT"
+    BUILD_ARGS: --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04"
 
 build_worker:
   extends: .build_template
@@ -294,23 +268,7 @@ build_worker:
     TARGET: production-worker
     DOCKERFILE: backend/Dockerfile
     CONTEXT: backend
-  script:
-    - |
-      set -euo pipefail
-      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
-      docker buildx inspect --bootstrap
-      docker buildx build \
-        --push \
-        -t "$DOCKER_IMAGE" \
-        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
-        --target "$TARGET" \
-        --provenance=false \
-        --sbom=false \
-        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04" \
-        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
-        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
-        -f "$DOCKERFILE" \
-        "$CONTEXT"
+    BUILD_ARGS: --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04"
 
 build_frontend:
   extends: .build_template
@@ -321,26 +279,11 @@ build_frontend:
     TARGET: production
     DOCKERFILE: frontend/Dockerfile
     CONTEXT: frontend
-  script:
-    - |
-      set -euo pipefail
-      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
-      docker buildx inspect --bootstrap
-      docker buildx build \
-        --push \
-        -t "$DOCKER_IMAGE" \
-        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
-        --target "$TARGET" \
-        --provenance=false \
-        --sbom=false \
-        --build-arg BASE_IMAGE_NODE="public.ecr.aws/docker/library/node:20-alpine" \
-        --build-arg BASE_IMAGE_NGINX="public.ecr.aws/docker/library/nginx:stable-alpine" \
-        --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-/api/v1}" \
-        --build-arg VITE_WS_BASE_URL="${VITE_WS_BASE_URL:-/api/v1}" \
-        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
-        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
-        -f "$DOCKERFILE" \
-        "$CONTEXT"
+    BUILD_ARGS: >-
+      --build-arg BASE_IMAGE_NODE="public.ecr.aws/docker/library/node:20-alpine"
+      --build-arg BASE_IMAGE_NGINX="public.ecr.aws/docker/library/nginx:stable-alpine"
+      --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-/api/v1}"
+      --build-arg VITE_WS_BASE_URL="${VITE_WS_BASE_URL:-/api/v1}"
 
 build_backup:
   extends: .build_template
@@ -351,23 +294,7 @@ build_backup:
     TARGET: production
     DOCKERFILE: infra/docker/backup/Dockerfile
     CONTEXT: .
-  script:
-    - |
-      set -euo pipefail
-      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
-      docker buildx inspect --bootstrap
-      docker buildx build \
-        --push \
-        -t "$DOCKER_IMAGE" \
-        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
-        --target "$TARGET" \
-        --provenance=false \
-        --sbom=false \
-        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/alpine:3.20" \
-        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
-        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
-        -f "$DOCKERFILE" \
-        "$CONTEXT"
+    BUILD_ARGS: --build-arg BASE_IMAGE="public.ecr.aws/docker/library/alpine:3.20"
 
 # ============ TEST STAGE ============
 backend_tests:
@@ -375,9 +302,8 @@ backend_tests:
   extends: .default-docker
   needs: [build_api_test]
   timeout: 20m
-  interruptible: false # Prevent cancellation during test/cleanup
+  interruptible: false
   variables:
-    # Database config for test container - use CI/CD variables with fallback defaults
     POSTGRES_USER: "${CI_TEST_POSTGRES_USER}"
     POSTGRES_PASSWORD: "${CI_TEST_POSTGRES_PASSWORD}"
     POSTGRES_DB: "${CI_TEST_POSTGRES_DB}"
@@ -461,11 +387,9 @@ backend_tests:
         echo "Waiting for API ($i/30)..." && sleep 2
       done
 
-    # Install test dependencies and run tests
     - docker exec api poetry run pytest -p no:cacheprovider tests/
   after_script:
     - docker logs api 2>&1 | tail -50 || true
-    # Forceful cleanup - ensure containers are removed even on abort
     - docker rm -f api db db_test redis 2>/dev/null || true
     - docker network rm testnet 2>/dev/null || true
 
@@ -499,7 +423,7 @@ frontend_tests:
 scan_image_vulns:
   stage: scan
   image:
-    name: aquasec/trivy:0.58.0 # Updated from 0.53.0
+    name: aquasec/trivy:0.58.0
     entrypoint: [""]
   needs: [build_api, build_worker, build_frontend, build_backup]
   timeout: 15m
@@ -647,14 +571,6 @@ deploy_staging:
       set -euo pipefail
 
       echo "=== Starting Consolidated Staging Deployment ==="
-      # Use -T (no pseudo-TTY) and explicit options for resilient connection
-      # BatchMode=yes prevents password prompts that could hang
-      # RequestTTY=no skips TTY allocation which can trigger slow login scripts
-      : "${DEPLOY_HOST_DIR:?missing DEPLOY_HOST_DIR}"
-      : "${ENV_FILE_NAME:?missing ENV_FILE_NAME}"
-      : "${TRIGGER_SCRIPT:?missing TRIGGER_SCRIPT}"
-      : "${LOG_FILE:?missing LOG_FILE}"
-      : "${DEPLOY_ENV:?missing DEPLOY_ENV}"
       ssh $SSH_OPTS "$SSH_HOST" bash -s <<DEPLOY_STAGE
         set -euo pipefail
 
@@ -835,7 +751,7 @@ cleanup_staging:
   image: alpine:3.20
   resource_group: staging
   variables:
-    STAGING_DEPLOY_DIR: /opt/subro_web_staging # Consistent with deploy_staging
+    STAGING_DEPLOY_DIR: /opt/subro_web_staging
   needs:
     - job: e2e_tests
       artifacts: false
@@ -848,11 +764,11 @@ cleanup_staging:
       optional: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-      when: always # Run even if e2e_tests fail
+      when: always
   extends: .ssh_setup
   script:
     - |
-      ssh $SSH_OPTS -o IPQoS=0x00 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<CLEANUP_SCRIPT
+      ssh $SSH_OPTS -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<CLEANUP_SCRIPT
         set -euo pipefail
 
         # ANSI color codes for inline script
@@ -882,13 +798,14 @@ cleanup_staging:
           log 'Staging directory not found, nothing to clean up'
         fi
       CLEANUP_SCRIPT
-  allow_failure: true # Don't block pipeline if cleanup fails
+  allow_failure: true
 
 # ============ DEPLOY STAGE ============
 .deploy_template:
   stage: deploy
   image: alpine:3.20
-  resource_group: $CI_ENVIRONMENT_NAME # Serializes deploys per environment
+  extends: .ssh_setup
+  resource_group: $CI_ENVIRONMENT_NAME
   needs:
     - job: backend_tests
       artifacts: false
@@ -898,32 +815,11 @@ cleanup_staging:
       artifacts: false
     - job: secret_scan
       artifacts: false
-  before_script:
-    - set -euo pipefail
-    - apk add --no-cache bash openssh-client
-    - eval "$(ssh-agent -s)"
-    - |
-      if echo "$SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
-        echo "$SSH_PRIVATE_KEY" > /tmp/ssh_key
-      else
-        echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
-      fi
-    - chmod 600 /tmp/ssh_key
-    - ssh-add /tmp/ssh_key
-    - rm -f /tmp/ssh_key
-    - mkdir -p ~/.ssh
-    - |
-      if [ -n "${SSH_HOST_KEY:-}" ]; then
-        echo "$SSH_HOST_KEY" >> ~/.ssh/known_hosts
-      else
-        ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
-      fi
   retry: 1
 
 deploy_prod:
   extends: .deploy_template
   needs:
-    # From template (Policy enforcement)
     - job: backend_tests
       artifacts: false
     - job: scan_image_vulns
@@ -932,7 +828,6 @@ deploy_prod:
       artifacts: false
     - job: secret_scan
       artifacts: false
-    # Production specific
     - job: e2e_tests
       artifacts: false
     - job: build_api
@@ -960,12 +855,6 @@ deploy_prod:
     DEPLOY_ENV: production
   script:
     - |
-      # Deploy (Fire and Forget)
-      : "${DEPLOY_HOST_DIR:?missing DEPLOY_HOST_DIR}"
-      : "${ENV_FILE_NAME:?missing ENV_FILE_NAME}"
-      : "${TRIGGER_SCRIPT:?missing TRIGGER_SCRIPT}"
-      : "${LOG_FILE:?missing LOG_FILE}"
-      : "${DEPLOY_ENV:?missing DEPLOY_ENV}"
       ssh $SSH_OPTS \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_PROD
         $REMOTE_DEPLOY_SCRIPT
@@ -1174,7 +1063,7 @@ rollback_prod:
   image: alpine:3.20
   needs:
     - job: verify_prod
-      optional: true # Required for when: on_failure to trigger
+      optional: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: on_failure
