@@ -9,16 +9,16 @@
 services:
   api:
     image: ${DOCKER_IMAGE_API:?DOCKER_IMAGE_API required}
-    pull_policy: always
+    pull_policy: missing
 
   worker:
     image: ${DOCKER_IMAGE_WORKER:?DOCKER_IMAGE_WORKER required}
-    pull_policy: always
+    pull_policy: missing
 
   frontend:
     image: ${DOCKER_IMAGE_FRONTEND:?DOCKER_IMAGE_FRONTEND required}
-    pull_policy: always
+    pull_policy: missing
 
   backup:
     image: ${DOCKER_IMAGE_BACKUP:?DOCKER_IMAGE_BACKUP required}
-    pull_policy: always
+    pull_policy: missing

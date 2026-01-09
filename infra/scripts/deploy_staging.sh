@@ -218,7 +218,7 @@ if [ -d "$PROD_INFRA_DIR/docker" ]; then
 fi
 
 log "Recreating Caddy (picks up env changes)..."
-PROJECT_ENV_FILE="$PROD_ENV_FILE" docker compose --progress=plain --env-file "$PROD_ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --force-recreate caddy
+PROJECT_ENV_FILE="$PROD_ENV_FILE" docker compose --progress=plain --env-file "$PROD_ENV_FILE" -p infra -f "$PROD_INFRA_DIR/docker/compose.gateway.yml" -f "$PROD_INFRA_DIR/docker/compose.data.yml" up -d --force-recreate caddy
 section_end "stage_caddy"
 
 # Cleanup old images to prevent disk buildup (runs in background)
