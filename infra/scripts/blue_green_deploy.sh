@@ -118,6 +118,40 @@ section_end "prod_sysctl"
 log "Stopping Development Stack (if running)..."
 docker compose -p subapp_dev -f "$DOCK_DIR/docker-compose.yml" -f "$DOCK_DIR/docker-compose.override.yml" down 2>/dev/null || true
 
+# 0.9 Ensure Caddyfile.prod exists BEFORE starting infrastructure
+# This prevents Caddy from using dev config on first boot
+section_start "prod_caddyfile_init" "Initializing Caddyfile.prod"
+TEMPLATE="$DOCK_DIR/Caddyfile.template"
+if [ ! -f "$TEMPLATE" ]; then
+    error "Caddyfile.template not found at $TEMPLATE"
+    exit 1
+fi
+
+# Determine which color to route to (prefer existing active, fallback to blue)
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "green-api-1"; then
+    INIT_COLOR="green"
+elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "blue-api-1"; then
+    INIT_COLOR="blue"
+else
+    INIT_COLOR="blue"  # Default to blue for fresh deployments
+fi
+
+DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+if [ -z "$DOMAIN_NAME" ]; then
+    error "DOMAIN_NAME not found in $ENV_FILE"
+    exit 1
+fi
+
+# Only regenerate if empty or missing (preserve existing config if valid)
+if [ ! -s "$CADDYFILE_PROD" ]; then
+    log "Generating initial Caddyfile.prod (routing to $INIT_COLOR)..."
+    sed "s/{{UPSTREAM_API}}/$INIT_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$INIT_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$TEMPLATE" > "$CADDYFILE_PROD"
+    success "Caddyfile.prod initialized"
+else
+    log "Caddyfile.prod already exists, skipping initialization"
+fi
+section_end "prod_caddyfile_init"
+
 # 1. Ensure Infrastructure (Gateway + Data) is running
 section_start "prod_infra" "Ensuring Infrastucture is Up"
 if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
