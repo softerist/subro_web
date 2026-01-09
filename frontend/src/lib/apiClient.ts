@@ -61,7 +61,8 @@ api.interceptors.response.use(
 
       try {
         console.debug(
-          `[API] 401 detected on ${originalRequest.url}. Attempting token refresh...`,
+          "[API] 401 detected on %s. Attempting token refresh...",
+          originalRequest.url,
         );
         const newAccessToken = await refreshAccessToken();
         if (newAccessToken) {
@@ -77,7 +78,8 @@ api.interceptors.response.use(
       } catch (refreshError) {
         // Refresh failed (token expired or invalid)
         console.error(
-          `[API] Refresh failed for ${originalRequest.url}:`,
+          "[API] Refresh failed for %s:",
+          originalRequest.url,
           refreshError,
         );
         useAuthStore.getState().logout(); // Clear state
@@ -87,7 +89,9 @@ api.interceptors.response.use(
           window.location.pathname !== "/onboarding"
         ) {
           console.warn(
-            `[API] Redirecting to login from ${window.location.pathname} due to auth failure on ${originalRequest.url}`,
+            "[API] Redirecting to login from %s due to auth failure on %s",
+            window.location.pathname,
+            originalRequest.url,
           );
           window.location.href = "/login";
         }
