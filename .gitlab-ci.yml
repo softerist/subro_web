@@ -109,14 +109,6 @@ variables:
   REMOTE_DEPLOY_SCRIPT: |
     set -euo pipefail
 
-    # Export deploy variables (passed via heredoc from CI runner)
-    export DEPLOY_HOST_DIR="$${DEPLOY_HOST_DIR}"
-    export ENV_FILE_NAME="$${ENV_FILE_NAME}"
-    export TRIGGER_SCRIPT="$${TRIGGER_SCRIPT}"
-    export LOG_FILE="$${LOG_FILE}"
-    export BACKUP_PREFIX="$${BACKUP_PREFIX:-}"
-    export DEPLOY_ENV="$${DEPLOY_ENV:-production}"
-
     # Ensure deploy directory exists
     mkdir -p "$${DEPLOY_HOST_DIR}"
     cd "$${DEPLOY_HOST_DIR}"
@@ -574,6 +566,14 @@ deploy_staging:
       ssh $SSH_OPTS "$SSH_HOST" bash -s <<DEPLOY_STAGE
         set -euo pipefail
 
+        # Export deploy variables for REMOTE_DEPLOY_SCRIPT
+        export DEPLOY_HOST_DIR="${DEPLOY_HOST_DIR}"
+        export ENV_FILE_NAME="${ENV_FILE_NAME}"
+        export TRIGGER_SCRIPT="${TRIGGER_SCRIPT}"
+        export LOG_FILE="${LOG_FILE}"
+        export BACKUP_PREFIX="${BACKUP_PREFIX:-}"
+        export DEPLOY_ENV="${DEPLOY_ENV:-staging}"
+
         # 0. Ensure server-side SSH keepalives are configured (idempotent)
         if [ ! -f /etc/ssh/sshd_config.d/keepalive.conf ]; then
           printf "%s\n" "# CI/CD keepalives" "ClientAliveInterval 15" "ClientAliveCountMax 10" "TCPKeepAlive yes" > /etc/ssh/sshd_config.d/keepalive.conf &&
@@ -619,6 +619,14 @@ deploy_staging:
         echo ""
 
         docker logout "${CI_REGISTRY}"
+
+        # Export deploy variables for REMOTE_DEPLOY_SCRIPT
+        export DEPLOY_HOST_DIR="${DEPLOY_HOST_DIR}"
+        export ENV_FILE_NAME="${ENV_FILE_NAME}"
+        export TRIGGER_SCRIPT="${TRIGGER_SCRIPT}"
+        export LOG_FILE="${LOG_FILE}"
+        export BACKUP_PREFIX="${BACKUP_PREFIX:-}"
+        export DEPLOY_ENV="${DEPLOY_ENV:-staging}"
 
         $REMOTE_DEPLOY_SCRIPT
       DEPLOY_STAGE
@@ -857,6 +865,14 @@ deploy_prod:
     - |
       ssh $SSH_OPTS \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_PROD
+        # Export deploy variables for REMOTE_DEPLOY_SCRIPT
+        export DEPLOY_HOST_DIR="${DEPLOY_HOST_DIR}"
+        export ENV_FILE_NAME="${ENV_FILE_NAME}"
+        export TRIGGER_SCRIPT="${TRIGGER_SCRIPT}"
+        export LOG_FILE="${LOG_FILE}"
+        export BACKUP_PREFIX="${BACKUP_PREFIX:-}"
+        export DEPLOY_ENV="${DEPLOY_ENV:-production}"
+
         $REMOTE_DEPLOY_SCRIPT
       DEPLOY_PROD
 
