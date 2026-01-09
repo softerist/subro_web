@@ -110,22 +110,22 @@ variables:
     set -euo pipefail
 
     # Ensure deploy directory exists
-    mkdir -p "\${DEPLOY_HOST_DIR}"
-    cd "\${DEPLOY_HOST_DIR}"
+    mkdir -p "${DEPLOY_HOST_DIR}"
+    cd "${DEPLOY_HOST_DIR}"
 
     # Clone/Fetch repo
     if [ ! -d .git ]; then
       git init .
-      git remote add origin "git@\${CI_SERVER_HOST}:\${CI_PROJECT_PATH}.git"
+      git remote add origin "git@${CI_SERVER_HOST}:${CI_PROJECT_PATH}.git"
     fi
-    git fetch --depth 1 origin "\${CI_COMMIT_SHA}"
-    git checkout -f "\${CI_COMMIT_SHA}"
+    git fetch --depth 1 origin "${CI_COMMIT_SHA}"
+    git checkout -f "${CI_COMMIT_SHA}"
     git clean -fd
 
     # Ensure infra directory exists
     mkdir -p infra
     # Write base secrets
-    echo '${PROD_ENV_FILE}' | base64 -d > "infra/\${ENV_FILE_NAME}"
+    echo '${PROD_ENV_FILE}' | base64 -d > "infra/${ENV_FILE_NAME}"
 
     # Append CI-specific variables
     {
@@ -138,21 +138,21 @@ variables:
       echo "DOCKER_IMAGE_FRONTEND='${DOCKER_IMAGE_FRONTEND}'"
       echo "DOCKER_IMAGE_BACKUP='${DOCKER_IMAGE_BACKUP}'"
       echo "DEPLOY_COMMIT_SHA='${CI_COMMIT_SHA}'"
-      echo "BACKUP_PREFIX='\${BACKUP_PREFIX:-}'"
+      echo "BACKUP_PREFIX='${BACKUP_PREFIX:-}'"
       echo "USE_PREBUILT_IMAGES='1'"
-      echo "DEPLOY_ENV='\${DEPLOY_ENV:-production}'"
-    } >> "infra/\${ENV_FILE_NAME}"
+      echo "DEPLOY_ENV='${DEPLOY_ENV:-production}'"
+    } >> "infra/${ENV_FILE_NAME}"
 
-    chmod 600 "infra/\${ENV_FILE_NAME}"
+    chmod 600 "infra/${ENV_FILE_NAME}"
     chmod +x ./infra/scripts/*.sh
 
     # Trigger detached deployment
     nohup ./infra/scripts/ci_deploy_trigger.sh \
-        "./infra/\${ENV_FILE_NAME}" \
-        "./infra/scripts/\${TRIGGER_SCRIPT}" \
-        "\${LOG_FILE}" > /dev/null 2>&1 &
+        "./infra/${ENV_FILE_NAME}" \
+        "./infra/scripts/${TRIGGER_SCRIPT}" \
+        "${LOG_FILE}" > /dev/null 2>&1 &
 
-    echo "✅ Deployment triggered in background. Check '\${LOG_FILE}' on server for details."
+    echo "✅ Deployment triggered in background. Check '${LOG_FILE}' on server for details."
 
 # -------- Docker-in-Docker Helper --------
 .default-docker:
