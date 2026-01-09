@@ -246,7 +246,7 @@ build_api:
     TARGET: production-api
     DOCKERFILE: backend/Dockerfile
     CONTEXT: backend
-    BUILD_ARGS: --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04"
+    BUILD_ARGS: --build-arg BASE_IMAGE=public.ecr.aws/docker/library/ubuntu:24.04
 
 build_api_test:
   extends: .build_template
@@ -257,7 +257,7 @@ build_api_test:
     TARGET: ci-test
     DOCKERFILE: backend/Dockerfile
     CONTEXT: backend
-    BUILD_ARGS: --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04"
+    BUILD_ARGS: --build-arg BASE_IMAGE=public.ecr.aws/docker/library/ubuntu:24.04
 
 build_worker:
   extends: .build_template
@@ -268,7 +268,7 @@ build_worker:
     TARGET: production-worker
     DOCKERFILE: backend/Dockerfile
     CONTEXT: backend
-    BUILD_ARGS: --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04"
+    BUILD_ARGS: --build-arg BASE_IMAGE=public.ecr.aws/docker/library/ubuntu:24.04
 
 build_frontend:
   extends: .build_template
@@ -280,10 +280,10 @@ build_frontend:
     DOCKERFILE: frontend/Dockerfile
     CONTEXT: frontend
     BUILD_ARGS: >-
-      --build-arg BASE_IMAGE_NODE="public.ecr.aws/docker/library/node:20-alpine"
-      --build-arg BASE_IMAGE_NGINX="public.ecr.aws/docker/library/nginx:stable-alpine"
-      --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-/api/v1}"
-      --build-arg VITE_WS_BASE_URL="${VITE_WS_BASE_URL:-/api/v1}"
+      --build-arg BASE_IMAGE_NODE=public.ecr.aws/docker/library/node:20-alpine
+      --build-arg BASE_IMAGE_NGINX=public.ecr.aws/docker/library/nginx:stable-alpine
+      --build-arg VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api/v1}
+      --build-arg VITE_WS_BASE_URL=${VITE_WS_BASE_URL:-/api/v1}
 
 build_backup:
   extends: .build_template
@@ -294,7 +294,7 @@ build_backup:
     TARGET: production
     DOCKERFILE: infra/docker/backup/Dockerfile
     CONTEXT: .
-    BUILD_ARGS: --build-arg BASE_IMAGE="public.ecr.aws/docker/library/alpine:3.20"
+    BUILD_ARGS: --build-arg BASE_IMAGE=public.ecr.aws/docker/library/alpine:3.20
 
 # ============ TEST STAGE ============
 backend_tests:
