@@ -625,9 +625,8 @@ deploy_staging:
         trap "kill \$KEEPALIVE_PID 2>/dev/null" EXIT
 
         # Docker login with retry (handles registry timeouts)
-        # Use single quotes around secrets to prevent remote shell expansion
         for i in 1 2 3; do
-          if echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin "${CI_REGISTRY}" 2>/dev/null; then
+          if echo "${REGISTRY_PASSWORD}" | docker login -u "${REGISTRY_USER}" --password-stdin "${CI_REGISTRY}" 2>/dev/null; then
             echo ""
             echo 'Docker login successful'
             break
