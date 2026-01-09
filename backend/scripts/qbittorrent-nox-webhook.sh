@@ -21,15 +21,36 @@ fi
 
 echo "Processing path: $TORRENT_PATH"
 
-# Load environment from repo root if available.
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Determine script and repo directories
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Assuming script is in backend/scripts/
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
-if [ -f "$ENV_FILE" ]; then
-    set -a
-    # shellcheck disable=SC1090
-    . "$ENV_FILE"
-    set +a
+
+# Define potential env file locations
+POSSIBLE_ENV_FILES=(
+    "${ENV_FILE:-}"
+    "$REPO_ROOT/.env"
+    "/opt/subro_web/.env"
+    "$HOME/subro_web/.env"
+)
+
+LOADED_ENV=""
+
+for file in "${POSSIBLE_ENV_FILES[@]}"; do
+    if [ -n "$file" ] && [ -f "$file" ]; then
+        echo "Loading environment from: $file"
+        # Use simple sourcing with allexport
+        set -o allexport
+        # shellcheck disable=SC1090
+        source "$file"
+        set +o allexport
+        LOADED_ENV="$file"
+        break
+    fi
+done
+
+if [ -z "$LOADED_ENV" ]; then
+    echo "Warning: No .env file found. Expecting variables in environment."
 fi
 
 # Environment variables (configured in .env):
@@ -42,8 +63,17 @@ PLEX_TOKEN="${PLEX_TOKEN:-}"
 PLEX_SECTION_IDS="${PLEX_SECTION_IDS:-}"
 PLEX_SECTION_TOKENS="${PLEX_SECTION_TOKENS:-}"
 
+# Debug: Print first few chars of key to verify load (security safe)
+if [ -n "$SUBRO_API_KEY" ]; then
+   echo "SUBRO_API_KEY loaded (starts with: ${SUBRO_API_KEY:0:4}...)"
+else
+   echo "SUBRO_API_KEY is empty"
+fi
+
+echo "SUBRO_API_BASE_URL: $SUBRO_API_BASE_URL"
+
 if [ -z "$SUBRO_API_BASE_URL" ] || [ -z "$SUBRO_API_KEY" ]; then
-    echo "Error: SUBRO_API_BASE_URL and SUBRO_API_KEY must be set in the environment."
+    echo "Error: SUBRO_API_BASE_URL and SUBRO_API_KEY must be set in the environment or .env file."
     exit 1
 fi
 
