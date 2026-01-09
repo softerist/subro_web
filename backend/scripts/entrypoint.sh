@@ -9,9 +9,9 @@ MAX_MIGRATION_ATTEMPTS="${MAX_MIGRATION_ATTEMPTS:-5}" # Increase attempts
 MIGRATION_RETRY_SLEEP="${MIGRATION_RETRY_SLEEP:-5}"   # Seconds between retries
 
 # --- User/Group ID Management (development only) ---
-# In production, appuser is already created in the Dockerfile with correct UID/GID.
-# These privileged operations require capabilities that production containers don't have.
-if [ "${APP_ENV}" != "production" ]; then
+# In production/staging/test, appuser is already created in the Dockerfile with correct UID/GID.
+# These privileged operations require capabilities that non-development containers don't have.
+if [ "${APP_ENV}" = "development" ]; then
     PUID="${PUID:-1000}"
     PGID="${PGID:-1000}"
 
