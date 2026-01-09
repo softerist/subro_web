@@ -1342,11 +1342,19 @@ export default function SettingsPage() {
                         variant="secondary"
                         size="icon"
                         className="bg-secondary/70 hover:bg-secondary text-secondary-foreground"
-                        onClick={() => {
+                        onClick={async () => {
                           if (generatedApiKey) {
-                            navigator.clipboard.writeText(generatedApiKey);
-                            setSuccess("API Key copied to clipboard.");
-                            setTimeout(() => setSuccess(null), 2000);
+                            try {
+                              await navigator.clipboard.writeText(
+                                generatedApiKey,
+                              );
+                              setSuccess("API Key copied to clipboard.");
+                              setTimeout(() => setSuccess(null), 2000);
+                            } catch (err) {
+                              console.error("Failed to copy API key:", err);
+                              setSuccess("Failed to copy to clipboard");
+                              setTimeout(() => setSuccess(null), 2000);
+                            }
                           }
                         }}
                         disabled={!generatedApiKey}
@@ -1375,11 +1383,17 @@ export default function SettingsPage() {
                       </Label>
                       <div
                         className="rounded-md border border-emerald-200 dark:border-sky-900/50 bg-emerald-50 dark:bg-sky-950/30 p-3 font-mono text-xs text-emerald-900 dark:text-sky-200 break-all cursor-pointer transition-colors hover:bg-emerald-100 dark:hover:bg-sky-950/50 hover:border-emerald-300 dark:hover:border-sky-800"
-                        onClick={() => {
+                        onClick={async () => {
                           const cmd = `curl -X POST ${window.location.origin}/api/v1/jobs/ -H "X-API-Key: ${generatedApiKey}" -H "Content-Type: application/json" -d "{\\"folder_path\\": \\"%R/%N\\", \\"log_level\\": \\"INFO\\"}"`;
-                          navigator.clipboard.writeText(cmd);
-                          setSuccess("Command copied to clipboard.");
-                          setTimeout(() => setSuccess(null), 2000);
+                          try {
+                            await navigator.clipboard.writeText(cmd);
+                            setSuccess("Command copied to clipboard.");
+                            setTimeout(() => setSuccess(null), 2000);
+                          } catch (err) {
+                            console.error("Failed to copy command:", err);
+                            setSuccess("Failed to copy to clipboard");
+                            setTimeout(() => setSuccess(null), 2000);
+                          }
                         }}
                       >
                         curl -X POST {window.location.origin}/api/v1/jobs/ \
