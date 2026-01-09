@@ -110,13 +110,23 @@ export BACKUP_PREFIX="staging_"
 
 section_start "stage_pull" "Pulling and Starting Staging App Stack"
 
-# Login to GitLab Registry if credentials are provided
+# Login to GitLab Registry if credentials are provided (with retry for transient failures)
 if [ -n "${REGISTRY_PASSWORD:-}" ] && [ -n "${REGISTRY_USER:-}" ] && [ -n "${CI_REGISTRY:-}" ]; then
     log "Logging into GitLab Registry..."
-    if echo "$REGISTRY_PASSWORD" | docker login -u "$REGISTRY_USER" --password-stdin "$CI_REGISTRY" 2>/dev/null; then
-        success "Docker registry login successful"
-    else
-        error "Docker registry login failed"
+    LOGIN_SUCCESS=false
+    for attempt in 1 2 3; do
+        if echo "$REGISTRY_PASSWORD" | docker login -u "$REGISTRY_USER" --password-stdin "$CI_REGISTRY" 2>/dev/null; then
+            success "Docker registry login successful"
+            LOGIN_SUCCESS=true
+            break
+        fi
+        if [ $attempt -lt 3 ]; then
+            warn "Docker login attempt $attempt/3 failed, retrying in 1s..."
+            sleep 1
+        fi
+    done
+    if [ "$LOGIN_SUCCESS" = false ]; then
+        error "Docker registry login failed after 3 attempts"
         exit 1
     fi
 else
