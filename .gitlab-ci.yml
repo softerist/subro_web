@@ -695,13 +695,13 @@ verify_staging:
           VERSION=$(echo "$RESPONSE" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
           if [ -z "$VERSION" ]; then VERSION="unknown"; fi
           echo ""
-          echo "┌─────────────────────────────────────────────────────┐"
-          echo "│  ✅ Staging deployment verified successfully!       │"
-          echo "├─────────────────────────────────────────────────────┤"
-          echo "│  • Commit:   $SHORT_SHA                             │"
-          echo "│  • Version:  $VERSION                               │"
-          echo "│  • API:      https://staging.$SSH_HOST/api/v1/      │"
-          echo "└─────────────────────────────────────────────────────┘"
+          echo "┌───────────────────────────────────────────────────────┐"
+          echo "│  ✅ Staging deployment verified successfully!         │"
+          echo "├───────────────────────────────────────────────────────┤"
+          printf "│  • %-10s %-41s │\n" "Commit:" "$SHORT_SHA"
+          printf "│  • %-10s %-41s │\n" "Version:" "$VERSION"
+          printf "│  • %-10s %-41s │\n" "API:" "https://staging.$SSH_HOST/api/v1/"
+          echo "└───────────────────────────────────────────────────────┘"
           exit 0
         fi
 
