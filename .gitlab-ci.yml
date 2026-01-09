@@ -110,8 +110,8 @@ variables:
     set -euo pipefail
 
     # Ensure deploy directory exists
-    mkdir -p "${DEPLOY_HOST_DIR}"
-    cd "${DEPLOY_HOST_DIR}"
+    mkdir -p "\${DEPLOY_HOST_DIR}"
+    cd "\${DEPLOY_HOST_DIR}"
 
     # Clone/Fetch repo
     if [ ! -d .git ]; then
@@ -125,7 +125,7 @@ variables:
     # Ensure infra directory exists
     mkdir -p infra
     # Write base secrets
-    echo '${PROD_ENV_FILE}' | base64 -d > "infra/${ENV_FILE_NAME}"
+    echo '${PROD_ENV_FILE}' | base64 -d > "infra/\${ENV_FILE_NAME}"
 
     # Append CI-specific variables
     {
@@ -138,21 +138,21 @@ variables:
       echo "DOCKER_IMAGE_FRONTEND='${DOCKER_IMAGE_FRONTEND}'"
       echo "DOCKER_IMAGE_BACKUP='${DOCKER_IMAGE_BACKUP}'"
       echo "DEPLOY_COMMIT_SHA='${CI_COMMIT_SHA}'"
-      echo "BACKUP_PREFIX='${BACKUP_PREFIX:-}'"
+      echo "BACKUP_PREFIX='\${BACKUP_PREFIX:-}'"
       echo "USE_PREBUILT_IMAGES='1'"
-      echo "DEPLOY_ENV='${DEPLOY_ENV:-production}'"
-    } >> "infra/${ENV_FILE_NAME}"
+      echo "DEPLOY_ENV='\${DEPLOY_ENV:-production}'"
+    } >> "infra/\${ENV_FILE_NAME}"
 
-    chmod 600 "infra/${ENV_FILE_NAME}"
+    chmod 600 "infra/\${ENV_FILE_NAME}"
     chmod +x ./infra/scripts/*.sh
 
     # Trigger detached deployment
     nohup ./infra/scripts/ci_deploy_trigger.sh \
-        "./infra/${ENV_FILE_NAME}" \
-        "./infra/scripts/${TRIGGER_SCRIPT}" \
-        "${LOG_FILE}" > /dev/null 2>&1 &
+        "./infra/\${ENV_FILE_NAME}" \
+        "./infra/scripts/\${TRIGGER_SCRIPT}" \
+        "\${LOG_FILE}" > /dev/null 2>&1 &
 
-    echo "✅ Deployment triggered in background. Check '${LOG_FILE}' on server for details."
+    echo "✅ Deployment triggered in background. Check '\${LOG_FILE}' on server for details."
 
 # -------- Docker-in-Docker Helper --------
 .default-docker:
@@ -644,6 +644,17 @@ deploy_staging:
       # Use -T (no pseudo-TTY) and explicit options for resilient connection
       # BatchMode=yes prevents password prompts that could hang
       # RequestTTY=no skips TTY allocation which can trigger slow login scripts
+      DEPLOY_HOST_DIR="${STAGING_DEPLOY_DIR}"
+      ENV_FILE_NAME=".env.staging"
+      TRIGGER_SCRIPT="deploy_staging.sh"
+      LOG_FILE="last_deploy.log"
+      BACKUP_PREFIX="staging_"
+      DEPLOY_ENV="staging"
+      : "${DEPLOY_HOST_DIR:?missing DEPLOY_HOST_DIR}"
+      : "${ENV_FILE_NAME:?missing ENV_FILE_NAME}"
+      : "${TRIGGER_SCRIPT:?missing TRIGGER_SCRIPT}"
+      : "${LOG_FILE:?missing LOG_FILE}"
+      : "${DEPLOY_ENV:?missing DEPLOY_ENV}"
       ssh $SSH_OPTS "$SSH_HOST" bash -s <<DEPLOY_STAGE
         set -euo pipefail
 
@@ -692,13 +703,6 @@ deploy_staging:
         echo ""
 
         docker logout "${CI_REGISTRY}"
-
-        export DEPLOY_HOST_DIR="${STAGING_DEPLOY_DIR}"
-        export ENV_FILE_NAME=".env.staging"
-        export TRIGGER_SCRIPT="deploy_staging.sh"
-        export LOG_FILE="last_deploy.log"
-        export BACKUP_PREFIX="staging_"
-        export DEPLOY_ENV="staging"
 
         $REMOTE_DEPLOY_SCRIPT
       DEPLOY_STAGE
@@ -852,10 +856,10 @@ cleanup_staging:
         STAGING_DIR="${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
 
         log "Starting cleanup for staging environment..."
-        log "Target directory: $STAGING_DIR"
+        log "Target directory: \$STAGING_DIR"
 
-        if [ -d "$STAGING_DIR" ]; then
-          cd "$STAGING_DIR"
+        if [ -d "\$STAGING_DIR" ]; then
+          cd "\$STAGING_DIR"
 
           # Stop staging containers (app stack) and remove volumes for true ephemeral state
           docker compose -p subro_staging \
@@ -940,15 +944,19 @@ deploy_prod:
   script:
     - |
       # Deploy (Fire and Forget)
+      DEPLOY_HOST_DIR="/opt/subro_web"
+      ENV_FILE_NAME=".env.prod"
+      TRIGGER_SCRIPT="blue_green_deploy.sh"
+      LOG_FILE="last_deploy_prod.log"
+      BACKUP_PREFIX=""
+      DEPLOY_ENV="production"
+      : "${DEPLOY_HOST_DIR:?missing DEPLOY_HOST_DIR}"
+      : "${ENV_FILE_NAME:?missing ENV_FILE_NAME}"
+      : "${TRIGGER_SCRIPT:?missing TRIGGER_SCRIPT}"
+      : "${LOG_FILE:?missing LOG_FILE}"
+      : "${DEPLOY_ENV:?missing DEPLOY_ENV}"
       ssh $SSH_OPTS \
           -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_PROD
-        export DEPLOY_HOST_DIR="/opt/subro_web"
-        export ENV_FILE_NAME=".env.prod"
-        export TRIGGER_SCRIPT="blue_green_deploy.sh"
-        export LOG_FILE="last_deploy_prod.log"
-        # No backup prefix for prod
-        export DEPLOY_ENV="production"
-
         $REMOTE_DEPLOY_SCRIPT
       DEPLOY_PROD
 
