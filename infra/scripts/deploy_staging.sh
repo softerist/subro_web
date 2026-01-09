@@ -110,7 +110,7 @@ export BACKUP_PREFIX="staging_"
 
 section_start "stage_pull" "Pulling and Starting Staging App Stack"
 
-# Login to GitLab Registry if credentials are provided (with retry for transient failures)
+# Login to GitLab Registry if credentials are provided
 if [ -n "${REGISTRY_PASSWORD:-}" ] && [ -n "${REGISTRY_USER:-}" ] && [ -n "${CI_REGISTRY:-}" ]; then
     log "Logging into GitLab Registry..."
     LOGIN_SUCCESS=false
