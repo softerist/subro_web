@@ -942,7 +942,11 @@ release_version:
     action: access
   extends: .ssh_setup
   before_script:
-    - !reference [.ssh_setup, before_script]
+    - mkdir -p ~/.ssh
+    - ssh-keyscan $CI_SERVER_HOST >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
     - apk add --no-cache git python3 py3-pip
     - pip install --break-system-packages tomlkit
     - git config --global user.email "ci-bot@gitlab.com"
@@ -961,18 +965,14 @@ release_version:
         git commit -m "chore(release): bump version to $NEW_VERSION"
 
         echo "Pushing to origin..."
-        if git push origin HEAD:$CI_COMMIT_BRANCH 2>&1; then
-          echo "✓ Pushed to origin"
-        else
-          echo "⚠️ Failed to push to origin (may already be up to date)"
-        fi
+        # We want to fail if this push fails, because if we don't push the version bump,
+        # the release is incomplete.
+        git push origin HEAD:$CI_COMMIT_BRANCH
 
-        echo "Pushing to gitlab..."
-        if git push gitlab HEAD:$CI_COMMIT_BRANCH 2>&1; then
-          echo "✓ Pushed to gitlab"
-        else
-          echo "⚠️ Failed to push to gitlab (may already be up to date)"
-        fi
+        echo "✅ Version bumped to $NEW_VERSION"
+      else
+        echo "No version changes detected."
+      fi
 
         echo "✅ Version bumped to $NEW_VERSION"
       else
