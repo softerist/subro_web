@@ -926,9 +926,9 @@ release_version:
     - echo "Bumping version..."
     - python3 backend/scripts/bump_version.py
 
-    # Check for changes
+    # Check for changes (use sh-compatible syntax for Alpine)
     - |
-      if [[ -n $(git status --porcelain) ]]; then
+      if [ -n "$(git status --porcelain)" ]; then
         git add backend/pyproject.toml backend/app/core/config.py frontend/package.json
         # Extract new version for commit message
         NEW_VERSION=$(grep 'version = ' backend/pyproject.toml | head -n 1 | cut -d '"' -f 2)
