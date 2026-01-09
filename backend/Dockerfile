@@ -167,6 +167,11 @@ RUN chmod +x /usr/local/bin/alass-cli
 COPY --chown=appuser:appuser --from=development /app/nltk_data /app/nltk_data
 ENV NLTK_DATA=/app/nltk_data
 
+# Create APP_STATE_DIR for celery beat schedule and other runtime state
+# This must exist before running as appuser since entrypoint skips chown in production
+RUN mkdir -p /app/.local/state/subro-web /app/logs && \
+    chown -R appuser:appuser /app/.local /app/logs
+
 EXPOSE 8000
 
 # Entrypoint and CMD
