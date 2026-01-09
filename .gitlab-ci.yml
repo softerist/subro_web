@@ -16,6 +16,16 @@ stages:
   - release
   - cleanup
 
+# -------- Workflow Rules --------
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG
+
 # -------- Templates --------
 .ssh_setup:
   before_script:
@@ -67,6 +77,7 @@ lint_backend:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
 
 lint_frontend:
   retry: 1
@@ -81,15 +92,7 @@ lint_frontend:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == "main"
-
-workflow:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
-      when: never
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_BRANCH == "develop"
-    - if: $CI_COMMIT_TAG
 
 # -------- Global Variables --------
 variables:
@@ -230,7 +233,6 @@ ci_debug_env:
 
 build_api:
   extends: .build_template
-  retry: 1
   timeout: 15m
   variables:
     SERVICE: api
@@ -257,9 +259,8 @@ build_api:
         "$CONTEXT"
 
 build_api_test:
-  retry: 1
-  timeout: 15m
   extends: .build_template
+  timeout: 15m
   variables:
     SERVICE: api-test
     DOCKER_IMAGE: $DOCKER_IMAGE_API_TEST
@@ -285,9 +286,8 @@ build_api_test:
         "$CONTEXT"
 
 build_worker:
-  retry: 1
-  timeout: 15m
   extends: .build_template
+  timeout: 15m
   variables:
     SERVICE: worker
     DOCKER_IMAGE: $DOCKER_IMAGE_WORKER
@@ -313,9 +313,8 @@ build_worker:
         "$CONTEXT"
 
 build_frontend:
-  retry: 1
-  timeout: 15m
   extends: .build_template
+  timeout: 15m
   variables:
     SERVICE: frontend
     DOCKER_IMAGE: $DOCKER_IMAGE_FRONTEND
@@ -344,9 +343,8 @@ build_frontend:
         "$CONTEXT"
 
 build_backup:
-  retry: 1
-  timeout: 15m
   extends: .build_template
+  timeout: 15m
   variables:
     SERVICE: backup
     DOCKER_IMAGE: $DOCKER_IMAGE_BACKUP
@@ -548,6 +546,7 @@ scan_image_vulns:
 
 sast_scan:
   stage: scan
+  needs: []
   image:
     name: semgrep/semgrep:1.147.0
     entrypoint: [""]
@@ -592,8 +591,9 @@ sast_scan:
   retry: 1
 
 secret_scan:
-  timeout: 5m
   stage: scan
+  needs: []
+  timeout: 5m
   image:
     name: aquasec/trivy:0.58.0
     entrypoint: [""]
@@ -808,7 +808,15 @@ e2e_tests:
   variables:
     E2E_BASE_URL: https://staging.$SSH_HOST
   script:
-    - SERVER_IP=$(getent hosts "$SSH_HOST" | awk '{print $1}' | head -1) && echo "$SERVER_IP staging.$SSH_HOST" >> /etc/hosts
+    - |
+      # Resolve SSH_HOST to IP with validation (consistent with verify_staging)
+      SERVER_IP=$(getent hosts "$SSH_HOST" | awk '{print $1}' | head -1)
+      if [ -z "$SERVER_IP" ]; then
+        echo "ERROR: Could not resolve IP for $SSH_HOST"
+        exit 1
+      fi
+      echo "$SERVER_IP staging.$SSH_HOST" >> /etc/hosts
+      echo "Added /etc/hosts entry: $SERVER_IP staging.$SSH_HOST"
     - cd frontend
     - npm ci --prefer-offline
     - npx playwright install --with-deps chromium
@@ -826,6 +834,8 @@ cleanup_staging:
   stage: e2e
   image: alpine:3.20
   resource_group: staging
+  variables:
+    STAGING_DEPLOY_DIR: /opt/subro_web_staging # Consistent with deploy_staging
   needs:
     - job: e2e_tests
       artifacts: false
