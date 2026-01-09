@@ -961,18 +961,13 @@ release_version:
       if [ -n "$(git status --porcelain)" ]; then
         git add backend/pyproject.toml backend/app/core/config.py frontend/package.json
         # Extract new version for commit message
-        NEW_VERSION=$(grep 'version = ' backend/pyproject.toml | head -n 1 | cut -d '"' -f 2)
+        NEW_VERSION=$(awk -F '"' '/^version = / { print $2; exit }' backend/pyproject.toml)
         git commit -m "chore(release): bump version to $NEW_VERSION"
 
         echo "Pushing to origin..."
         # We want to fail if this push fails, because if we don't push the version bump,
         # the release is incomplete.
         git push origin HEAD:$CI_COMMIT_BRANCH
-
-        echo "✅ Version bumped to $NEW_VERSION"
-      else
-        echo "No version changes detected."
-      fi
 
         echo "✅ Version bumped to $NEW_VERSION"
       else

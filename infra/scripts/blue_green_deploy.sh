@@ -145,8 +145,17 @@ fi
 # Only regenerate if empty or missing (preserve existing config if valid)
 if [ ! -s "$CADDYFILE_PROD" ]; then
     log "Generating initial Caddyfile.prod (routing to $INIT_COLOR)..."
-    sed "s/{{UPSTREAM_API}}/$INIT_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$INIT_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$TEMPLATE" > "$CADDYFILE_PROD"
-    success "Caddyfile.prod initialized"
+    TMP_CADDYFILE="$CADDYFILE_PROD.tmp"
+    sed "s/{{UPSTREAM_API}}/$INIT_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$INIT_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$TEMPLATE" > "$TMP_CADDYFILE"
+
+    if [ -s "$TMP_CADDYFILE" ]; then
+        mv "$TMP_CADDYFILE" "$CADDYFILE_PROD"
+        success "Caddyfile.prod initialized"
+    else
+        error "Failed to generate Caddyfile.prod: Output is empty"
+        rm -f "$TMP_CADDYFILE"
+        exit 1
+    fi
 else
     log "Caddyfile.prod already exists, skipping initialization"
 fi
@@ -301,7 +310,14 @@ DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' |
 if [ -z "$DOMAIN_NAME" ]; then
     error "DOMAIN_NAME not found in $ENV_FILE"; exit 1
 fi
-sed "s/{{UPSTREAM_API}}/$NEW_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$NEW_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$TEMPLATE" > "$CADDYFILE_PROD"
+sed "s/{{UPSTREAM_API}}/$NEW_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$NEW_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$TEMPLATE" > "$TMP_CADDYFILE"
+
+if [ ! -s "$TMP_CADDYFILE" ]; then
+    error "Failed to generate Caddyfile.prod (switch phase): Output is empty"
+    rm -f "$TMP_CADDYFILE"
+    exit 1
+fi
+mv "$TMP_CADDYFILE" "$CADDYFILE_PROD"
 
 # Reload Caddy (in infra project)
 docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T caddy caddy reload --config /etc/caddy/Caddyfile.prod
