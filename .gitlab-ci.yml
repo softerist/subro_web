@@ -952,14 +952,28 @@ release_version:
     - python3 backend/scripts/bump_version.py
 
     - |
+      set -e
       if [ -n "$(git status --porcelain)" ]; then
         git add backend/pyproject.toml backend/app/core/config.py frontend/package.json
         # Extract new version for commit message
         NEW_VERSION=$(grep 'version = ' backend/pyproject.toml | head -n 1 | cut -d '"' -f 2)
         git commit -m "chore(release): bump version to $NEW_VERSION"
-        git push origin HEAD:$CI_COMMIT_BRANCH
-        git push gitlab HEAD:$CI_COMMIT_BRANCH
-        echo "Version bumped to $NEW_VERSION and pushed to origin and gitlab ($CI_COMMIT_BRANCH)"
+
+        echo "Pushing to origin..."
+        if git push origin HEAD:$CI_COMMIT_BRANCH 2>&1; then
+          echo "✓ Pushed to origin"
+        else
+          echo "⚠️ Failed to push to origin (may already be up to date)"
+        fi
+
+        echo "Pushing to gitlab..."
+        if git push gitlab HEAD:$CI_COMMIT_BRANCH 2>&1; then
+          echo "✓ Pushed to gitlab"
+        else
+          echo "⚠️ Failed to push to gitlab (may already be up to date)"
+        fi
+
+        echo "✅ Version bumped to $NEW_VERSION"
       else
         echo "No version changes detected."
       fi
