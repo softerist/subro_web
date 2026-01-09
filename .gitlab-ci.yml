@@ -652,71 +652,96 @@ verify_staging:
       echo "Verifying staging deployment..."
       echo ""
       # Quick container status check
-      echo "=== Checking Container Status ==="
+      echo "📦 Checking container status..."
       ssh "$SSH_HOST" \
-        "docker ps --filter 'name=subro.*staging' --format '{{.Names}}: {{.Status}}' || echo 'Could not check containers'"
+        "docker ps --filter 'name=subro.*staging' --format '  • {{.Names}}: {{.Status}}' || echo '  ⚠️  Could not check containers'"
       echo ""
 
       # Increased retry window for staging container startup
-      MAX_ATTEMPTS=24  # 24 * 10s = 4 minutes (was 2 minutes)
+      MAX_ATTEMPTS=24  # 24 * 10s = 4 minutes
       DEPLOY_MARKER_PATH="${STAGING_DEPLOY_DIR}/infra/.deploy_sha"
+      SHORT_SHA="${CI_COMMIT_SHA:0:8}"
 
       # Initial wait for containers to start before polling
-      echo "Waiting 30s for containers to initialize..."
+      echo "⏳ Waiting 30s for containers to initialize..."
       sleep 30
 
-      for attempt in $(seq 1 $MAX_ATTEMPTS); do
-        echo "=== Verification attempt $attempt/$MAX_ATTEMPTS ==="
+      echo ""
+      echo "🔍 Verifying deployment (commit: $SHORT_SHA)..."
+      echo ""
 
+      for attempt in $(seq 1 $MAX_ATTEMPTS); do
         MARKER_OK=false
+        API_OK=false
+
+        # Check deploy marker
         DEPLOYED_SHA=$(ssh "$SSH_HOST" \
           "cat '$DEPLOY_MARKER_PATH' 2>/dev/null || true")
-        if [ -z "$DEPLOYED_SHA" ]; then
-          echo "Deploy marker not found yet (expected $CI_COMMIT_SHA)"
-        elif [ "$DEPLOYED_SHA" != "$CI_COMMIT_SHA" ]; then
-          echo "Deploy marker mismatch (found $DEPLOYED_SHA, expected $CI_COMMIT_SHA)"
-        else
-          echo "Deploy marker matches expected commit."
+
+        if [ "$DEPLOYED_SHA" = "$CI_COMMIT_SHA" ]; then
           MARKER_OK=true
         fi
 
+        # Check API response
         HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "000")
         RESPONSE=$(curl -k -s --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "")
 
-        echo "HTTP Code: $HTTP_CODE"
-        echo "Response: >>$RESPONSE<<"
+        if echo "$RESPONSE" | grep -qE '"(version|message)"'; then
+          API_OK=true
+        fi
 
-        # Check if API is responding with valid content
-        if [ "$MARKER_OK" = "true" ] && echo "$RESPONSE" | grep -qE '"(version|message)"'; then
-          echo "✅ Staging API is responding correctly!"
+        # Success condition
+        if [ "$MARKER_OK" = "true" ] && [ "$API_OK" = "true" ]; then
+          VERSION=$(echo "$RESPONSE" | grep -oP '"version"\s*:\s*"\K[^"]+' || echo "unknown")
+          echo ""
+          echo "┌─────────────────────────────────────────────────────┐"
+          echo "│  ✅ Staging deployment verified successfully!       │"
+          echo "├─────────────────────────────────────────────────────┤"
+          echo "│  • Commit:   $SHORT_SHA                             │"
+          echo "│  • Version:  $VERSION                               │"
+          echo "│  • API:      https://staging.$SSH_HOST/api/v1/      │"
+          echo "└─────────────────────────────────────────────────────┘"
           exit 0
         fi
 
-        # Check for common error conditions
-        if [ "$HTTP_CODE" = "502" ] || [ "$HTTP_CODE" = "503" ]; then
-          echo "Containers not ready yet (HTTP $HTTP_CODE), waiting 10s..."
-        elif [ "$HTTP_CODE" = "200" ] && [ -z "$RESPONSE" ]; then
-          echo "Empty response - Caddy may not be routing to staging yet, waiting 10s..."
-        else
-          echo "Unexpected response, waiting 10s..."
+        # Show progress dot for non-verbose output
+        if [ $attempt -eq 1 ]; then
+          printf "   Waiting for deployment"
+        fi
+        printf "."
+
+        # Only show detailed status every 6th attempt or on specific errors
+        if [ $((attempt % 6)) -eq 0 ]; then
+          echo ""
+          if [ "$MARKER_OK" != "true" ]; then
+            echo "   ⏳ Deploy marker: waiting (${DEPLOYED_SHA:0:8}... → $SHORT_SHA)"
+          fi
+          if [ "$HTTP_CODE" = "502" ] || [ "$HTTP_CODE" = "503" ]; then
+            echo "   ⏳ API: starting (HTTP $HTTP_CODE)"
+          elif [ "$API_OK" != "true" ]; then
+            echo "   ⏳ API: not ready yet"
+          fi
+          printf "   Waiting"
         fi
 
         sleep 10
       done
 
       echo ""
-      echo "❌ Staging verification failed after $MAX_ATTEMPTS attempts"
+      echo ""
+      echo "┌─────────────────────────────────────────────────────┐"
+      echo "│  ❌ Staging verification failed                     │"
+      echo "└─────────────────────────────────────────────────────┘"
       echo ""
       echo "Possible causes:"
-      echo "  - Staging containers failed to start"
-      echo "  - Caddy not configured for staging.secure.go.ro"
-      echo "  - Network/firewall issues"
+      echo "  • Staging containers failed to start"
+      echo "  • Caddy not configured for staging.secure.go.ro"
+      echo "  • Network/firewall issues"
       echo ""
       echo "Troubleshooting:"
-      echo "  1. SSH to server and run: docker ps -a"
-      echo "  2. Check API logs: docker logs subro-api-staging"
-      echo "  3. Check Caddy logs: docker logs caddy"
-      echo "  4. Test direct: curl http://localhost:8000/api/v1/"
+      echo "  1. SSH: docker ps -a | grep staging"
+      echo "  2. Logs: docker logs subro-api-staging --tail 50"
+      echo "  3. Test: curl http://localhost:8000/api/v1/"
       exit 1
   environment:
     name: staging
@@ -926,7 +951,6 @@ release_version:
     - echo "Bumping version..."
     - python3 backend/scripts/bump_version.py
 
-    # Check for changes (use sh-compatible syntax for Alpine)
     - |
       if [ -n "$(git status --porcelain)" ]; then
         git add backend/pyproject.toml backend/app/core/config.py frontend/package.json
