@@ -692,7 +692,8 @@ verify_staging:
 
         # Success condition
         if [ "$MARKER_OK" = "true" ] && [ "$API_OK" = "true" ]; then
-          VERSION=$(echo "$RESPONSE" | grep -oP '"version"\s*:\s*"\K[^"]+' || echo "unknown")
+          VERSION=$(echo "$RESPONSE" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+          if [ -z "$VERSION" ]; then VERSION="unknown"; fi
           echo ""
           echo "┌─────────────────────────────────────────────────────┐"
           echo "│  ✅ Staging deployment verified successfully!       │"
