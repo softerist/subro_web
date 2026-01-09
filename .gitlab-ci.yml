@@ -622,7 +622,7 @@ deploy_staging:
         # Start background keepalive to prevent SSH timeout during slow docker operations
         (while true; do echo -n "."; sleep 5; done) &
         KEEPALIVE_PID=\$!
-        trap "kill \$KEEPALIVE_PID 2>/dev/null" EXIT
+        trap "kill \$KEEPALIVE_PID 2>/dev/null || true" EXIT
 
         # Docker login with retry (handles registry timeouts)
         for i in 1 2 3; do
@@ -684,6 +684,7 @@ deploy_staging:
             "last_deploy.log" > /dev/null 2>&1 &
 
         echo "✅ Deployment triggered in background. Check 'last_deploy.log' on server for details."
+        exit 0
       DEPLOY_ALL_STAGING
 
 verify_staging:
