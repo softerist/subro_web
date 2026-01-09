@@ -585,7 +585,7 @@ deploy_staging:
         echo "=== Verifying Docker Images ==="
 
         # Start background keepalive to prevent SSH timeout during slow docker operations
-        (while true; do echo -n "."; sleep 5; done) &
+        (while true; do echo -n " "; sleep 5; done) &
         KEEPALIVE_PID=\$!
         trap "kill \$KEEPALIVE_PID 2>/dev/null || true" EXIT
 
@@ -923,7 +923,7 @@ release_version:
     # Check for changes
     - |
       if [[ -n $(git status --porcelain) ]]; then
-        git add backend/pyproject.toml backend/app/core/config.py
+        git add backend/pyproject.toml backend/app/core/config.py frontend/package.json
         # Extract new version for commit message
         NEW_VERSION=$(grep 'version = ' backend/pyproject.toml | head -n 1 | cut -d '"' -f 2)
         git commit -m "chore(release): bump version to $NEW_VERSION"

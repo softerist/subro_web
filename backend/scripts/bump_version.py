@@ -304,6 +304,36 @@ class VersionBumper:
             return False
         return False
 
+    def update_package_json(self, new_version: Version) -> bool:
+        """Update version in frontend/package.json."""
+        package_json_path = self.backend_dir.parent / "frontend" / "package.json"
+        if not package_json_path.exists():
+            logger.info("frontend/package.json not found, skipping")
+            return True
+
+        try:
+            content = package_json_path.read_text()
+            # Match "version": "x.y.z" or "version": "x.y.z-suffix"
+            pattern = r'"version":\s*"[^"]+"'
+            # Use base version without suffix for npm compatibility
+            base_version = f"{new_version.major}.{new_version.minor}.{new_version.patch}"
+            new_content = re.sub(pattern, f'"version": "{base_version}"', content, count=1)
+
+            if self.dry_run:
+                logger.info(f"[DRY-RUN] Update package.json to {base_version}")
+                return True
+
+            updater = FileUpdater(package_json_path, self.dry_run)
+            self.updaters.append(updater)
+            with updater:
+                if updater.update(new_content):
+                    logger.info(f"✓ Updated package.json to {base_version}")
+                    return True
+        except Exception as e:
+            logger.error(f"Failed to update package.json: {e}")
+            return False
+        return False
+
     def bump_version(self) -> bool:
         try:
             with file_lock(self.pyproject_path):
@@ -318,6 +348,9 @@ class VersionBumper:
                 logger.info(f"New version:     {new_version}")
 
                 if self.update_pyproject(new_version) and self.update_config(new_version):
+                    # Also update frontend version
+                    if not self.update_package_json(new_version):
+                        logger.warning("Failed to update package.json, continuing...")
                     # Note: Database version sync happens during deployment via sync_db_version.py
                     # We don't update the DB here to keep CI concerns separate
                     if not self.dry_run:
