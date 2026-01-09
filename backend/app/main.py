@@ -116,9 +116,13 @@ async def lifespan(_app_instance: FastAPI):
         async with db_session_module.FastAPISessionLocal() as session:
             try:
                 # First, check if ANY active superuser already exists
-                existing_superuser_stmt = select(UserModel).where(
-                    UserModel.is_superuser == True,  # noqa: E712
-                    UserModel.is_active == True,  # noqa: E712
+                existing_superuser_stmt = (
+                    select(UserModel)
+                    .where(
+                        UserModel.is_superuser == True,  # noqa: E712
+                        UserModel.is_active == True,  # noqa: E712
+                    )
+                    .limit(1)
                 )
                 existing_superuser_result = await session.execute(existing_superuser_stmt)
                 existing_superuser = existing_superuser_result.scalar_one_or_none()
