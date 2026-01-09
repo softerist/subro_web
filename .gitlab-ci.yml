@@ -661,6 +661,10 @@ verify_staging:
       MAX_ATTEMPTS=24  # 24 * 10s = 4 minutes (was 2 minutes)
       DEPLOY_MARKER_PATH="${STAGING_DEPLOY_DIR}/infra/.deploy_sha"
 
+      # Initial wait for containers to start before polling
+      echo "Waiting 30s for containers to initialize..."
+      sleep 30
+
       for attempt in $(seq 1 $MAX_ATTEMPTS); do
         echo "=== Verification attempt $attempt/$MAX_ATTEMPTS ==="
 
