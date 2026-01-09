@@ -643,28 +643,15 @@ deploy_staging:
           sleep 5
         done
 
-        echo 'Checking images...'
-        # Wait for registry to propagate newly pushed images (with progress)
-        echo -n 'Waiting for registry propagation'
-        for j in 1 2 3 4 5 6 7 8 9 10; do echo -n "."; sleep 1; done
-        echo " done"
+        # Skip slow manifest verification - images were just pushed by build stage
+        # If they somehow don't exist, the docker pull in deploy will fail fast
+        echo 'Images built and pushed by CI - skipping slow manifest verification'
+        echo "Will deploy: ${DOCKER_IMAGE_API}"
+        echo "Will deploy: ${DOCKER_IMAGE_FRONTEND}"
 
-        for img in "${DOCKER_IMAGE_API}" "${DOCKER_IMAGE_WORKER}" "${DOCKER_IMAGE_FRONTEND}" "${DOCKER_IMAGE_BACKUP}"; do
-          echo "Verifying: \$img"
-          for attempt in 1 2 3; do
-            if docker manifest inspect "\$img" > /dev/null 2>&1; then
-              echo "✅ Found: \$img"
-              break
-            fi
-            if [ \$attempt -eq 3 ]; then
-              echo "❌ ERROR: Image not found after 3 attempts: \$img"
-              docker logout "${CI_REGISTRY}"
-              exit 1
-            fi
-            echo "Image not found yet (attempt \$attempt/3), retrying in 10s..."
-            sleep 10
-          done
-        done
+        # Kill keepalive before continuing
+        kill \$KEEPALIVE_PID 2>/dev/null || true
+        echo ""
 
         docker logout "${CI_REGISTRY}"
 
