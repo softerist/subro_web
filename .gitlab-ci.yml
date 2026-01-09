@@ -1068,7 +1068,8 @@ cleanup_registry:
     KEEP_TAGS: "10" # Number of recent tags to keep per repository
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-      when: on_success
+      when: manual
+      allow_failure: true # Don't block pipeline if not triggered
   script:
     - apk add --no-cache curl jq
     - |
