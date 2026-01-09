@@ -36,7 +36,11 @@ stages:
       Host *
         User $SSH_USER
         Port ${SSH_PORT:-22}
-        ServerAliveInterval 15
+        ServerAliveInterval 10
+        ServerAliveCountMax 30
+        TCPKeepAlive yes
+        ConnectTimeout 30
+        ConnectionAttempts 3
         IdentityFile ~/.ssh/id_rsa
       EOF
     - chmod 600 ~/.ssh/config
@@ -581,7 +585,10 @@ deploy_staging:
       set -euo pipefail
 
       echo "=== Starting Consolidated Staging Deployment ==="
-      ssh -o TCPKeepAlive=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=30 "$SSH_HOST" bash -s <<DEPLOY_ALL_STAGING
+      # Use -T (no pseudo-TTY) and explicit options for resilient connection
+      # BatchMode=yes prevents password prompts that could hang
+      # RequestTTY=no skips TTY allocation which can trigger slow login scripts
+      ssh -T -o BatchMode=yes -o RequestTTY=no -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=30 "$SSH_HOST" bash -s <<DEPLOY_ALL_STAGING
         set -euo pipefail
 
         # 0. Ensure server-side SSH keepalives are configured (idempotent)
