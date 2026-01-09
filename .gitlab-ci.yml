@@ -37,8 +37,8 @@ stages:
         HostName $SSH_HOST
         User $SSH_USER
         Port ${SSH_PORT:-22}
-        ServerAliveInterval 5
-        ServerAliveCountMax 60
+        ServerAliveInterval 10
+        ServerAliveCountMax 3
         TCPKeepAlive yes
         ConnectTimeout 30
         ConnectionAttempts 3
