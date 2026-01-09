@@ -965,6 +965,7 @@ deploy_prod:
 
         # Append CI-specific variables using single quotes to protect values from remote shell expansion
         {
+          echo "DOMAIN_NAME='${SSH_HOST}'"
           echo "REGISTRY_PASSWORD='${REGISTRY_PASSWORD}'"
           echo "REGISTRY_USER='${REGISTRY_USER}'"
           echo "CI_REGISTRY='${CI_REGISTRY}'"
