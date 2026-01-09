@@ -1,4 +1,6 @@
 #!/bin/bash
+# Add this path to your qBittorrent-nox download post-completion executioon
+# <path_to_app>/backend/scripts/qbittorrent-nox-webhook.sh "F"
 
 # Enhanced Logging
 LOG_FILE="/opt/subro_web/logs/webhook.log"

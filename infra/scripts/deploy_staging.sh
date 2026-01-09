@@ -89,12 +89,19 @@ docker_compose_pull_with_retry() {
 
 log "--- Staging Deployment Started ---"
 
+# Source .env.staging to get DOCKER_IMAGE_* variables set by CI
+# shellcheck disable=SC1090
+set -a
+source "$ENV_FILE"
+set +a
+
 # Export variables for compose file expansion
 export PROJECT_ENV_FILE="$ENV_FILE"
 export NETWORK_NAME="infra_internal_net"
 export NETWORK_EXTERNAL="true"
 
 # Deploy Staging using a different project name
+# These defaults are only used if .env.staging doesn't define them
 export DOCKER_IMAGE_API=${DOCKER_IMAGE_API:-"subro-api:latest"}
 export DOCKER_IMAGE_WORKER=${DOCKER_IMAGE_WORKER:-"subro-worker:latest"}
 export DOCKER_IMAGE_FRONTEND=${DOCKER_IMAGE_FRONTEND:-"subro-frontend:latest"}
