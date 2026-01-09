@@ -161,7 +161,14 @@ if [ "$MIGRATIONS_UP_TO_DATE" != "true" ]; then
   # exit 1
 fi
 
-echo "Entrypoint: Migration check loop finished. Starting main application command as appuser..."
+echo "Entrypoint: Migration check loop finished. Starting main application command..."
 # Execute the command passed to the entrypoint (e.g., the CMD from Dockerfile)
-# Use gosu to drop privileges to appuser
-exec gosu appuser "$@"
+# In development, use gosu to drop privileges to appuser
+# In production/staging/test, the Dockerfile already sets USER appuser, and we lack capabilities for gosu
+if [ "${APP_ENV}" = "development" ]; then
+    echo "Entrypoint: Development mode - using gosu to switch to appuser"
+    exec gosu appuser "$@"
+else
+    echo "Entrypoint: Production mode - running as current user (appuser from Dockerfile)"
+    exec "$@"
+fi
