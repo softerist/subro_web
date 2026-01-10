@@ -207,6 +207,46 @@ ci_debug_env:
   script:
     - 'echo "Pipeline: $CI_PIPELINE_SOURCE | Branch: $CI_COMMIT_BRANCH | SHA: $CI_COMMIT_SHORT_SHA"'
 
+# -------- VERSION BUMP (main branch only) --------
+bump_version:
+  stage: pre
+  image: python:3.12-slim
+  variables:
+    GIT_STRATEGY: clone
+    GIT_DEPTH: "0"
+  rules:
+    # Skip if this is already a version bump commit or if [skip ci] is present
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\): bump version/ && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+      when: on_success
+    - when: never
+  before_script:
+    - apt-get update && apt-get install -y git
+    - pip install tomlkit
+    - git config --global user.email "ci-bot@gitlab.com"
+    - git config --global user.name "CI Bot"
+  script:
+    - echo "Bumping version for main branch deployment..."
+    - python3 backend/scripts/bump_version.py
+    - |
+      if [ -n "$(git status --porcelain)" ]; then
+        NEW_VERSION=$(awk -F '"' '/^version = / { print $2; exit }' backend/pyproject.toml)
+        echo "NEW_APP_VERSION=$NEW_VERSION" >> version.env
+        echo "✅ Version bumped to $NEW_VERSION (will be committed after deploy)"
+      else
+        echo "No version changes needed"
+        # Use current version
+        CURRENT_VERSION=$(awk -F '"' '/^version = / { print $2; exit }' backend/pyproject.toml)
+        echo "NEW_APP_VERSION=$CURRENT_VERSION" >> version.env
+      fi
+  artifacts:
+    reports:
+      dotenv: version.env
+    paths:
+      - backend/pyproject.toml
+      - backend/app/core/config.py
+      - frontend/package.json
+    expire_in: 1 hour
+
 # ============ BUILD STAGE ============
 .build_template:
   stage: build
@@ -239,6 +279,10 @@ ci_debug_env:
 build_api:
   extends: .build_template
   timeout: 15m
+  needs:
+    - job: bump_version
+      artifacts: true
+      optional: true
   variables:
     SERVICE: api
     DOCKER_IMAGE: $DOCKER_IMAGE_API
@@ -261,6 +305,10 @@ build_api_test:
 build_worker:
   extends: .build_template
   timeout: 15m
+  needs:
+    - job: bump_version
+      artifacts: true
+      optional: true
   variables:
     SERVICE: worker
     DOCKER_IMAGE: $DOCKER_IMAGE_WORKER
@@ -272,6 +320,10 @@ build_worker:
 build_frontend:
   extends: .build_template
   timeout: 15m
+  needs:
+    - job: bump_version
+      artifacts: true
+      optional: true
   variables:
     SERVICE: frontend
     DOCKER_IMAGE: $DOCKER_IMAGE_FRONTEND
@@ -973,57 +1025,66 @@ verify_prod:
       exit 1
 
 # ============ RELEASE STAGE ============
-release_version:
+# Commit version bump (files already bumped in pre stage)
+commit_version_bump:
   retry: 1
   timeout: 5m
   stage: release
   image: alpine:3.20
+  needs:
+    - job: bump_version
+      artifacts: true
+    - job: verify_prod
+      artifacts: false
   variables:
     GIT_STRATEGY: clone
+    GIT_DEPTH: "0"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\): bump version/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\): bump version/ && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       when: on_success
-  environment:
-    name: production
-    action: access
-  extends: .ssh_setup
+    - when: never
   before_script:
-    - apk add --no-cache git python3 py3-pip bash openssh-client
-    - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
-    - |
+    - apk add --no-cache git openssh-client bash
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - |-
       if echo "$SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
         echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
       else
         echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/id_rsa
       fi
     - chmod 600 ~/.ssh/id_rsa
-    - ssh-keyscan $CI_SERVER_HOST >> ~/.ssh/known_hosts
-    - chmod 644 ~/.ssh/known_hosts
-    - pip install --break-system-packages tomlkit
+    - ssh-keyscan $CI_SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null
     - git config --global user.email "ci-bot@gitlab.com"
     - git config --global user.name "CI Bot"
     - git remote set-url origin git@$CI_SERVER_HOST:$CI_PROJECT_PATH.git
   script:
-    - echo "Bumping version..."
-    - python3 backend/scripts/bump_version.py
+    - |-
+      echo ""
+      echo "┌─────────────────────────────────────────────────────────────┐"
+      echo "│  📦 Committing Version Bump                                 │"
+      echo "└─────────────────────────────────────────────────────────────┘"
+      echo ""
 
-    - |
-      set -e
-      if [ -n "$(git status --porcelain)" ]; then
+      # Check if we have version changes from bump_version artifacts
+      if [ -n "$(git status --porcelain backend/pyproject.toml backend/app/core/config.py frontend/package.json 2>/dev/null)" ]; then
+        NEW_VERSION="${NEW_APP_VERSION:-unknown}"
+        echo "Version: $NEW_VERSION"
+        echo ""
+
         git add backend/pyproject.toml backend/app/core/config.py frontend/package.json
-        # Extract new version for commit message
-        NEW_VERSION=$(awk -F '"' '/^version = / { print $2; exit }' backend/pyproject.toml)
-        git commit -m "chore(release): bump version to $NEW_VERSION"
 
-        echo "Pushing to origin..."
-        # We want to fail if this push fails, because if we don't push the version bump,
-        # the release is incomplete.
+        # Use [skip ci] to prevent triggering another pipeline
+        git commit -m "chore(release): bump version to $NEW_VERSION [skip ci]"
+
+        echo "Pushing version commit..."
         git push origin HEAD:$CI_COMMIT_BRANCH
 
-        echo "✅ Version bumped to $NEW_VERSION"
+        echo ""
+        echo "┌─────────────────────────────────────────────────────────────┐"
+        echo "│  ✅ Version $NEW_VERSION committed successfully            │"
+        echo "└─────────────────────────────────────────────────────────────┘"
       else
-        echo "No version changes detected."
+        echo "No version changes to commit (files unchanged)"
       fi
 
 # ============ CLEANUP STAGE ============
