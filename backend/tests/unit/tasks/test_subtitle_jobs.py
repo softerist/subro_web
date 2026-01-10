@@ -250,7 +250,7 @@ async def test_execute_subtitle_downloader_task_success_with_pubsub(
     _mock_create_subprocess_exec: AsyncMock,  # MODIFIED: Usage renamed
     mock_subprocess_protocol: tuple[AsyncMock, AsyncMock, AsyncMock],
     mock_path_exists: MagicMock,
-):
+) -> None:
     process_mock, stdout_mock_reader, stderr_mock_reader = mock_subprocess_protocol
     stdout_mock_reader.stdout_lines.extend([b"Script output line 1\n", b"Script output line 2\n"])
     stderr_mock_reader.stderr_lines.append(b"Script error detail 1\n")
@@ -347,7 +347,7 @@ async def test_execute_subtitle_downloader_task_script_failure(
     _mock_create_subprocess_exec: AsyncMock,  # MODIFIED: Usage renamed
     mock_subprocess_protocol: tuple[AsyncMock, AsyncMock, AsyncMock],
     mock_path_exists: MagicMock,  # noqa: ARG001
-):
+) -> None:
     process_mock, stdout_mock_reader, stderr_mock_reader = mock_subprocess_protocol
     stdout_mock_reader.stdout_lines.append(b"Some output before error\n")
     stderr_mock_reader.stderr_lines.append(b"CRITICAL ERROR IN SCRIPT\n")
@@ -428,7 +428,7 @@ async def test_execute_subtitle_downloader_task_script_timeout(
     _mock_create_subprocess_exec: AsyncMock,  # MODIFIED: Usage renamed
     mock_subprocess_protocol: tuple[AsyncMock, AsyncMock, AsyncMock],
     mock_path_exists: MagicMock,  # noqa: ARG001
-):
+) -> None:
     process_mock, _, _ = mock_subprocess_protocol
     # Note: process_mock.wait uses the fixture's simple_wait_side_effect (hangs until event set)
     # process_mock.returncode uses the fixture's get_rc (initially None)
@@ -547,7 +547,7 @@ async def test_execute_subtitle_downloader_task_redis_connection_failure(
     _mock_create_subprocess_exec: AsyncMock,  # MODIFIED: Usage renamed
     mock_subprocess_protocol: tuple[AsyncMock, AsyncMock, AsyncMock],
     mock_path_exists: MagicMock,  # noqa: ARG001
-):
+) -> None:
     async def raise_redis_connection_error(*_args: Any, **_kwargs: Any) -> None:
         raise RedisConnectionError("Simulated Redis connection error")
 

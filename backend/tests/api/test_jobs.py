@@ -23,7 +23,7 @@ async def login_user(client: AsyncClient, email: str, password: str) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_list_jobs_empty(test_client: AsyncClient, db_session: AsyncSession):
+async def test_list_jobs_empty(test_client: AsyncClient, db_session: AsyncSession) -> None:
     user = UserFactory.create_user(session=db_session, email="job_user@example.com")
     await db_session.flush()
     headers = await login_user(test_client, user.email, "password123")
@@ -35,7 +35,9 @@ async def test_list_jobs_empty(test_client: AsyncClient, db_session: AsyncSessio
 
 @pytest.mark.asyncio
 @patch("app.api.routers.jobs.celery_app")
-async def test_create_job_success(mock_celery, test_client: AsyncClient, db_session: AsyncSession):
+async def test_create_job_success(
+    mock_celery, test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     # Mocking Path.resolve to avoid needing real directories
     with patch("app.api.routers.jobs.Path") as mock_path:
         # Setup admin user (can auto-add paths)
@@ -74,7 +76,7 @@ async def test_create_job_success(mock_celery, test_client: AsyncClient, db_sess
 
 
 @pytest.mark.asyncio
-async def test_get_job_details(test_client: AsyncClient, db_session: AsyncSession):
+async def test_get_job_details(test_client: AsyncClient, db_session: AsyncSession) -> None:
     user = UserFactory.create_user(session=db_session, email="owner@example.com")
     await db_session.flush()
 
@@ -97,7 +99,9 @@ async def test_get_job_details(test_client: AsyncClient, db_session: AsyncSessio
 
 
 @pytest.mark.asyncio
-async def test_get_job_details_forbidden(test_client: AsyncClient, db_session: AsyncSession):
+async def test_get_job_details_forbidden(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     owner = UserFactory.create_user(session=db_session, email="owner_priv@example.com")
     other_user = UserFactory.create_user(session=db_session, email="other@example.com")
     await db_session.flush()

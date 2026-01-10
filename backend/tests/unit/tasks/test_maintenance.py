@@ -7,7 +7,7 @@ from app.tasks.maintenance import manage_audit_partitions
 
 
 @pytest.mark.asyncio
-async def test_manage_audit_partitions_creation():
+async def test_manage_audit_partitions_creation() -> None:
     db = AsyncMock()
     db.add = MagicMock()
     db.commit = AsyncMock()

@@ -8,6 +8,7 @@ to the immutable audit_logs table. Uses SKIP LOCKED for concurrency safety.
 
 import asyncio
 import logging
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func, select
@@ -61,7 +62,7 @@ def _extract_event_timestamp(row: AuditOutbox) -> datetime:
     return row.created_at
 
 
-def _collect_partition_months(outbox_rows: list[AuditOutbox]) -> list[date]:
+def _collect_partition_months(outbox_rows: Sequence[AuditOutbox]) -> list[date]:
     month_starts = {
         date(timestamp.year, timestamp.month, 1)
         for timestamp in (_extract_event_timestamp(row) for row in outbox_rows)
@@ -70,10 +71,10 @@ def _collect_partition_months(outbox_rows: list[AuditOutbox]) -> list[date]:
 
 
 @celery_app.task(name="app.tasks.audit_worker_batch")
-def audit_worker_batch_task(batch_size: int = 100):
+def audit_worker_batch_task(batch_size: int = 100) -> int:
     """Celery task wrapper for outbox processing."""
 
-    async def _run():
+    async def _run() -> int:
         db_session.initialize_worker_db_resources()
         if db_session.WorkerSessionLocal is None:
             raise RuntimeError("WorkerSessionLocal not initialized")

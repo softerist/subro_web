@@ -20,7 +20,7 @@ async def login_user(client: AsyncClient, email: str, password: str) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_get_active_tiles(test_client: AsyncClient, db_session: AsyncSession):
+async def test_get_active_tiles(test_client: AsyncClient, db_session: AsyncSession) -> None:
     # Create some tiles
     tile1 = DashboardTile(title="Tile 1", url="http://t1.com", is_active=True, order_index=1)
     tile2 = DashboardTile(title="Tile 2", url="http://t2.com", is_active=False, order_index=2)
@@ -35,7 +35,7 @@ async def test_get_active_tiles(test_client: AsyncClient, db_session: AsyncSessi
 
 
 @pytest.mark.asyncio
-async def test_admin_get_all_tiles(test_client: AsyncClient, db_session: AsyncSession):
+async def test_admin_get_all_tiles(test_client: AsyncClient, db_session: AsyncSession) -> None:
     admin = UserFactory.create_user(
         session=db_session, email="admin_dash@example.com", is_superuser=True
     )
@@ -52,7 +52,7 @@ async def test_admin_get_all_tiles(test_client: AsyncClient, db_session: AsyncSe
 
 
 @pytest.mark.asyncio
-async def test_create_tile_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_create_tile_admin(test_client: AsyncClient, db_session: AsyncSession) -> None:
     admin = UserFactory.create_user(
         session=db_session, email="admin_create_tile@example.com", is_superuser=True
     )
@@ -74,7 +74,7 @@ async def test_create_tile_admin(test_client: AsyncClient, db_session: AsyncSess
 
 
 @pytest.mark.asyncio
-async def test_update_tile_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_update_tile_admin(test_client: AsyncClient, db_session: AsyncSession) -> None:
     admin = UserFactory.create_user(
         session=db_session, email="admin_update_tile@example.com", is_superuser=True
     )
@@ -92,7 +92,7 @@ async def test_update_tile_admin(test_client: AsyncClient, db_session: AsyncSess
 
 
 @pytest.mark.asyncio
-async def test_reorder_tiles_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_reorder_tiles_admin(test_client: AsyncClient, db_session: AsyncSession) -> None:
     admin = UserFactory.create_user(
         session=db_session, email="admin_reorder@example.com", is_superuser=True
     )
@@ -118,7 +118,7 @@ async def test_reorder_tiles_admin(test_client: AsyncClient, db_session: AsyncSe
 
 
 @pytest.mark.asyncio
-async def test_delete_tile_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_delete_tile_admin(test_client: AsyncClient, db_session: AsyncSession) -> None:
     admin = UserFactory.create_user(
         session=db_session, email="admin_delete_tile@example.com", is_superuser=True
     )

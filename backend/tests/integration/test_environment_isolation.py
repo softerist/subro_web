@@ -19,7 +19,7 @@ from app.crud.crud_app_settings import crud_app_settings
 class TestEnvironmentConfiguration:
     """Tests for environment configuration correctness."""
 
-    def test_postgres_server_is_not_generic_alias(self):
+    def test_postgres_server_is_not_generic_alias(self) -> None:
         """
         Verify that POSTGRES_SERVER is not a generic alias like 'db'.
 
@@ -42,7 +42,7 @@ class TestEnvironmentConfiguration:
                 f"Expected something like 'infra-db-1' to prevent DNS collisions."
             )
 
-    def test_redis_host_is_not_generic_alias(self):
+    def test_redis_host_is_not_generic_alias(self) -> None:
         """
         Verify that REDIS_HOST is not a generic alias like 'redis'.
 
@@ -59,7 +59,7 @@ class TestEnvironmentConfiguration:
                 f"Expected something like 'infra-redis-1' to prevent DNS collisions."
             )
 
-    def test_database_url_contains_expected_host(self):
+    def test_database_url_contains_expected_host(self) -> None:
         """Verify the constructed database URL uses the configured host."""
         db_url = settings.ASYNC_SQLALCHEMY_DATABASE_URL
 
@@ -74,7 +74,7 @@ class TestSetupDatabaseIsolation:
     """Tests to verify setup operations affect the correct database."""
 
     @pytest.mark.asyncio
-    async def test_setup_status_persists_correctly(self, db_session: AsyncSession):
+    async def test_setup_status_persists_correctly(self, db_session: AsyncSession) -> None:
         """
         Verify that setup status changes persist to the test database.
 
@@ -102,7 +102,7 @@ class TestSetupDatabaseIsolation:
             )
 
     @pytest.mark.asyncio
-    async def test_app_settings_singleton_exists(self, db_session: AsyncSession):
+    async def test_app_settings_singleton_exists(self, db_session: AsyncSession) -> None:
         """Verify that the AppSettings singleton is accessible."""
         app_settings = await crud_app_settings.get(db_session)
 
@@ -113,21 +113,21 @@ class TestSetupDatabaseIsolation:
 class TestConfigurationConsistency:
     """Tests for configuration consistency across the application."""
 
-    def test_environment_is_set(self):
+    def test_environment_is_set(self) -> None:
         """Verify ENVIRONMENT is explicitly configured."""
         assert settings.ENVIRONMENT in {"development", "staging", "production", "test"}, (
             f"ENVIRONMENT must be one of development/staging/production/test, "
             f"got: {settings.ENVIRONMENT}"
         )
 
-    def test_secret_key_is_set(self):
+    def test_secret_key_is_set(self) -> None:
         """Verify SECRET_KEY is configured (not default)."""
         assert settings.SECRET_KEY, "SECRET_KEY must be set"
         assert (
             len(settings.SECRET_KEY) >= 32
         ), "SECRET_KEY should be at least 32 characters for security"
 
-    def test_jwt_secrets_are_unique(self):
+    def test_jwt_secrets_are_unique(self) -> None:
         """Verify JWT secrets are distinct from each other."""
         secrets = [
             settings.SECRET_KEY,
@@ -145,7 +145,7 @@ class TestConfigurationConsistency:
             set(secrets)
         ), "JWT secrets should be unique from each other to prevent token confusion attacks"
 
-    def test_cors_origins_configured(self):
+    def test_cors_origins_configured(self) -> None:
         """Verify CORS origins are configured in non-development environments."""
         if settings.ENVIRONMENT != "development":
             # In production/staging, CORS should be explicitly configured

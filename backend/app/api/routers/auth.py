@@ -27,7 +27,7 @@ from app.core.users import (
 )
 from app.db.models.user import User as UserModel  # Your DB model, aliased
 from app.db.session import get_async_session
-from app.schemas.auth import Token
+from app.schemas.auth import SessionStatus, Token
 from app.schemas.user import UserCreate, UserRead  # UserCreate for register router
 from app.services import audit_service
 
@@ -93,7 +93,7 @@ async def _apply_login_delay(db: AsyncSession, email: str) -> None:
             action="auth.login",
             severity="warning",
             success=False,
-            target_user_id=user_obj.id if user_obj else None,
+            target_user_id=str(user_obj.id) if user_obj else None,
             details={"reason": "ACCOUNT_SUSPENDED"},
         )
         await db.commit()
@@ -149,7 +149,7 @@ async def _raise_inactive_user(
         category="auth",
         action="auth.login",
         success=False,
-        target_user_id=user.id,
+        target_user_id=str(user.id),
         details={"reason": "USER_INACTIVE"},
     )
     await db.commit()
@@ -197,7 +197,7 @@ async def _maybe_require_mfa(
     response: Response,
     db: AsyncSession,
     user: UserModel,
-) -> dict[str, str] | None:
+) -> dict[str, str | bool] | None:
     if not user.mfa_enabled:
         return None
 
@@ -235,7 +235,7 @@ async def custom_login(
     user_manager: UserManager = Depends(get_user_manager),
     access_token_strategy: JWTStrategy = Depends(get_access_token_jwt_strategy),
     db: AsyncSession = Depends(get_async_session),
-):
+) -> dict[str, str | bool]:
     # Get client IP using trusted proxy-aware extraction
     client_ip = get_real_client_ip(request)
 
@@ -252,6 +252,7 @@ async def custom_login(
 
     if user is None:
         await _raise_bad_credentials(db, email, client_ip, user_agent)
+    assert user is not None
 
     if not user.is_active:
         await _raise_inactive_user(db, user, client_ip, email)
@@ -289,7 +290,7 @@ async def custom_login(
     logger.info(f"User logged in successfully: {user.email} (ID: {user.id})")
 
     # Return token with MFA setup warning for admins without MFA
-    result = {"access_token": access_token, "token_type": "bearer"}
+    result: dict[str, str | bool] = {"access_token": access_token, "token_type": "bearer"}
     if mfa_setup_required:
         result["mfa_setup_required"] = True
     return result
@@ -303,7 +304,7 @@ async def custom_refresh(
     user_manager: UserManager = Depends(get_user_manager),
     access_token_strategy: JWTStrategy = Depends(get_access_token_jwt_strategy),  # <<< CORRECTED
     # refresh_token_strategy: JWTStrategy = Depends(get_refresh_token_jwt_strategy), # if separated
-):
+) -> Token:
     refresh_token_from_cookie = request.cookies.get(cookie_transport.cookie_name)
     if not refresh_token_from_cookie:
         logger.debug("Refresh attempt without refresh token cookie.")
@@ -386,14 +387,12 @@ async def check_session(
     response: Response,
     user_manager: UserManager = Depends(get_user_manager),
     access_token_strategy: JWTStrategy = Depends(get_access_token_jwt_strategy),
-):
+) -> SessionStatus:
     """
     Check if a valid refresh token exists in cookies.
     If valid: returns new access token and is_authenticated=True.
     If invalid: returns is_authenticated=False (no 401 error).
     """
-    from app.schemas.auth import SessionStatus
-
     refresh_token_from_cookie = request.cookies.get(cookie_transport.cookie_name)
     if not refresh_token_from_cookie:
         return SessionStatus(is_authenticated=False)
@@ -452,7 +451,7 @@ async def change_password(
     body: ChangePasswordRequest,
     current_user: UserModel = Depends(current_active_user),
     user_manager: UserManager = Depends(get_user_manager),
-):
+) -> dict[str, str]:
     """
     Change password for the currently logged-in user.
     Requires the current password for verification.
@@ -518,7 +517,7 @@ async def custom_logout(
     response: Response,
     current_user: UserModel = Depends(current_active_user),
     db: AsyncSession = Depends(get_async_session),
-):
+) -> dict[str, str]:
     logger.info(
         f"Logout attempt for {current_user.email}. Deleting cookie: {cookie_transport.cookie_name}"
     )
@@ -558,7 +557,7 @@ async def register_user(
     user_create: UserCreate,
     user_manager: UserManager = Depends(get_user_manager),
     db: AsyncSession = Depends(get_async_session),
-):
+) -> UserRead:
     """
     Register a new user account.
     Only available when open signup is enabled in app settings.
@@ -594,7 +593,7 @@ async def register_user(
             category="auth",
             action="auth.register",
             severity="info",
-            actor_user_id=created_user.id,
+            actor_user_id=str(created_user.id),
             details={"email": created_user.email},
         )
         await db.commit()

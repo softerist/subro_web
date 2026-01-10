@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from typing import (  # Using Optional for broader Python compatibility if needed
     TYPE_CHECKING,
+    Any,
 )
 
 from sqlalchemy import (
@@ -95,7 +96,8 @@ class Job(Base):
         nullable=False,
     )
 
-    # Stores a brief message about the job's outcome or current state, e.g., error message, cancellation reason
+    # Stores a brief message about the job's outcome
+    # e.g., error message, cancellation reason
     result_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Exit code of the executed script, if applicable
@@ -150,7 +152,7 @@ class Job(Base):
 # SQLAlchemy event listener to validate before insert/update
 @event.listens_for(Job, "before_insert")
 @event.listens_for(Job, "before_update")
-def validate_job_before_save(_mapper, _connection, target: Job):
+def validate_job_before_save(_mapper: Any, _connection: Any, target: Job) -> None:
     """
     Event listener that validates job state before saving to database.
     This ensures we catch inconsistent states before they're persisted.

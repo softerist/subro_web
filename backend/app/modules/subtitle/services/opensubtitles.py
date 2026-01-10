@@ -29,12 +29,12 @@ LOGOUT_URL = f"{BASE_URL}/logout"
 # Shared session
 network_session = create_session_with_retries()
 
-_current_opensubs_token = None
-_auth_failed_this_run = False  # Tracks if auth failed in the current script execution
+_current_opensubs_token: str | None = None
+_auth_failed_this_run: bool = False  # Tracks if auth failed in the current script execution
 
 
 # Helper for dynamic setting retrieval
-def _get_dynamic_setting(db_field, env_var_name=None):
+def _get_dynamic_setting(db_field: str, env_var_name: str | None = None) -> Any:
     """
     Fetches setting synchronously from DB, falling back to Environment/Settings.
     """
@@ -73,7 +73,7 @@ def _get_dynamic_setting(db_field, env_var_name=None):
     return None
 
 
-def set_token(token):
+def set_token(token: str | None) -> None:
     """Sets the active OpenSubtitles token for the service."""
     global _current_opensubs_token
     _current_opensubs_token = token
@@ -83,23 +83,23 @@ def set_token(token):
         logger.debug("OpenSubtitles token state cleared (set to None).")
 
 
-def get_token():
+def get_token() -> str | None:
     """Gets the currently active OpenSubtitles token stored in the module."""
     return _current_opensubs_token
 
 
-def clear_token():
+def clear_token() -> None:
     """Clears the stored OpenSubtitles token."""
     global _auth_failed_this_run
     set_token(None)
 
 
-def is_authenticated():
+def is_authenticated() -> bool:
     """Checks if a valid token currently exists."""
     return bool(_current_opensubs_token)
 
 
-def authenticate():
+def authenticate() -> bool:
     """
     Authenticates with the OpenSubtitles API if not already authenticated
     and no prior attempt failed in this run. Sets the module token.
@@ -178,7 +178,7 @@ def authenticate():
         return False
 
 
-def logout():
+def logout() -> bool:
     """
     Logs out using the currently stored token (if any) and clears state.
     Returns True if logout API call was successful or if not logged in, False on API error.
@@ -205,10 +205,7 @@ def logout():
             response = make_request(
                 network_session, "DELETE", LOGOUT_URL, headers=headers, raise_for_status=False
             )
-            logout_success = response and response.status_code in [
-                200,
-                204,
-            ]  # 204 No Content is also valid for DELETE success
+            logout_success = bool(response and response.status_code in [200, 204])
 
             if logout_success:
                 logger.info("Logged out from OpenSubtitles successfully via API.")
@@ -226,7 +223,9 @@ def logout():
     return logout_success
 
 
-def _opensubs_api_request(method, url, needs_auth=True, retry_on_401=True, **kwargs):
+def _opensubs_api_request(
+    method: str, url: str, needs_auth: bool = True, retry_on_401: bool = True, **kwargs: Any
+) -> Any | None:
     """
     Internal helper to make API requests.
     Relies on authenticate() having been called previously if needs_auth=True.
@@ -438,16 +437,10 @@ def search_subtitles(  # noqa: C901
     if response.status_code == 200:
         try:
             data = response.json()
-            results = data.get("data", [])
-            total_count = data.get("total_count", 0)
-            if not results:
-                logger.info("No OpenSubtitles subtitles found matching the search criteria.")
-                return []  # Returning an empty list if no results are found
-            else:
-                logger.info(
-                    f"OpenSubtitles search successful. Found {len(results)} subtitles (total matching criteria: {total_count})."
-                )
+            results = data.get("data")
+            if isinstance(results, list):
                 return results
+            return []
         except ValueError:
             logger.error(
                 f"Failed to decode OpenSubtitles search JSON. Status: {response.status_code}",
@@ -459,7 +452,7 @@ def search_subtitles(  # noqa: C901
         return None
 
 
-def get_download_info(file_id):
+def get_download_info(file_id: Any) -> dict[str, Any] | None:
     """
     Requests download info. Relies on prior call to authenticate().
     """
@@ -479,7 +472,7 @@ def get_download_info(file_id):
     if response.status_code == 200:
         try:
             data = response.json()
-            if data and "link" in data and data["link"]:
+            if isinstance(data, dict) and "link" in data and data["link"]:
                 logger.info(f"OK: Retrieved download info for file_id: {file_id}")
                 return data
             else:
@@ -500,7 +493,7 @@ def get_download_info(file_id):
         return None
 
 
-def download_subtitle_content(download_link):
+def download_subtitle_content(download_link: str) -> bytes | None:
     """Downloads subtitle content (no auth needed, uses separate session)."""
     if not download_link:
         logger.error("Cannot download subtitle: link missing.")
@@ -519,8 +512,10 @@ def download_subtitle_content(download_link):
             if not content:
                 logger.warning(f"Downloaded empty content from {download_link}")
                 return None  # Return None for empty content
-            logger.info(f"OK: Downloaded {len(content)} bytes OpenSubtitles content.")
-            return content
+            if isinstance(content, bytes):
+                logger.info(f"OK: Downloaded {len(content)} bytes OpenSubtitles content.")
+                return content
+            return None
         except Exception as e:
             logger.error(f"Error reading downloaded OpenSubtitles content: {e}")
             return None
@@ -532,7 +527,9 @@ def download_subtitle_content(download_link):
         return None
 
 
-def find_best_subtitle_match(subtitle_results, target_release_name):  # noqa: C901
+def find_best_subtitle_match(  # noqa: C901
+    subtitle_results: list[dict[str, Any]] | None, target_release_name: str | None
+) -> dict[str, Any] | None:
     """
     Scores and finds the best matching subtitle from a list of OpenSubtitles API results.
     (Uses v2's scoring logic which is generally more robust)

@@ -23,7 +23,7 @@ class SettingsBase(BaseModel):
     qbittorrent_username: str | None = None
 
     # Paths
-    allowed_media_folders: list[str] = Field(default_factory=list)
+    allowed_media_folders: list[str] | None = None
 
 
 class SettingsUpdate(SettingsBase):
@@ -72,6 +72,7 @@ class SettingsRead(SettingsBase):
     opensubtitles_username: str = ""
     opensubtitles_password: str = ""
     deepl_api_keys: list[str] = Field(default_factory=list)  # Masked entries
+    allowed_media_folders: list[str] = Field(default_factory=list)
     # Usage Stats (Read Only)
     deepl_usage: list[DeepLUsage] = Field(default_factory=list)
     qbittorrent_password: str = ""

@@ -25,7 +25,7 @@ async def login_user(client: AsyncClient, email: str, password: str) -> dict:
 @pytest.mark.asyncio
 async def test_standard_user_can_access_translation_stats(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test that standard users can access translation statistics."""
     # Arrange
     user = UserFactory.create_user(
@@ -55,7 +55,7 @@ async def test_standard_user_can_access_translation_stats(
 @pytest.mark.asyncio
 async def test_admin_user_can_access_translation_stats(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test that admin users can access translation statistics."""
     # Arrange
     admin = UserFactory.create_user(
@@ -81,7 +81,7 @@ async def test_admin_user_can_access_translation_stats(
 @pytest.mark.asyncio
 async def test_unauthenticated_cannot_access_translation_stats(
     test_client: AsyncClient,
-):
+) -> None:
     """Test that unauthenticated users cannot access translation statistics."""
     # Act
     response = await test_client.get(f"{API_PREFIX}/translation-stats")
@@ -93,7 +93,7 @@ async def test_unauthenticated_cannot_access_translation_stats(
 @pytest.mark.asyncio
 async def test_standard_user_can_access_translation_history(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test that standard users can access translation history."""
     # Arrange
     user = UserFactory.create_user(
@@ -123,7 +123,7 @@ async def test_standard_user_can_access_translation_history(
 @pytest.mark.asyncio
 async def test_translation_stats_response_format(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test that translation stats response has correct format."""
     # Arrange
     user = UserFactory.create_user(

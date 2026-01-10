@@ -7,7 +7,9 @@ from app.tasks.audit_worker import process_outbox_batch
 
 @pytest.mark.usefixtures("override_auth_dependencies")
 @pytest.mark.asyncio
-async def test_get_audit_stats(test_client: AsyncClient, audit_admin_headers: dict, db_session):
+async def test_get_audit_stats(
+    test_client: AsyncClient, audit_admin_headers: dict, db_session
+) -> None:
     # Ensure some data exists
     await audit_service.log_event(db_session, category="auth", action="auth.login", success=True)
     await audit_service.log_event(
@@ -29,7 +31,7 @@ async def test_get_audit_stats(test_client: AsyncClient, audit_admin_headers: di
 @pytest.mark.asyncio
 async def test_audit_list_pagination(
     test_client: AsyncClient, audit_admin_headers: dict, db_session
-):
+) -> None:
     # Create 10 events
     for i in range(10):
         await audit_service.log_event(db_session, category="test", action=f"test.action.{i}")
@@ -51,7 +53,7 @@ async def test_audit_list_pagination(
 @pytest.mark.asyncio
 async def test_audit_verify_integrity(
     test_client: AsyncClient, audit_admin_headers: dict, db_session
-):
+) -> None:
     # Create a small chain
     await audit_service.log_event(db_session, category="admin", action="admin.audit.view")
     await audit_service.log_event(db_session, category="admin", action="admin.audit.verify")
@@ -68,6 +70,8 @@ async def test_audit_verify_integrity(
 
 @pytest.mark.usefixtures("override_auth_dependencies")
 @pytest.mark.asyncio
-async def test_audit_forbidden_for_non_admin(test_client: AsyncClient, audit_user_headers: dict):
+async def test_audit_forbidden_for_non_admin(
+    test_client: AsyncClient, audit_user_headers: dict
+) -> None:
     response = await test_client.get("/api/v1/admin/audit", headers=audit_user_headers)
     assert response.status_code == 403

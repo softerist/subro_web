@@ -58,7 +58,7 @@ celery_app.conf.beat_schedule_filename = str(beat_schedule_path)
 
 
 @worker_process_init.connect(weak=False)
-def init_worker_process_signal(**_kwargs):
+def init_worker_process_signal(**_kwargs: object) -> None:
     """Signal handler for when a Celery worker process starts."""
     # Ensure all models are imported and registered
 
@@ -70,7 +70,7 @@ def init_worker_process_signal(**_kwargs):
 
 
 @worker_process_shutdown.connect(weak=False)
-def shutdown_worker_process_signal(**_kwargs):
+def shutdown_worker_process_signal(**_kwargs: object) -> None:
     """Signal handler for when a Celery worker process shuts down."""
     logger.info("CELERY_WORKER_PROCESS_SHUTDOWN: Signal received. Disposing DB resources.")
     dispose_worker_db_resources_sync()  # Call the synchronous wrapper

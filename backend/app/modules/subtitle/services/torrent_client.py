@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import qbittorrentapi
 
@@ -12,7 +13,7 @@ QBITTORRENT_USERNAME = getattr(settings, "QBITTORRENT_USERNAME", None)
 QBITTORRENT_PASSWORD = getattr(settings, "QBITTORRENT_PASSWORD", None)
 
 
-def get_client():
+def get_client() -> qbittorrentapi.Client | None:
     """
     Initializes and returns a qBittorrent API client instance.
     Handles basic connection setup. Returns None if configuration is missing.
@@ -48,7 +49,7 @@ def get_client():
         return None
 
 
-def login_to_qbittorrent():
+def login_to_qbittorrent() -> qbittorrentapi.Client | None:
     """
     Attempts to log in to the qBittorrent client.
 
@@ -97,7 +98,7 @@ def login_to_qbittorrent():
         return None
 
 
-def get_completed_torrents(client):
+def get_completed_torrents(client: qbittorrentapi.Client) -> list[Any]:
     """
     Retrieves a list of completed torrents from the qBittorrent client.
     Includes torrents fully downloaded but still seeding/uploading.
@@ -115,11 +116,10 @@ def get_completed_torrents(client):
         # Fetch torrents by relevant status filters
         completed = client.torrents_info(status_filter="completed")
         seeding = client.torrents_info(status_filter="seeding")
-        uploading = client.torrents_info(status_filter="uploading")
 
         # Combine lists, ensuring uniqueness by hash and checking progress
-        potentially_complete = {}
-        for t in completed + seeding + uploading:
+        potentially_complete: dict[str, Any] = {}
+        for t in completed + seeding:
             if t.progress == 1.0:  # Check if fully downloaded
                 # Use hash as key to automatically handle duplicates from different filters
                 potentially_complete[t.hash] = t
@@ -140,7 +140,7 @@ def get_completed_torrents(client):
         return []
 
 
-def get_torrent_files(client, torrent_hash):
+def get_torrent_files(client: qbittorrentapi.Client, torrent_hash: str) -> list[Any]:
     """
     Retrieves the list of files for a specific torrent.
 
@@ -160,7 +160,7 @@ def get_torrent_files(client, torrent_hash):
     try:
         files = client.torrents_files(torrent_hash=torrent_hash)
         logging.debug(f"Retrieved {len(files)} files for torrent hash {torrent_hash}.")
-        return files
+        return list(files)
     except qbittorrentapi.exceptions.NotFound404Error:
         logging.error(f"Torrent with hash {torrent_hash} not found.")
         return []
@@ -175,7 +175,9 @@ def get_torrent_files(client, torrent_hash):
         return []
 
 
-def rename_torrent_file(client, torrent_hash, old_path, new_path):
+def rename_torrent_file(
+    client: qbittorrentapi.Client, torrent_hash: str, old_path: str, new_path: str
+) -> bool:
     """
     Renames a file within a torrent in qBittorrent.
 

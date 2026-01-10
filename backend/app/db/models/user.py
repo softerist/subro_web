@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
+from uuid import UUID
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
 from sqlalchemy import JSON, DateTime, String, func  # text is not needed if no server_default
@@ -16,6 +17,14 @@ if TYPE_CHECKING:
 
 class User(SQLAlchemyBaseUserTableUUID, Base):
     __tablename__ = "users"
+
+    # Explicitly hint fields inherited from mixins to help Mypy/SQLAlchemy plugin
+    id: Mapped[UUID]
+    email: Mapped[str]
+    hashed_password: Mapped[str]
+    is_active: Mapped[bool]
+    is_superuser: Mapped[bool]
+    is_verified: Mapped[bool]
 
     role: Mapped[Literal["admin", "standard"]] = mapped_column(
         String(50), default="standard", nullable=False, index=True

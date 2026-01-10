@@ -358,12 +358,12 @@ async def create_job(
     job_in: Annotated[JobCreate, Body(...)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(get_current_user_with_api_key_or_jwt)],
-    request: Request = None,  # Required for SlowAPI  # noqa: ARG001
+    request: Request | None = None,  # Required for SlowAPI  # noqa: ARG001
 ) -> Job:
     # Fetch dynamic allowed paths from DB
     db_paths = await crud.storage_path.get_multi(db)
     env_folders = settings.ALLOWED_MEDIA_FOLDERS or []
-    allowed_folders = list(set(env_folders + [p.path for p in db_paths]))
+    allowed_folders = list({str(f) for f in env_folders} | {str(p.path) for p in db_paths})
 
     # Ensure settings.ALLOWED_MEDIA_FOLDERS is the correct config variable name
     resolved_input_path = await _validate_and_resolve_job_path(
@@ -435,7 +435,7 @@ async def get_allowed_folders(
 ) -> list[str]:
     db_paths = await crud.storage_path.get_multi(db)
     env_folders = settings.ALLOWED_MEDIA_FOLDERS or []
-    combined = list(set(env_folders + [p.path for p in db_paths]))
+    combined = list({str(f) for f in env_folders} | {str(p.path) for p in db_paths})
     return sorted(combined)
 
 

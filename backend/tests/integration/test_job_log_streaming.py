@@ -368,7 +368,7 @@ class TestWebSocketLogStreaming:
                 print(f"   ⚠️  Failed to delete test folder: {e}")
 
     @pytest.mark.asyncio
-    async def test_websocket_log_streaming_flow(self):
+    async def test_websocket_log_streaming_flow(self) -> None:
         """
         Integration test for Real-time Log Streaming.
         """
@@ -441,7 +441,7 @@ class TestWebSocketLogStreaming:
             await self._cleanup_test_data(job_id, user_token, test_folder)
 
     @pytest.mark.asyncio
-    async def test_websocket_auth_failure(self):
+    async def test_websocket_auth_failure(self) -> None:
         """Test that WebSocket connection is rejected with invalid token."""
 
         job_id = uuid.uuid4()

@@ -866,7 +866,7 @@ except Exception as e:
 
 
 # --- Validation Function ---
-def _validate_constants():  # noqa: C901
+def _validate_constants() -> bool:  # noqa: C901
     """Perform basic checks on the defined constants."""
     valid = True
     warnings = []

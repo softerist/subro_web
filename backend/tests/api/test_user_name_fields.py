@@ -40,7 +40,9 @@ async def get_or_create_app_settings(db_session: AsyncSession) -> AppSettings:
 
 
 @pytest.mark.asyncio
-async def test_create_user_with_name_fields(test_client: AsyncClient, db_session: AsyncSession):
+async def test_create_user_with_name_fields(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test admin can create user with first_name and last_name."""
     # Arrange
     admin = UserFactory.create_user(
@@ -76,7 +78,9 @@ async def test_create_user_with_name_fields(test_client: AsyncClient, db_session
 
 
 @pytest.mark.asyncio
-async def test_create_user_without_name_fields(test_client: AsyncClient, db_session: AsyncSession):
+async def test_create_user_without_name_fields(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test admin can create user without name fields (they are optional)."""
     # Arrange
     admin = UserFactory.create_user(
@@ -113,7 +117,7 @@ async def test_create_user_without_name_fields(test_client: AsyncClient, db_sess
 
 
 @pytest.mark.asyncio
-async def test_update_user_name_fields(test_client: AsyncClient, db_session: AsyncSession):
+async def test_update_user_name_fields(test_client: AsyncClient, db_session: AsyncSession) -> None:
     """Test admin can update user's first_name and last_name."""
     # Arrange
     admin = UserFactory.create_user(
@@ -156,7 +160,9 @@ async def test_update_user_name_fields(test_client: AsyncClient, db_session: Asy
 
 
 @pytest.mark.asyncio
-async def test_update_user_clear_name_fields(test_client: AsyncClient, db_session: AsyncSession):
+async def test_update_user_clear_name_fields(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test admin can clear user's name fields by setting to null."""
     # Arrange
     admin = UserFactory.create_user(
@@ -200,7 +206,9 @@ async def test_update_user_clear_name_fields(test_client: AsyncClient, db_sessio
 
 
 @pytest.mark.asyncio
-async def test_get_user_includes_name_fields(test_client: AsyncClient, db_session: AsyncSession):
+async def test_get_user_includes_name_fields(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test getting a user includes first_name and last_name."""
     # Arrange
     admin = UserFactory.create_user(
@@ -235,7 +243,9 @@ async def test_get_user_includes_name_fields(test_client: AsyncClient, db_sessio
 
 
 @pytest.mark.asyncio
-async def test_list_users_includes_name_fields(test_client: AsyncClient, db_session: AsyncSession):
+async def test_list_users_includes_name_fields(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test listing users includes first_name and last_name."""
     # Arrange
     admin = UserFactory.create_user(
@@ -270,7 +280,9 @@ async def test_list_users_includes_name_fields(test_client: AsyncClient, db_sess
 
 
 @pytest.mark.asyncio
-async def test_register_with_name_fields(test_client: AsyncClient, db_session: AsyncSession):
+async def test_register_with_name_fields(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test user registration includes name fields when open signup is enabled."""
     # Arrange - Enable open signup
     app_settings = await get_or_create_app_settings(db_session)

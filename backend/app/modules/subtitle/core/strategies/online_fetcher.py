@@ -292,7 +292,7 @@ class OnlineFetcher(ProcessingStrategy):
             attempt_path = self._download_process_selected(candidate, context, main_temp_dir)
 
             if attempt_path and Path(attempt_path).exists():
-                selected_lang = candidate.get("language")
+                selected_lang = candidate.get("language") or "unknown"
                 self.logger.info(
                     f"Successfully processed ONLINE {selected_lang.upper()} subtitle to: {attempt_path}"
                 )

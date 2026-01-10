@@ -1,5 +1,6 @@
 import logging
 import uuid
+from collections.abc import AsyncGenerator
 from datetime import UTC
 
 from fastapi import (
@@ -9,11 +10,7 @@ from fastapi import (
     Response,
     status,
 )
-from fastapi_users import (
-    BaseUserManager,
-    FastAPIUsers,
-    UUIDIDMixin,
-)
+from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin, schemas
 from fastapi_users.authentication import (
     AuthenticationBackend,
     BearerTransport,
@@ -42,11 +39,11 @@ password_helper = PasswordHelper()
 
 
 # User Manager
-class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
+class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):  # type: ignore[type-var]
     reset_password_token_secret = settings.SECRET_KEY
     verification_token_secret = settings.SECRET_KEY
 
-    async def on_after_register(self, user: User, _request: Request | None = None):
+    async def on_after_register(self, user: User, _request: Request | None = None) -> None:
         logger.info(f"User {user.id} ({user.email}) has registered.")
 
     async def on_after_forgot_password(
@@ -54,7 +51,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user: User,
         token: str,
         _request: Request | None = None,
-    ):
+    ) -> None:
         logger.info("User %s (%s) requested a password reset.", user.id, user.email)
         # Send password reset email
         import asyncio
@@ -67,11 +64,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     async def on_after_request_verify(
         self, user: User, _token: str, _request: Request | None = None
-    ):
+    ) -> None:
         logger.info("Verification requested for user %s (%s).", user.id, user.email)
         # Implement actual email sending logic here.
 
-    async def on_after_verify(self, user: User, _token: str, _request: Request | None = None):
+    async def on_after_verify(self, user: User, _request: Request | None = None) -> None:
         logger.info(f"User {user.id} ({user.email}) has been verified.")
 
     async def on_after_login(
@@ -90,7 +87,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     ) -> None:
         logger.info(f"User {user.id} ({user.email}) logged out successfully.")
 
-    async def validate_password(self, password: str, user: User | None = None) -> None:
+    async def validate_password(self, password: str, user: schemas.BaseUserCreate | User) -> None:
         """
         Validate password strength.
         Requirements:
@@ -116,7 +113,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         if not re.search(r"\d", password):
             raise InvalidPasswordException(reason="Password must contain at least one number.")
         # Check if password contains email (common weak pattern)
-        if user and user.email and user.email.split("@")[0].lower() in password.lower():
+        user_email = getattr(user, "email", None)
+        if user_email and user_email.split("@")[0].lower() in password.lower():
             raise InvalidPasswordException(reason="Password should not contain your email address.")
 
     async def on_after_reset_password(self, user: User, _request: Request | None = None) -> None:
@@ -132,7 +130,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
 async def get_user_manager(
     user_db: SQLAlchemyUserDatabase = Depends(get_user_db_adapter_from_session),
-):
+) -> AsyncGenerator["UserManager", None]:
     """Dependency to get the UserManager instance."""
     yield UserManager(user_db)
 
@@ -184,7 +182,7 @@ cookie_auth_backend = AuthenticationBackend(
 
 
 # --- FastAPIUsers Main Instance ---
-fastapi_users_instance = FastAPIUsers[User, uuid.UUID](
+fastapi_users_instance = FastAPIUsers[User, uuid.UUID](  # type: ignore[type-var]
     get_user_manager,
     [
         bearer_auth_backend,

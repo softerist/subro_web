@@ -1,8 +1,9 @@
 # backend/tests/conftest.py
 import logging  # Added to configure logging
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -58,7 +59,7 @@ else:
 
 
 @pytest.fixture(scope="session")
-def event_loop(request: pytest.FixtureRequest):  # noqa: ARG001
+def event_loop(request: pytest.FixtureRequest) -> Generator:  # noqa: ARG001
     """Create an instance of the default event loop for each test session."""
     import asyncio
 
@@ -69,7 +70,7 @@ def event_loop(request: pytest.FixtureRequest):  # noqa: ARG001
 
 
 @pytest_asyncio.fixture(scope="function")
-async def test_engine():
+async def test_engine() -> AsyncGenerator:
     """Ensures a clean database state for each test function."""
     engine = create_async_engine(TEST_DATABASE_URL, echo=getattr(settings, "DB_ECHO_TESTS", False))
     async with engine.begin() as conn:
@@ -87,7 +88,7 @@ async def test_engine():
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session(
-    test_engine,
+    test_engine: Any,
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yields a database session per function, using the function-scoped engine."""
     TestSessionFactory = async_sessionmaker(

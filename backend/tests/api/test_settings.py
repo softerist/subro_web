@@ -21,7 +21,7 @@ async def login_user(client: AsyncClient, email: str, password: str) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_get_settings_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_get_settings_admin(test_client: AsyncClient, db_session: AsyncSession) -> None:
     admin = UserFactory.create_user(
         session=db_session, email="admin_settings@example.com", is_superuser=True
     )
@@ -37,7 +37,7 @@ async def test_get_settings_admin(test_client: AsyncClient, db_session: AsyncSes
 
 
 @pytest.mark.asyncio
-async def test_update_settings_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_update_settings_admin(test_client: AsyncClient, db_session: AsyncSession) -> None:
     admin = UserFactory.create_user(
         session=db_session, email="admin_set_update@example.com", is_superuser=True
     )
@@ -56,7 +56,7 @@ async def test_update_settings_admin(test_client: AsyncClient, db_session: Async
 
 
 @pytest.mark.asyncio
-async def test_get_raw_setting_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_get_raw_setting_admin(test_client: AsyncClient, db_session: AsyncSession) -> None:
     admin = UserFactory.create_user(
         session=db_session, email="admin_raw@example.com", is_superuser=True
     )
@@ -72,7 +72,7 @@ async def test_get_raw_setting_admin(test_client: AsyncClient, db_session: Async
 @pytest.mark.asyncio
 async def test_settings_forbidden_for_standard_user(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     user = UserFactory.create_user(session=db_session, email="standard_settings@example.com")
     await db_session.flush()
     headers = await login_user(test_client, user.email, "password123")

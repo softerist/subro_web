@@ -33,7 +33,7 @@ async def test_api_key_lifecycle_allows_job_access(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-):
+) -> None:
     if not settings.API_KEY_PEPPER:
         pytest.skip("API_KEY_PEPPER not configured for API key tests.")
 

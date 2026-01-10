@@ -73,7 +73,7 @@ diacritics_map2 = {
 }  # Correcting cedilla to comma below, handling other common issues
 
 
-def fix_diacritics(text):
+def fix_diacritics(text: str) -> str:
     """
     Fixes common incorrect diacritics for Romanian and unescapes HTML entities.
 
@@ -151,7 +151,7 @@ def ensure_correct_timestamp_format(content: str) -> str:
 # --- Text Processing ---
 
 
-def tokenize_and_normalize(text):
+def tokenize_and_normalize(text: str | None) -> list[str]:
     """
     Splits text into lower-case alphanumeric tokens.
     Useful for matching filenames. Handles potential None input.
@@ -194,7 +194,7 @@ def parse_srt_into_segments(srt_content: str) -> list[tuple[str, str, str]]:  # 
     segment_index = 0
     current_index_line = None
     current_ts_line = None
-    current_text_lines = []
+    current_text_lines: list[str] = []
     state = "index"  # Possible states: index, timestamp, text
 
     for line_num, line in enumerate(lines, 1):
@@ -322,7 +322,7 @@ def chunk_text_for_translation(text: str, max_length: int = 4500) -> list[str]: 
     Returns:
         list[str]: A list of text chunks.
     """
-    chunks = []
+    chunks: list[str] = []
     if not text or not isinstance(text, str):
         return chunks
 
@@ -349,7 +349,7 @@ def chunk_text_for_translation(text: str, max_length: int = 4500) -> list[str]: 
         logger.debug("NLTK not available or failed. Using line splitting for chunking.")
 
     # --- Chunking logic based on elements (sentences or lines) ---
-    current_chunk_parts = []
+    current_chunk_parts: list[str] = []
     current_length = 0
     for element in elements:
         # Process the element (strip maybe?) - keep original for joining for now

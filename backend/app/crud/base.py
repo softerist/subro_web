@@ -25,7 +25,7 @@ class CRUDBase[ModelType: Base, CreateSchemaType: BaseModel, UpdateSchemaType: B
         Get a single record by ID.
         """
         # Assuming 'id' is the primary key attribute name in your models
-        result = await db.execute(select(self.model).filter(self.model.id == id))
+        result = await db.execute(select(self.model).filter(self.model.id == id))  # type: ignore
         return result.scalars().first()
 
     async def get_multi(
@@ -91,7 +91,7 @@ class CRUDBase[ModelType: Base, CreateSchemaType: BaseModel, UpdateSchemaType: B
         Returns the removed object or None if not found.
         """
         # Assuming 'id' is the primary key attribute name
-        result = await db.execute(select(self.model).filter(self.model.id == id))
+        result = await db.execute(select(self.model).filter(self.model.id == id))  # type: ignore
         obj = result.scalars().first()
         if obj:
             await db.delete(obj)

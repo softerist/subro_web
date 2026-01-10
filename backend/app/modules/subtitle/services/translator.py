@@ -9,6 +9,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 from urllib.error import URLError
 
 try:
@@ -21,7 +22,7 @@ try:
     import deepl
 except ImportError:
     print("Error: 'deepl' library not found. Please install it: pip install deepl")
-    deepl = None  # Indicate library is missing
+    deepl = None  # type: ignore[assignment]
 
 try:
     import nltk
@@ -30,8 +31,8 @@ except ImportError:
     print(
         "Warning: 'nltk' library not found (pip install nltk). Sentence splitting will rely on basic line breaks."
     )
-    nltk = None  # Indicate library is missing
-    sent_tokenize = None
+    nltk = None  # type: ignore[assignment]
+    sent_tokenize = None  # type: ignore[assignment]
 
 try:
     from google.api_core import exceptions as google_exceptions
@@ -40,8 +41,8 @@ except ImportError:
     print(
         "Warning: Google Cloud Translate libraries not found (pip install google-cloud-translate). Google Translate functionality disabled."
     )
-    google_translate = None
-    google_exceptions = None
+    google_translate = None  # type: ignore[assignment]
+    google_exceptions = None  # type: ignore[assignment]
 
 try:
     # Example: Using a hypothetical settings object
@@ -54,18 +55,18 @@ try:
     CONFIG_LOADER_AVAILABLE = True
     DATABASE_AVAILABLE = True
 except ImportError:
-    settings = None
+    settings = None  # type: ignore[assignment]
     SyncSessionLocal = None
-    DeepLUsage = None
-    TranslationLog = None
+    DeepLUsage = None  # type: ignore[assignment, misc]
+    TranslationLog = None  # type: ignore[assignment, misc]
     CONFIG_LOADER_AVAILABLE = False
     DATABASE_AVAILABLE = False
     # In a real application, handle missing config loader more robustly.
 
 
-DEEPL_KEYS = []
-GOOGLE_PROJECT_ID_CONFIG = None
-GOOGLE_CREDENTIALS_PATH = None
+DEEPL_KEYS: list[str] = []
+GOOGLE_PROJECT_ID_CONFIG: str | None = None
+GOOGLE_CREDENTIALS_PATH: str | None = None
 DEEPL_QUOTA_PER_KEY = 500000  # Default DeepL monthly free tier limit (chars)
 
 # DeepL limits (adjust if using Pro API with different limits)
@@ -81,7 +82,7 @@ GOOGLE_MAX_TOTAL_BYTES_PER_REQUEST = 100000  # Approximate total byte limit per 
 logger = logging.getLogger(__name__)  # Logger for this module
 
 
-def download_nltk_data_if_needed(resource_name, resource_subdir):
+def download_nltk_data_if_needed(resource_name: str, resource_subdir: str) -> bool:
     """Downloads NLTK data if not found."""
     if not nltk:
         logger.warning("NLTK library not available, cannot download data.")
@@ -123,7 +124,7 @@ NLTK_PUNKT_AVAILABLE = False
 TRANSLATION_LOG_FILE = "translation_log.json"  # Default
 
 
-def _ensure_initialized():
+def _ensure_initialized() -> None:
     """
     Performs one-time initialization (NLTK check, Log file path) that requires logging to be ready.
     Called by get_translation_manager().
@@ -169,16 +170,16 @@ def _ensure_initialized():
 class TranslationJob:
     input_file: str
     content: str
-    source_language: str
+    source_language: str | None
     target_language: str
 
 
 @dataclass
 class TranslationResult:
-    input_file: str
-    translated_content: str
+    input_file: str | None
+    translated_content: str | None
     characters_translated: int  # Total chars *billed* by APIs
-    service_used: str  # e.g., "deepl", "google", "mixed", "failed", "partial_failure"
+    service_used: str | None  # e.g., "deepl", "google", "mixed", "failed", "partial_failure"
 
 
 def ensure_correct_timestamp_format(content: str) -> str:
@@ -210,7 +211,7 @@ def correct_text_after_translation(content: str) -> str:
     General post-translation cleanup: Unescape HTML entities.
     """
     if not isinstance(content, str):
-        return content
+        return str(content)
     try:
         # Unescape HTML entities like &, <, >, etc.
         content_unescaped = html.unescape(content)
@@ -242,7 +243,7 @@ def chunk_text_for_translation(text: str, max_length: int) -> list[str]:  # noqa
     Splits a single large text block into chunks <= max_length.
     Prefers sentence boundaries using NLTK if available, falls back to newlines.
     """
-    chunks = []
+    chunks: list[str] = []
     if not text or not isinstance(text, str) or max_length <= 0:
         return chunks
 
@@ -272,7 +273,7 @@ def chunk_text_for_translation(text: str, max_length: int) -> list[str]:  # noqa
                 "NLTK available but 'punkt' data missing/failed. Using line splitting for single text block chunking."
             )
 
-    current_chunk_parts = []
+    current_chunk_parts: list[str] = []
     current_chunk_len = 0
     for element in elements:
         element = (
@@ -334,7 +335,7 @@ def chunk_text_list_for_translation(  # noqa: C901
     Chunks a list of strings into batches for list translation APIs.
     Respects max total length (chars/bytes) AND max number of strings per batch.
     """
-    batches = []
+    batches: list[list[str]] = []
     if not texts:
         return batches
     if max_strings <= 0:
@@ -345,10 +346,10 @@ def chunk_text_list_for_translation(  # noqa: C901
         max_length = 100
 
     # Define length function based on bytes or characters
-    def len_func(s):
+    def len_func(s: str) -> int:
         return len(s.encode("utf-8", errors="ignore")) if use_bytes else len(s)
 
-    current_batch = []
+    current_batch: list[str] = []
     current_batch_len = 0
 
     for i, text in enumerate(texts):
@@ -425,7 +426,7 @@ def parse_srt_into_segments(srt_content: str) -> list[tuple[str, str, str]]:  # 
     segment_index = 0
     current_index_line = None
     current_ts_line = None
-    current_text_lines = []
+    current_text_lines: list[str] = []
     state = "index"  # Possible states: index, timestamp, text
 
     for line_num, line in enumerate(lines, 1):
@@ -624,7 +625,7 @@ class TranslationManager:
         self,  # Changed from 'manager'
         input_file: str,
         content: str,
-        source_lang: str,  # Keep: Needed for dispatched methods
+        source_lang: str | None,  # Keep: Needed for dispatched methods
         target_lang: str,  # Keep: Needed for dispatched methods
     ) -> TranslationResult:
         """
@@ -678,7 +679,7 @@ class TranslationManager:
                 )
                 return TranslationResult(input_file, content, 0, "failed_generic_exception")
 
-    def __init__(self):  # noqa: C901
+    def __init__(self) -> None:  # noqa: C901
         # These globals should be populated by an external mechanism before instantiation
         global DEEPL_KEYS, GOOGLE_PROJECT_ID_CONFIG, GOOGLE_CREDENTIALS_PATH, DEEPL_QUOTA_PER_KEY
         self.deepl_keys = [key for key in DEEPL_KEYS if key]  # Filter out empty keys
@@ -697,7 +698,9 @@ class TranslationManager:
         self.google_parent = None
         self.google_project_id_num = None  # Stores the validated project ID string
         self.current_deepl_key_index = 0
-        self.deepl_usage_cache = {}  # { key_index: {"count": int, "limit": int, "valid": bool} }
+        self.deepl_usage_cache: dict[
+            int, dict[str, Any]
+        ] = {}  # { key_index: {"count": int, "limit": int, "valid": bool} }
         self.google_used_session = 0  # Track chars translated by Google in this run
 
         if not self.deepl_keys:
@@ -734,6 +737,10 @@ class TranslationManager:
                     config_value = self.google_project_id_config
                     extracted_project_id = None
                     location = "global"  # Default location
+
+                    if not config_value:
+                        raise ValueError("Google Project ID configuration is empty.")
+
                     # Use regex to parse 'projects/PROJECT_ID/locations/LOCATION' format
                     path_match = re.match(
                         r"projects/([^/]+)(?:/locations/([^/]+))?", config_value
@@ -797,13 +804,13 @@ class TranslationManager:
         if self.deepl_keys:
             self.update_deepl_usage_cache()  # Fetch initial usage
 
-    def _reset_google_state(self):
+    def _reset_google_state(self) -> None:
         """Helper to reset Google-related instance variables."""
         self.google_client = None
         self.google_parent = None
         self.google_project_id_num = None
 
-    def update_deepl_usage_cache(self):
+    def update_deepl_usage_cache(self) -> None:
         """Fetches and updates usage info for all configured, valid DeepL keys."""
         if not self.deepl_keys:
             logger.debug("No DeepL keys to update usage cache for.")
@@ -952,14 +959,14 @@ class TranslationManager:
 
     def _translate_deepl_chunk(  # noqa: C901
         self, text: str, target_language: str, source_language: str | None = None
-    ) -> tuple[str | None, int]:
+    ) -> tuple[str, int]:
         """
         Translates one chunk with the current DeepL key. Internal use.
         Returns (translated_text, characters_billed) or (None, 0) on failure.
         Raises DeepLException or subclasses if API call fails, allowing caller to handle.
         """
         if not deepl:
-            return None, 0  # Library check
+            raise RuntimeError("DeepL library not available.")
 
         key_index, key, available, is_valid = self._get_current_deepl_key_info()
         key_suffix = key[-4:] if key and len(key) >= 4 else "N/A"
@@ -1022,7 +1029,10 @@ class TranslationManager:
                 tag_handling="xml",  # Handles basic HTML/XML tags
                 # formality='less' # Example option
             )
-            translated_text = result.text
+            if isinstance(result, list):
+                translated_text = result[0].text
+            else:
+                translated_text = result.text
 
             # Update usage cache immediately after successful call
             if key_index in self.deepl_usage_cache:
@@ -1067,15 +1077,19 @@ class TranslationManager:
             ) from e
 
     def _translate_deepl_list(  # noqa: C901
-        self, texts: list[str], target_language: str, source_language: str | None = None
-    ) -> tuple[list[str] | None, int]:
+        self,
+        texts: list[str],
+        target_language: str,
+        source_language: str | None = None,
+        _use_bytes: bool = False,
+    ) -> tuple[list[str], int]:
         """
         Translates a list of strings using the current DeepL key. Internal use.
-        Returns (list_of_translated_texts, total_characters_billed) or (None, 0).
+        Returns (list_of_translated_texts, total_characters_billed).
         Raises DeepLException or subclasses if API call fails.
         """
         if not deepl:
-            return None, 0  # Library check
+            raise RuntimeError("DeepL library not available.")
 
         key_index, key, available, is_valid = self._get_current_deepl_key_info()
         key_suffix = key[-4:] if key and len(key) >= 4 else "N/A"
@@ -1369,7 +1383,7 @@ class TranslationManager:
             return None, 0
 
     def batched_srt_translate(  # noqa: C901
-        self, input_file: str, srt_content: str, source_lang: str, target_lang: str
+        self, input_file: str, srt_content: str, source_lang: str | None, target_lang: str
     ) -> TranslationResult:
         """
         Translates SRT content using batched list translation for efficiency.
@@ -1434,7 +1448,7 @@ class TranslationManager:
             translated_batch_texts = None
             billed_chars_batch = 0
             service_used_for_batch = "failed"
-            last_exception_batch = None
+            last_exception_batch: Exception | None = None
 
             if self.deepl_keys:  # Only attempt if DeepL keys are configured
                 should_retry_deepl = True
@@ -1672,10 +1686,14 @@ class TranslationManager:
 
         # Log detailed usage for this file
         deepl_billed = sum(
-            d["chars"] for d in batch_billing_details if d["service"].startswith("deepl")
+            cast(int, d["chars"])
+            for d in batch_billing_details
+            if cast(str, d["service"]).startswith("deepl")
         )
         google_billed = sum(
-            d["chars"] for d in batch_billing_details if d["service"] == "google_api"
+            cast(int, d["chars"])
+            for d in batch_billing_details
+            if cast(str, d["service"]) == "google_api"
         )
         self._log_usage(
             deepl_chars=deepl_billed,
@@ -1733,7 +1751,7 @@ class TranslationManager:
             translated_chunk_text = None
             billed_chars_chunk = 0
             chunk_service = "failed"
-            last_exception_chunk = None
+            last_exception_chunk: Exception | None = None
 
             if self.deepl_keys:
                 should_retry_deepl_chunk = True
@@ -1872,10 +1890,14 @@ class TranslationManager:
 
         # Log detailed usage for this file
         deepl_billed = sum(
-            d["chars"] for d in chunk_billing_details if d["service"].startswith("deepl")
+            cast(int, d["chars"])
+            for d in chunk_billing_details
+            if cast(str, d["service"]).startswith("deepl")
         )
         google_billed = sum(
-            d["chars"] for d in chunk_billing_details if d["service"] == "google_api"
+            cast(int, d["chars"])
+            for d in chunk_billing_details
+            if cast(str, d["service"]) == "google_api"
         )
         self._log_usage(
             deepl_chars=deepl_billed,
@@ -1934,7 +1956,7 @@ class TranslationManager:
         output_file_path: str | None = None,
         target_lang: str | None = None,
         source_lang: str | None = None,
-    ):
+    ) -> None:
         """Logs translation usage details to the JSON log file and Database."""
         global TRANSLATION_LOG_FILE, DATABASE_AVAILABLE, SyncSessionLocal, DeepLUsage
         if not TRANSLATION_LOG_FILE:
@@ -1942,18 +1964,20 @@ class TranslationManager:
             return
 
         # 1. Update Database (New)
-        if DATABASE_AVAILABLE and SyncSessionLocal and DeepLUsage:
+        if DATABASE_AVAILABLE and SyncSessionLocal is not None and DeepLUsage is not None:
             try:
                 with SyncSessionLocal() as db:
                     # Update counts for each key used
                     if billing_details:
                         # Aggregate by service
-                        deepl_usage_updates = {}  # {key_hash: {"count": int, "limit": int, "valid": bool}}
+                        deepl_usage_updates: dict[
+                            str, dict[str, Any]
+                        ] = {}  # {key_hash: {"count_incr": int, "limit": int, "valid": bool}}
 
                         import hashlib
 
                         for detail in billing_details:
-                            service = detail.get("service", "")
+                            service = str(detail.get("service", ""))
                             if service.startswith("deepl_key_"):
                                 try:
                                     idx = int(service.replace("deepl_key_", "")) - 1
@@ -1966,7 +1990,7 @@ class TranslationManager:
 
                                         # Get latest info from cache or just use billed chars
                                         info = self.deepl_usage_cache.get(idx, {})
-                                        count_incr = detail.get("chars", 0)
+                                        count_incr = int(detail.get("chars", 0))
 
                                         if key_hash not in deepl_usage_updates:
                                             deepl_usage_updates[key_hash] = {
@@ -2012,7 +2036,7 @@ class TranslationManager:
 
                         db.commit()
 
-                    if TranslationLog:
+                    if TranslationLog is not None:
                         # Determine overall status
                         overall_status = self._summarize_service_status(service_details)
 
@@ -2039,7 +2063,7 @@ class TranslationManager:
 
         # 2. Update JSON Log (Maintain for backward compatibility/backup)
         try:
-            log_data = {
+            log_data: dict[str, Any] = {
                 "log_schema_version": "1.1",  # Add versioning
                 "cumulative_totals": {"deepl": 0, "google": 0, "overall": 0, "last_updated": None},
                 "jobs": [],
@@ -2048,7 +2072,7 @@ class TranslationManager:
             if Path(TRANSLATION_LOG_FILE).exists():
                 try:
                     with Path(TRANSLATION_LOG_FILE).open(encoding="utf-8") as f:
-                        log_data = json.load(f)
+                        log_data = cast(dict[str, Any], json.load(f))
                     # Migrate older log formats
                     if "total_chars" in log_data and "cumulative_totals" not in log_data:
                         log_data["cumulative_totals"] = log_data.pop("total_chars")
@@ -2080,16 +2104,11 @@ class TranslationManager:
 
             # Update cumulative totals
             current_time_iso = datetime.now(UTC).isoformat()
-            log_data["cumulative_totals"]["deepl"] = (
-                log_data["cumulative_totals"].get("deepl", 0) + deepl_chars
-            )
-            log_data["cumulative_totals"]["google"] = (
-                log_data["cumulative_totals"].get("google", 0) + google_chars
-            )
-            log_data["cumulative_totals"]["overall"] = (
-                log_data["cumulative_totals"]["deepl"] + log_data["cumulative_totals"]["google"]
-            )  # Recalculate overall
-            log_data["cumulative_totals"]["last_updated"] = current_time_iso
+            totals = cast(dict[str, Any], log_data["cumulative_totals"])
+            totals["deepl"] = totals.get("deepl", 0) + deepl_chars
+            totals["google"] = totals.get("google", 0) + google_chars
+            totals["overall"] = totals["deepl"] + totals["google"]
+            totals["last_updated"] = current_time_iso
 
             # Create entry for this specific job
             job_entry = {
@@ -2108,12 +2127,14 @@ class TranslationManager:
                     service_details
                 ),  # Add summary status
             }
-            log_data["jobs"].append(job_entry)
+            jobs_list = cast(list[Any], log_data["jobs"])
+            jobs_list.append(job_entry)
 
             # Update the snapshot of DeepL key usage based on the current cache state
             for key_idx, usage_info in self.deepl_usage_cache.items():
                 key_id = f"key_{key_idx+1}"  # Consistent identifier
-                log_data["deepl_keys_snapshot"][key_id] = {
+                snapshot = cast(dict[str, Any], log_data["deepl_keys_snapshot"])
+                snapshot[key_id] = {
                     "count": usage_info.get("count", "N/A"),
                     "limit": usage_info.get("limit", "N/A"),
                     "valid": usage_info.get("valid", False),  # Default to False if missing
@@ -2144,7 +2165,7 @@ class TranslationManager:
 _translation_manager_instance = None
 
 
-def get_translation_manager():  # noqa: C901
+def get_translation_manager() -> TranslationManager:  # noqa: C901
     """
     Singleton accessor for the TranslationManager.
     Initializes the manager on first call. Ensures config is loaded first.

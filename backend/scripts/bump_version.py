@@ -8,7 +8,6 @@ proper TOML handling, atomic writes, and updates the database.
 
 import argparse
 import logging
-import platform
 import re
 import shutil
 import sys
@@ -20,8 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # Platform-specific imports for file locking
-IS_WINDOWS = platform.system() == "Windows"
-if IS_WINDOWS:
+if sys.platform == "win32":
     import msvcrt
 else:
     import fcntl
@@ -59,7 +57,7 @@ def file_lock(file_path: Path, timeout: int = 30):
         while True:
             try:
                 lock_file = lock_path.open("x")
-                if IS_WINDOWS:
+                if sys.platform == "win32":
                     msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
                 else:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -73,7 +71,7 @@ def file_lock(file_path: Path, timeout: int = 30):
     finally:
         if lock_file:
             try:
-                if IS_WINDOWS:
+                if sys.platform == "win32":
                     msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
                 else:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)

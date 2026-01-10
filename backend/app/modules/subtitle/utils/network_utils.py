@@ -1,8 +1,9 @@
 import logging
+from typing import Any
 
-import requests
-from requests.adapters import HTTPAdapter
-from requests.exceptions import (
+import requests  # type: ignore[import-untyped]
+from requests.adapters import HTTPAdapter  # type: ignore[import-untyped]
+from requests.exceptions import (  # type: ignore[import-untyped]
     ConnectionError,
     ConnectTimeout,
     HTTPError,
@@ -24,7 +25,7 @@ except ImportError:
         USER_AGENT_APP_NAME = "SubtitleTool"
         USER_AGENT_APP_VERSION = "1.0"
 
-    settings = DummySettings()
+    settings = DummySettings()  # type: ignore[assignment, no-redef]
     logging.warning("Could not import app.core.config. Using default network settings.")
 
 logger = logging.getLogger(__name__)
@@ -39,11 +40,11 @@ DEFAULT_READ_TIMEOUT = getattr(settings, "NETWORK_READ_TIMEOUT", 30.0)
 
 
 def create_session_with_retries(
-    max_retries=DEFAULT_MAX_RETRIES,
-    backoff_factor=DEFAULT_BACKOFF_FACTOR,
-    status_forcelist=DEFAULT_STATUS_FORCELIST,
-    allowed_methods=None,  # Include POST/DELETE etc. if needed
-):
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    backoff_factor: int = DEFAULT_BACKOFF_FACTOR,
+    status_forcelist: list[int] = DEFAULT_STATUS_FORCELIST,
+    allowed_methods: list[str] | None = None,  # Include POST/DELETE etc. if needed
+) -> requests.Session:
     """
     Creates a requests.Session configured with automatic retries on specific
     HTTP methods and status codes, using exponential backoff and respecting
@@ -74,7 +75,9 @@ def create_session_with_retries(
     return session
 
 
-def make_request(session, method, url, **kwargs):  # noqa: C901
+def make_request(  # noqa: C901
+    session: requests.Session, method: str, url: str, **kwargs: Any
+) -> requests.Response | None:
     """
     Makes an HTTP request using the provided session, handling common exceptions
     and logging request/response details. Uses configured default timeouts.

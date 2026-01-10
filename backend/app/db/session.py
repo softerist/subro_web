@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import AsyncGenerator, Generator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from celery.utils.log import get_task_logger
 from fastapi import Depends
@@ -33,7 +33,7 @@ fastapi_async_engine: AsyncEngine | None = None
 FastAPISessionLocal: async_sessionmaker[AsyncSession] | None = None
 
 
-def _initialize_fastapi_db_resources_sync():
+def _initialize_fastapi_db_resources_sync() -> None:
     """
     Synchronous function to initialize FastAPI's async database engine and session maker.
     Called by the lifespan manager.
@@ -85,7 +85,7 @@ def _initialize_fastapi_db_resources_sync():
         ) from e
 
 
-async def _dispose_fastapi_db_resources_async():
+async def _dispose_fastapi_db_resources_async() -> None:
     global fastapi_async_engine, FastAPISessionLocal
     if fastapi_async_engine:
         logger.info("FastAPI: Disposing FastAPI asynchronous database engine.")
@@ -183,7 +183,7 @@ worker_async_engine: AsyncEngine | None = None
 WorkerSessionLocal: async_sessionmaker[AsyncSession] | None = None
 
 
-def initialize_worker_db_resources():
+def initialize_worker_db_resources() -> None:
     global worker_async_engine, WorkerSessionLocal
     if worker_async_engine is None:
         celery_logger.info("CELERY_WORKER: Initializing database engine and session factory.")
@@ -228,7 +228,7 @@ def initialize_worker_db_resources():
         )
 
 
-def dispose_worker_db_resources_sync():
+def dispose_worker_db_resources_sync() -> None:
     global worker_async_engine, WorkerSessionLocal
     if worker_async_engine:
         celery_logger.info("CELERY_WORKER: Disposing database engine (sync call).")
@@ -292,7 +292,7 @@ async def get_worker_db_session() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def lifespan_db_manager(_app_instance, event_type: str):
+async def lifespan_db_manager(_app_instance: Any, event_type: str) -> None:
     lifespan_logger = logging.getLogger("app.db.lifespan")
 
     if event_type == "startup":

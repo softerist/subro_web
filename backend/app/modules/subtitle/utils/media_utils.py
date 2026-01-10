@@ -9,78 +9,11 @@ from typing import Any
 
 # --- Imports and Setup ---
 # Import configuration from app.core.config (Pydantic settings)
-try:
-    from app.core.config import settings
-    from app.modules.subtitle.core import constants
-    from app.modules.subtitle.core.strategies.base import ProcessingContext, ProcessingStrategy
-    from app.modules.subtitle.utils import file_utils, subtitle_parser
+from app.core.config import settings
+from app.modules.subtitle.core import constants
+from app.modules.subtitle.utils import file_utils, subtitle_parser
 
-    logger = logging.getLogger(__name__)
-    logger.debug("Successfully imported internal modules using absolute paths.")
-except (ImportError, ModuleNotFoundError) as e:
-    logger = logging.getLogger(__name__)
-    logger.critical(
-        f"Import failed: {e}. Media utilities may be non-functional. Using minimal defaults."
-    )
-
-    # Define dummy classes/functions/settings to prevent runtime errors if critical imports fail
-    class DummySettings:
-        SUP2SRT_PATH = "sup2srt"
-        FFMPEG_PATH = "ffmpeg"
-        FFPROBE_PATH = "ffprobe"
-        SUP2SRT_TIMEOUT = 120
-        FFMPEG_TIMEOUT = 180
-        FFPROBE_TIMEOUT = 60
-
-    settings = DummySettings()
-    constants = type(
-        "obj",
-        (object,),
-        {
-            "LANGUAGE_CODE_MAPPING_3_TO_2": {
-                "rum": "ro",
-                "ron": "ro",
-                "eng": "en",
-                "rom": "ro",
-                "rou": "ro",
-            },
-            "LANGUAGE_CODE_MAPPING_2_TO_3": {"ro": "ron", "en": "eng"},
-            "TEXT_SUBTITLE_CODECS": ["subrip", "ass", "ssa", "mov_text", "webvtt"],
-            "IMAGE_SUBTITLE_CODECS_RO": ["hdmv_pgs_subtitle", "dvd_subtitle"],
-            "IMAGE_SUBTITLE_CODECS_EN": ["hdmv_pgs_subtitle", "dvd_subtitle"],
-            "IGNORED_OCR_CODECS": [],
-        },
-    )()
-
-    class ProcessingStrategy:
-        pass
-
-    class ProcessingContext:
-        pass
-
-    class DummyFileUtils:
-        def get_preferred_subtitle_path(*_args, **_kwargs):
-            return "dummy.srt"
-
-        def write_srt_file(*_args, **_kwargs):
-            pass
-
-        def read_srt_file(*_args, **_kwargs):
-            return ""
-
-        def clean_temp_directory(*_args, **_kwargs):
-            pass
-
-    file_utils = DummyFileUtils()
-
-    class DummyParser:
-        def fix_diacritics(s):
-            return s
-
-        def ensure_correct_timestamp_format(s):
-            return s
-
-    subtitle_parser = DummyParser()
+logger = logging.getLogger(__name__)
 
 # --- Configuration ---
 # Use separate settings for ffmpeg and ffprobe if available, otherwise derive from ffmpeg
@@ -340,7 +273,7 @@ def get_2_letter_code(code: str | None) -> str | None:
     mapped_code = map_3_to_2.get(code_lower)
     if mapped_code:
         # Ensure the mapped code is valid 2 letters
-        if len(mapped_code) == 2 and mapped_code.isalpha():
+        if isinstance(mapped_code, str) and len(mapped_code) == 2 and mapped_code.isalpha():
             return mapped_code
         else:
             logger.error(

@@ -63,7 +63,7 @@ class Settings(BaseSettings):
 
     # --- Core Application Settings ---
     APP_NAME: str = Field(default="Subtitle Downloader", validation_alias="APP_NAME")
-    APP_VERSION: str = Field(default="0.1.3-PROD", validation_alias="APP_VERSION")
+    APP_VERSION: str = Field(default="0.1.4-PROD", validation_alias="APP_VERSION")
     APP_DESCRIPTION: str = Field(
         default="API for managing subtitle download jobs and user authentication.",
         validation_alias="APP_DESCRIPTION",
@@ -80,8 +80,13 @@ class Settings(BaseSettings):
     HEALTHZ_URL: str | None = Field(default=None, validation_alias="HEALTHZ_URL")
 
     # --- JWT & Authentication Settings ---
-    SECRET_KEY: str = Field(validation_alias=AliasChoices("JWT_SECRET_KEY", "SECRET_KEY"))
-    JWT_REFRESH_SECRET_KEY: str = Field(validation_alias="JWT_REFRESH_SECRET_KEY")
+    SECRET_KEY: str = Field(
+        default="CHANGEME_SECRET_KEY",
+        validation_alias=AliasChoices("JWT_SECRET_KEY", "SECRET_KEY"),
+    )
+    JWT_REFRESH_SECRET_KEY: str = Field(
+        default="CHANGEME_REFRESH_SECRET_KEY", validation_alias="JWT_REFRESH_SECRET_KEY"
+    )
     API_KEY_PEPPER: str | None = Field(default=None, validation_alias="API_KEY_PEPPER")
     ALGORITHM: str = Field(default="HS256", validation_alias="ALGORITHM")
     DATA_ENCRYPTION_KEYS_ENV_STR: str | None = Field(
@@ -273,30 +278,9 @@ class Settings(BaseSettings):
         os.getenv("DEBUG_TASK_CANCELLATION_DELAY_S", "10")
     )  # Default 10 seconds
 
-    # --- Subtitle Tool Configuration ---
-    # API Keys
-    OMDB_API_KEY: str | None = Field(default=None, validation_alias="OMDB_API_KEY")
-    TMDB_API_KEY: str | None = Field(default=None, validation_alias="TMDB_API_KEY")
-    OPENSUBTITLES_API_KEY: str | None = Field(
-        default=None, validation_alias="OPENSUBTITLES_API_KEY"
-    )
     DEEPL_API_KEYS_ENV_STR: str | None = Field(
         default=None, validation_alias="DEEPL_API_KEYS"
     )  # JSON list of keys
-
-    # User Credentials
-    OPENSUBTITLES_USERNAME: str | None = Field(
-        default=None, validation_alias="OPENSUBTITLES_USERNAME"
-    )
-    OPENSUBTITLES_PASSWORD: str | None = Field(
-        default=None, validation_alias="OPENSUBTITLES_PASSWORD"
-    )
-
-    # qBittorrent Settings
-    QBITTORRENT_HOST: str = Field(default="localhost", validation_alias="QBITTORRENT_HOST")
-    QBITTORRENT_PORT: int = Field(default=8080, validation_alias="QBITTORRENT_PORT")
-    QBITTORRENT_USERNAME: str = Field(default="admin", validation_alias="QBITTORRENT_USERNAME")
-    QBITTORRENT_PASSWORD: str | None = Field(default=None, validation_alias="QBITTORRENT_PASSWORD")
 
     # Google Cloud Translate Settings
     GOOGLE_PROJECT_ID: str | None = Field(default=None, validation_alias="GOOGLE_PROJECT_ID")
@@ -504,21 +488,21 @@ class Settings(BaseSettings):
             f"{driver_prefix}{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
-    @computed_field(repr=False)
     @property
+    @computed_field(repr=False)
     def ASYNC_SQLALCHEMY_DATABASE_URL(self) -> str:
         return str(self._build_postgres_dsn(self.PRIMARY_DATABASE_URL_ENV, use_async=True))
 
-    @computed_field(repr=False)
     @property
+    @computed_field(repr=False)
     def ASYNC_SQLALCHEMY_DATABASE_URL_WORKER(self) -> str:
         base_for_worker = (
             self.ASYNC_SQLALCHEMY_DATABASE_URL_WORKER_ENV or self.PRIMARY_DATABASE_URL_ENV
         )
         return str(self._build_postgres_dsn(base_for_worker, use_async=True))
 
-    @computed_field(repr=False)
     @property
+    @computed_field(repr=False)
     def SYNC_SQLALCHEMY_DATABASE_URL(self) -> str:
         return str(self._build_postgres_dsn(self.PRIMARY_DATABASE_URL_ENV, use_async=False))
 

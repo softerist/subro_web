@@ -1,5 +1,6 @@
 import hashlib
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import httpx
@@ -338,7 +339,7 @@ async def validate_google_cloud(creds_json: str) -> tuple[bool | None, str | Non
 
 
 async def validate_deepl_keys_background(  # noqa: C901
-    keys: list[str], db_session_factory
+    keys: list[str], db_session_factory: Callable[[], AsyncSession]
 ) -> None:
     """
     Background task to validate a list of DeepL keys.
@@ -466,9 +467,15 @@ async def validate_all_settings(db: AsyncSession) -> None:
         os_username = await crud_app_settings.get_decrypted_value(db, "opensubtitles_username")
         os_password = await crud_app_settings.get_decrypted_value(db, "opensubtitles_password")
 
+        tmdb_key_str = tmdb_key if isinstance(tmdb_key, str) else None
+        omdb_key_str = omdb_key if isinstance(omdb_key, str) else None
+        os_api_key_str = os_api_key if isinstance(os_api_key, str) else None
+        os_username_str = os_username if isinstance(os_username, str) else None
+        os_password_str = os_password if isinstance(os_password, str) else None
+
         # 1. Validate General API keys (fast)
-        if tmdb_key:
-            tmdb_result = await validate_tmdb(tmdb_key)
+        if tmdb_key_str:
+            tmdb_result = await validate_tmdb(tmdb_key_str)
             settings_row.tmdb_valid = tmdb_result["valid"]
             settings_row.tmdb_rate_limited = tmdb_result["rate_limited"]
         else:
@@ -476,19 +483,18 @@ async def validate_all_settings(db: AsyncSession) -> None:
             settings_row.tmdb_rate_limited = None
 
         # OMDB validation with direct rate limit detection
-        if omdb_key:
-            omdb_result = await validate_omdb(omdb_key)
+        if omdb_key_str:
+            omdb_result = await validate_omdb(omdb_key_str)
             settings_row.omdb_valid = omdb_result["valid"]
             settings_row.omdb_rate_limited = omdb_result["rate_limited"]
         else:
             settings_row.omdb_valid = None
             settings_row.omdb_rate_limited = None
 
-        if os_api_key:
-            u_arg = str(os_username) if os_username else None
-            p_arg = str(os_password) if os_password else None
-
-            os_result = await validate_opensubtitles(str(os_api_key), u_arg, p_arg)
+        if os_api_key_str:
+            os_result = await validate_opensubtitles(
+                os_api_key_str, os_username_str, os_password_str
+            )
             settings_row.opensubtitles_key_valid = os_result["key_valid"]
             settings_row.opensubtitles_valid = os_result["login_valid"]
             settings_row.opensubtitles_rate_limited = os_result["rate_limited"]
@@ -505,8 +511,9 @@ async def validate_all_settings(db: AsyncSession) -> None:
 
         # 2. Validate Google Cloud Translation
         google_creds = await crud_app_settings.get_decrypted_value(db, "google_cloud_credentials")
-        if google_creds:
-            is_valid, project_id, _error_msg = await validate_google_cloud(google_creds)
+        google_creds_str = google_creds if isinstance(google_creds, str) else None
+        if google_creds_str:
+            is_valid, project_id, _error_msg = await validate_google_cloud(google_creds_str)
             settings_row.google_cloud_valid = is_valid
             settings_row.google_cloud_project_id = project_id
         else:

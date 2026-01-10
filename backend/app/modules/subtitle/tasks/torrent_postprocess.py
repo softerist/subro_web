@@ -24,7 +24,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def post_process_completed_torrents(target_directory):  # noqa: C901
+def post_process_completed_torrents(target_directory: str) -> None:  # noqa: C901
     """
     (Optional Cleanup Step) Finds the torrent matching the target_directory,
     renames subtitle files based on language detection using qBittorrent API.

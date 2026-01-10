@@ -9,12 +9,12 @@ MOCK_SCRIPT_PATH = (
 )
 
 
-def test_mock_script_exists():
+def test_mock_script_exists() -> None:
     """Ensure we are targeting the correct file path."""
     assert MOCK_SCRIPT_PATH.exists(), f"Mock script not found at {MOCK_SCRIPT_PATH}"
 
 
-def test_mock_script_success_output():
+def test_mock_script_success_output() -> None:
     """Test that the script prints the expected number of lines and exits with 0."""
     cmd = [
         sys.executable,
@@ -47,7 +47,7 @@ def test_mock_script_success_output():
     assert "STDERR Line 1/1" in result.stderr
 
 
-def test_mock_script_failure_exit_code():
+def test_mock_script_failure_exit_code() -> None:
     """Test that the script returns the requested non-zero exit code."""
     cmd = [sys.executable, str(MOCK_SCRIPT_PATH), "--duration", "0.1", "--exit-code", "5"]
 
@@ -57,7 +57,7 @@ def test_mock_script_failure_exit_code():
     assert "Script Finished. Exiting with code 5" in result.stdout
 
 
-def test_mock_script_zero_output():
+def test_mock_script_zero_output() -> None:
     """Test that the script handles zero output lines gracefully."""
     cmd = [
         sys.executable,

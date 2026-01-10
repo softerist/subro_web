@@ -352,7 +352,8 @@ async def revoke_trusted_device(
     )
     await db.commit()
 
-    return result.rowcount > 0
+    rowcount = getattr(result, "rowcount", 0) or 0
+    return rowcount > 0
 
 
 async def get_user_trusted_devices(

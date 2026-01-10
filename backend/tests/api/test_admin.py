@@ -33,7 +33,7 @@ async def login_user(client: AsyncClient, email: str, password: str) -> dict:  #
 
 
 @pytest.mark.asyncio
-async def test_list_users_as_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_list_users_as_admin(test_client: AsyncClient, db_session: AsyncSession) -> None:
     """Test listing users successfully as an admin."""
     # Arrange: Create an admin user and some standard users
     admin = UserFactory.create_user(
@@ -65,7 +65,9 @@ async def test_list_users_as_admin(test_client: AsyncClient, db_session: AsyncSe
 
 
 @pytest.mark.asyncio
-async def test_list_users_as_standard_user(test_client: AsyncClient, db_session: AsyncSession):
+async def test_list_users_as_standard_user(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test standard user cannot list users."""
     # Arrange: Create a standard user
     user = UserFactory.create_user(session=db_session, email="standard_cant_list@example.com")
@@ -83,14 +85,16 @@ async def test_list_users_as_standard_user(test_client: AsyncClient, db_session:
 
 
 @pytest.mark.asyncio
-async def test_list_users_unauthenticated(test_client: AsyncClient):
+async def test_list_users_unauthenticated(test_client: AsyncClient) -> None:
     """Test unauthenticated user cannot list users."""
     response = await test_client.get(f"{API_PREFIX}/admin/users")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.asyncio
-async def test_get_specific_user_as_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_get_specific_user_as_admin(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test admin can get details of a specific user."""
     # Arrange
     admin = UserFactory.create_user(
@@ -116,7 +120,7 @@ async def test_get_specific_user_as_admin(test_client: AsyncClient, db_session: 
 @pytest.mark.asyncio
 async def test_get_specific_user_not_found_admin(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test getting a non-existent user returns 404."""
     # Arrange
     admin = UserFactory.create_user(
@@ -138,7 +142,9 @@ async def test_get_specific_user_not_found_admin(
 
 
 @pytest.mark.asyncio
-async def test_update_user_role_as_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_update_user_role_as_admin(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test admin can update another user's role and is_superuser syncs."""
     # Arrange
     admin = UserFactory.create_user(
@@ -177,7 +183,9 @@ async def test_update_user_role_as_admin(test_client: AsyncClient, db_session: A
 
 
 @pytest.mark.asyncio
-async def test_update_user_is_active_as_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_update_user_is_active_as_admin(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test admin can update another user's active status."""
     # Arrange
     admin = UserFactory.create_user(
@@ -208,7 +216,9 @@ async def test_update_user_is_active_as_admin(test_client: AsyncClient, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_update_user_as_standard_user(test_client: AsyncClient, db_session: AsyncSession):
+async def test_update_user_as_standard_user(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test standard user cannot use admin update endpoint."""
     # Arrange
     user = UserFactory.create_user(session=db_session, email="standard_cant_update@example.com")
@@ -232,7 +242,7 @@ async def test_update_user_as_standard_user(test_client: AsyncClient, db_session
 
 
 @pytest.mark.asyncio
-async def test_delete_user_as_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_delete_user_as_admin(test_client: AsyncClient, db_session: AsyncSession) -> None:
     """Test admin can delete a user."""
     # Arrange
     admin = UserFactory.create_user(
@@ -262,7 +272,9 @@ async def test_delete_user_as_admin(test_client: AsyncClient, db_session: AsyncS
 
 
 @pytest.mark.asyncio
-async def test_delete_user_as_standard_user(test_client: AsyncClient, db_session: AsyncSession):
+async def test_delete_user_as_standard_user(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test standard user cannot delete users."""
     # Arrange
     user = UserFactory.create_user(session=db_session, email="standard_cant_delete@example.com")

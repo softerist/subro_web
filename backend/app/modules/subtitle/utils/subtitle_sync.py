@@ -22,7 +22,7 @@ except ImportError:
         ALASS_TIMEOUT = 300
         FFSUBSYNC_CHECK_TIMEOUT = 90
 
-    settings = DummySettings()
+    settings = DummySettings()  # type: ignore[assignment, no-redef]
     logging.warning("Could not import config. Using default sync tool paths/timeouts.")
 
 # Import file utils safely
@@ -39,7 +39,7 @@ except ImportError:
         )
 
         # Define dummy function
-        def clean_temp_directory(*_args):
+        def clean_temp_directory(_temp_dir_path: str | None) -> None:
             pass
 
 
@@ -62,7 +62,7 @@ FFSUBSYNC_CHECK_TIMEOUT = getattr(settings, "FFSUBSYNC_CHECK_TIMEOUT", 90)  # De
 _tool_cache: dict[str, bool | None] = {}
 
 
-def _is_tool_available(tool_path, tool_name):
+def _is_tool_available(tool_path: str, tool_name: str) -> bool:
     """Checks if an external tool exists and is executable (cached)."""
     cache_key = f"{tool_name}|{tool_path}"  # Unique key per tool name and path
 
@@ -114,7 +114,7 @@ def _is_tool_available(tool_path, tool_name):
 # --- Synchronization Functions ---
 
 
-def check_offset_with_ffsubsync(video_file, subtitle_file):  # noqa: C901
+def check_offset_with_ffsubsync(video_file: str, subtitle_file: str) -> float | None:  # noqa: C901
     """
     Uses ffsubsync to estimate the offset between video audio and subtitles.
     Parses standard output for offset info. Uses FFSUBSYNC_CHECK_TIMEOUT.
@@ -237,7 +237,7 @@ def check_offset_with_ffsubsync(video_file, subtitle_file):  # noqa: C901
     return offset
 
 
-def _run_sync_tool(command, tool_name, timeout_seconds):  # noqa: C901
+def _run_sync_tool(command: list[str], tool_name: str, timeout_seconds: int | None) -> bool:  # noqa: C901
     """Helper to run a synchronization command, log output, handle timeout."""
     try:
         logging.debug(f"Running command: {' '.join(command)}")
@@ -363,7 +363,7 @@ def _run_sync_tool(command, tool_name, timeout_seconds):  # noqa: C901
         return False
 
 
-def sync_with_alass(video_file, subtitle_file, synced_output_path):
+def sync_with_alass(video_file: str, subtitle_file: str, synced_output_path: str) -> bool:
     """Attempts to synchronize subtitles using alass-cli."""
     if not _is_tool_available(ALASS_CLI_PATH, "alass-cli"):
         logging.warning(f"Skipping alass sync: '{ALASS_CLI_PATH}' tool unavailable.")
@@ -389,7 +389,7 @@ def sync_with_alass(video_file, subtitle_file, synced_output_path):
     return _run_sync_tool(command, "alass", ALASS_TIMEOUT)
 
 
-def sync_with_ffsubsync(video_file, subtitle_file, synced_output_path):
+def sync_with_ffsubsync(video_file: str, subtitle_file: str, synced_output_path: str) -> bool:
     """Attempts to synchronize subtitles using ffsubsync."""
     if not _is_tool_available(FFSUBSYNC_PATH, "ffsubsync"):
         logging.warning(f"Skipping ffsubsync sync: '{FFSUBSYNC_PATH}' tool unavailable.")
@@ -426,7 +426,7 @@ def sync_with_ffsubsync(video_file, subtitle_file, synced_output_path):
     return _run_sync_tool(command, "ffsubsync", FFSUBSYNC_TIMEOUT)
 
 
-def sync_subtitles_with_audio(video_file_path, subtitle_file_path):  # noqa: C901
+def sync_subtitles_with_audio(video_file_path: str, subtitle_file_path: str) -> str:  # noqa: C901
     """
     Synchronizes a subtitle file with the audio of a video file.
     Checks offset first, then tries alass, then ffsubsync as fallback.

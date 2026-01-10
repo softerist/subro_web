@@ -9,7 +9,7 @@ from app.tasks.audit_export import EXPORT_DIR, _run_audit_export_task
 
 
 @pytest.mark.asyncio
-async def test_audit_export_uncompressed(db_session):
+async def test_audit_export_uncompressed(db_session) -> None:
     # Setup
     filters = {"action": "auth.login"}
     actor_user_id = "test-user-id"

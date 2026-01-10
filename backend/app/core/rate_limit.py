@@ -92,13 +92,13 @@ def get_real_client_ip(request: Request) -> str:
                 return client_ip
 
         # Check X-Real-IP header (Nginx convention)
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
+        real_ip_header = request.headers.get("X-Real-IP")
+        if real_ip_header:
             try:
-                ipaddress.ip_address(real_ip)
-                return real_ip
+                ipaddress.ip_address(real_ip_header)
+                return real_ip_header
             except ValueError:
-                logger.warning("Invalid X-Real-IP: %s", _sanitize_for_log(real_ip))
+                logger.warning("Invalid X-Real-IP: %s", _sanitize_for_log(real_ip_header))
                 return client_ip
 
     # Not from a trusted proxy or no forwarded headers - use direct connection IP
