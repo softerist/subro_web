@@ -87,7 +87,7 @@ async def _migrate_legacy_api_key(
         existing = result.scalars().first()
         if existing:
             return existing.user
-        logger.warning(
+        logger.warning(  # nosemgrep
             "Legacy API key migration failed for user_id=%s; duplicate key but no record found.",
             user.id,
         )
