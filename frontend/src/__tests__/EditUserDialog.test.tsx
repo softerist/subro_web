@@ -10,6 +10,7 @@ global.ResizeObserver = class ResizeObserver {
   unobserve() {}
   disconnect() {}
 };
+import { toast } from "sonner";
 import { EditUserDialog } from "../features/admin/components/EditUserDialog";
 import { adminApi } from "../features/admin/api/admin";
 import { User } from "../features/admin/types";
@@ -48,13 +49,13 @@ const mockUser: User = {
   mfa_enabled: false,
 };
 
-const renderDialog = (open = true, user = mockUser) => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-    },
-  });
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: false },
+  },
+});
 
+const renderDialog = (open = true, user = mockUser) => {
   const onOpenChange = vi.fn();
   return {
     ...render(
@@ -71,6 +72,7 @@ const renderDialog = (open = true, user = mockUser) => {
 describe("EditUserDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    queryClient.clear();
   });
 
   it("renders correctly with user data", () => {
@@ -193,5 +195,121 @@ describe("EditUserDialog", () => {
         }),
       );
     });
+  });
+
+  it("handles update error", async () => {
+    updateUserMock.mockRejectedValue(new Error("API Error"));
+    const { user } = renderDialog();
+
+    const submitBtn = screen.getByText("Save Changes");
+    await user.click(submitBtn);
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to update user: API Error"),
+      );
+    });
+  });
+
+  it("shows loading state when mutation is pending", async () => {
+    let resolveMutation: (value: any) => void;
+    const promise = new Promise((resolve) => {
+      resolveMutation = resolve;
+    });
+    updateUserMock.mockReturnValue(promise);
+
+    const { user } = renderDialog();
+    const submitBtn = screen.getByText("Save Changes");
+    await user.click(submitBtn);
+
+    // Should show loader (line 442)
+    expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+    expect(submitBtn).toBeDisabled();
+
+    // Clean up
+    resolveMutation!(mockUser);
+  });
+
+  it("calls onOpenChange(false) when clicking cancel", async () => {
+    const { onOpenChangeMock, user } = renderDialog();
+
+    const cancelBtn = screen.getByText("Cancel");
+    await user.click(cancelBtn);
+
+    expect(onOpenChangeMock).toHaveBeenCalledWith(false);
+  });
+
+  it("shows MFA enabled badge and warning when user has MFA", () => {
+    renderDialog(true, { ...mockUser, mfa_enabled: true });
+
+    expect(screen.getByText("Enabled")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Unchecking will disable 2FA for this user/i),
+    ).toBeInTheDocument();
+  });
+
+  it("handles initial null values in constructor-like phase and reset useEffect", () => {
+    const userWithNulls: User = {
+      ...mockUser,
+      first_name: null,
+      last_name: null,
+      role: undefined as any,
+      is_active: undefined as any,
+      is_verified: undefined as any,
+      force_password_change: undefined as any,
+      mfa_enabled: undefined as any,
+    };
+    // Trigger initial state (lines 99-106)
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <EditUserDialog
+          open={false}
+          onOpenChange={vi.fn()}
+          user={userWithNulls}
+        />
+      </QueryClientProvider>,
+    );
+
+    // Trigger reset useEffect branches (lines 117-123)
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <EditUserDialog
+          open={true}
+          onOpenChange={vi.fn()}
+          user={userWithNulls}
+        />
+      </QueryClientProvider>,
+    );
+  });
+
+  it("handles user with null names in update payload", async () => {
+    updateUserMock.mockResolvedValue(mockUser);
+    const userWithNulls = { ...mockUser, first_name: null, last_name: null };
+    const { user } = renderDialog(true, userWithNulls);
+
+    const submitBtn = screen.getByText("Save Changes");
+    await user.click(submitBtn);
+
+    await waitFor(() => {
+      expect(adminApi.updateUser).toHaveBeenCalledWith(
+        "user-1",
+        expect.objectContaining({
+          first_name: null,
+          last_name: null,
+        }),
+      );
+    });
+  });
+
+  it("handles case where user is null initially", () => {
+    // Trigger branch on line 99: email: user?.email || ""
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EditUserDialog open={true} onOpenChange={vi.fn()} user={null} />
+      </QueryClientProvider>,
+    );
+    expect(
+      screen.queryByDisplayValue("test@example.com"),
+    ).not.toBeInTheDocument();
   });
 });

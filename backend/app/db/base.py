@@ -26,6 +26,7 @@ from app.db.models.storage_path import StoragePath  # noqa: F401
 from app.db.models.translation_log import TranslationLog  # noqa: F401
 from app.db.models.trusted_device import TrustedDevice  # noqa: F401
 from app.db.models.user import User  # noqa: F401
+from app.db.models.webhook_key import WebhookKey  # noqa: F401
 # Example for future models:
 # from app.db.models.another_model import AnotherModel
 # from app.db.models.yet_another_model import YetAnotherModel

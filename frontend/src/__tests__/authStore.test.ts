@@ -1,4 +1,5 @@
-import { describe, expect, it, beforeEach } from "vitest";
+/** @vitest-environment jsdom */
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import { useAuthStore } from "../store/authStore";
 
 describe("authStore", () => {
@@ -44,5 +45,42 @@ describe("authStore", () => {
     expect(state.isAuthenticated).toBe(false);
     expect(state.accessToken).toBe(null);
     expect(state.user).toBe(null);
+  });
+
+  it("should set user data without altering tokens", () => {
+    const user = {
+      id: "99",
+      email: "user@example.com",
+      role: "member",
+      is_superuser: false,
+    };
+    useAuthStore.getState().setUser(user);
+
+    const state = useAuthStore.getState();
+    expect(state.user).toEqual(user);
+    expect(state.accessToken).toBe(null);
+  });
+
+  it("uses in-memory storage fallback when localStorage is unavailable", async () => {
+    const originalLocalStorage = window.localStorage;
+    Object.defineProperty(window, "localStorage", {
+      value: undefined,
+      configurable: true,
+    });
+
+    vi.resetModules();
+    const { useAuthStore: fallbackStore } = await import("../store/authStore");
+    const storage = (fallbackStore as any).persist.getOptions().storage;
+
+    storage.setItem("auth-storage", "cached");
+    expect(storage.getItem("auth-storage")).toBe("cached");
+    storage.removeItem("auth-storage");
+    expect(storage.getItem("auth-storage")).toBeNull();
+
+    fallbackStore.getState().logout();
+    Object.defineProperty(window, "localStorage", {
+      value: originalLocalStorage,
+      configurable: true,
+    });
   });
 });

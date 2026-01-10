@@ -413,46 +413,31 @@ async def create_job_via_webhook(
     """
     Webhook endpoint for automated job submission.
 
-    Uses X-Webhook-Secret header for authentication instead of user credentials.
+    Requires X-Webhook-Key header - dedicated webhook key with limited scope.
     Jobs are attributed to the first admin user found in the system.
     """
     from sqlalchemy import select
 
-    from app.core.security import decrypt_value
-    from app.crud.crud_app_settings import crud_app_settings
+    from app.api.routers.webhook_keys import validate_webhook_key
 
-    # 1. Validate webhook secret
-    provided_secret = request.headers.get("X-Webhook-Secret")
-    if not provided_secret:
+    # 1. Validate X-Webhook-Key
+    webhook_key = request.headers.get("X-Webhook-Key")
+    if not webhook_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing X-Webhook-Secret header",
+            detail="Missing X-Webhook-Key header",
         )
 
-    app_settings = await crud_app_settings.get(db)
-    if not app_settings.webhook_secret:
-        logger.error("Webhook secret not configured in database")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Webhook not configured",
-        )
-
-    try:
-        stored_secret = decrypt_value(app_settings.webhook_secret)
-    except ValueError as err:
-        logger.warning("Stored webhook_secret is invalid, regenerating...")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Webhook secret not configured - restart the server",
-        ) from err
-
-    if provided_secret != stored_secret:
+    validated_key = await validate_webhook_key(webhook_key, db, required_scope="jobs:create")
+    if validated_key:
+        logger.info(f"Webhook authenticated via X-Webhook-Key: {validated_key.preview}")
+    else:
         logger.warning(
-            f"Invalid webhook secret from {request.client.host if request.client else 'unknown'}"
+            f"Invalid webhook key from {request.client.host if request.client else 'unknown'}"
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid webhook secret",
+            detail="Invalid webhook key",
         )
 
     # 2. Get the first admin user to attribute the job

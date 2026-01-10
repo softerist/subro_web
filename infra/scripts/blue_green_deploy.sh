@@ -364,14 +364,26 @@ section_end "prod_cleanup"
 
 # 7. Post-Deployment Hooks
 section_start "prod_hooks" "Running Post-Deployment Hooks"
-if [ -f "$INFRA_DIR/../backend/scripts/qbittorrent-nox-webhook.sh" ]; then
-    log "Ensuring webhook script is executable..."
-    chmod +x "$INFRA_DIR/../backend/scripts/qbittorrent-nox-webhook.sh"
-    log "Ensuring log permissions for qbittorrent-nox..."
-    mkdir -p "$INFRA_DIR/../logs"
-    chown -R qbittorrent-nox:qbittorrent-nox "$INFRA_DIR/../logs" 2>/dev/null || true
-    chmod -R 775 "$INFRA_DIR/../logs"
+
+# Create directories on host for qBittorrent integration
+log "Creating /opt/subro_web directories..."
+mkdir -p /opt/subro_web/scripts /opt/subro_web/secrets /opt/subro_web/logs
+
+# Copy webhook script from Docker container to host
+# (The script runs on the HOST where qBittorrent is, not inside Docker)
+log "Copying webhook script from container to host..."
+if docker cp "$NEW_COLOR-api-1:/app/scripts/qbittorrent-nox-webhook.sh" /opt/subro_web/scripts/; then
+    chmod +x /opt/subro_web/scripts/qbittorrent-nox-webhook.sh
+    success "Webhook script copied to /opt/subro_web/scripts/"
+else
+    warn "Failed to copy webhook script (container may not have it)"
 fi
+
+# Set ownership for qbittorrent-nox user
+log "Setting permissions for qbittorrent-nox..."
+chown -R qbittorrent-nox:qbittorrent-nox /opt/subro_web/scripts /opt/subro_web/logs 2>/dev/null || true
+chmod -R 775 /opt/subro_web/logs
+
 section_end "prod_hooks"
 
 success "Deployment Complete ($NEW_COLOR Active)"

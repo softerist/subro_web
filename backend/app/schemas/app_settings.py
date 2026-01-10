@@ -76,7 +76,6 @@ class SettingsRead(SettingsBase):
     # Usage Stats (Read Only)
     deepl_usage: list[DeepLUsage] = Field(default_factory=list)
     qbittorrent_password: str = ""
-    webhook_secret: str = ""
 
     # Validation Status (set by backend after validating credentials)
     # None = Not Validated / Connection Error

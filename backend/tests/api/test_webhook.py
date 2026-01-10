@@ -8,10 +8,10 @@ from fastapi import status
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.routers.webhook_keys import _hash_webhook_key
 from app.core.config import settings
-from app.core.security import encrypt_value
-from app.db.models.app_settings import AppSettings
 from app.db.models.job import Job
+from app.db.models.webhook_key import WebhookKey
 
 from ..factories.user_factory import UserFactory
 
@@ -19,21 +19,22 @@ API_PREFIX = settings.API_V1_STR
 
 
 @pytest.fixture
-async def setup_webhook_secret(db_session: AsyncSession) -> str:
-    """Set up a webhook secret in app_settings and return the plaintext secret."""
-    plaintext_secret = "test-webhook-secret-12345"
-    encrypted_secret = encrypt_value(plaintext_secret)
+async def setup_webhook_key(db_session: AsyncSession) -> str:
+    """Set up a webhook key and return the raw key."""
+    raw_key = "test-webhook-key-67890"
+    hashed_key = _hash_webhook_key(raw_key)
 
-    # Get or create app_settings
-    app_settings = await db_session.get(AppSettings, 1)
-    if not app_settings:
-        app_settings = AppSettings(id=1, webhook_secret=encrypted_secret)
-        db_session.add(app_settings)
-    else:
-        app_settings.webhook_secret = encrypted_secret
-
+    webhook_key = WebhookKey(
+        name="Test Webhook Key",
+        prefix=raw_key[:8],
+        last4=raw_key[-4:],
+        hashed_key=hashed_key,
+        scopes=["jobs:create"],
+        is_active=True,
+    )
+    db_session.add(webhook_key)
     await db_session.commit()
-    return plaintext_secret
+    return raw_key
 
 
 @pytest.fixture
@@ -49,65 +50,33 @@ async def admin_user(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_webhook_missing_secret_header(
+async def test_webhook_missing_key_header(
     test_client: AsyncClient,
     db_session: AsyncSession,  # noqa: ARG001
 ) -> None:
-    """Test that webhook endpoint rejects requests without X-Webhook-Secret header."""
+    """Test that webhook endpoint rejects requests without X-Webhook-Key header."""
     job_in = {"folder_path": "/media/test", "log_level": "INFO"}
 
     response = await test_client.post(f"{API_PREFIX}/jobs/webhook", json=job_in)
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert "Missing X-Webhook-Secret" in response.json()["detail"]
+    assert "Missing X-Webhook-Key" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
-async def test_webhook_invalid_secret(
+async def test_webhook_invalid_key(
     test_client: AsyncClient,
     db_session: AsyncSession,  # noqa: ARG001
-    setup_webhook_secret: str,  # noqa: ARG001
+    setup_webhook_key: str,  # noqa: ARG001
 ) -> None:
-    """Test that webhook endpoint rejects requests with wrong secret."""
+    """Test that webhook endpoint rejects requests with wrong key."""
     job_in = {"folder_path": "/media/test", "log_level": "INFO"}
-    headers = {"X-Webhook-Secret": "wrong-secret"}
+    headers = {"X-Webhook-Key": "wrong-key"}
 
     response = await test_client.post(f"{API_PREFIX}/jobs/webhook", json=job_in, headers=headers)
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert "Invalid webhook secret" in response.json()["detail"]
-
-
-@pytest.mark.asyncio
-async def test_webhook_no_admin_user(
-    test_client: AsyncClient,
-    db_session: AsyncSession,  # noqa: ARG001
-    setup_webhook_secret: str,
-) -> None:
-    """Test that webhook endpoint fails gracefully when no admin exists."""
-    # Clear any existing admin users for this test
-    # Note: In practice, admin should always exist after setup
-    job_in = {"folder_path": "/media/test", "log_level": "INFO"}
-    headers = {"X-Webhook-Secret": setup_webhook_secret}
-
-    with patch("app.api.routers.jobs.Path") as mock_path:
-        mock_resolved = MagicMock()
-        mock_resolved.__str__.return_value = "/media/test"
-        mock_resolved.parents = []
-        mock_path.return_value.resolve.return_value = mock_resolved
-
-        # The test may pass or fail depending on if UserFactory created users
-        # This test is mainly to ensure error handling works
-        response = await test_client.post(
-            f"{API_PREFIX}/jobs/webhook", json=job_in, headers=headers
-        )
-
-        # Either creates job (if admin exists from other fixtures) or returns error
-        assert response.status_code in [
-            status.HTTP_201_CREATED,
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            status.HTTP_404_NOT_FOUND,  # Path not found is also valid
-        ]
+    assert "Invalid webhook key" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -116,7 +85,7 @@ async def test_webhook_success(
     mock_celery,
     test_client: AsyncClient,
     db_session: AsyncSession,
-    setup_webhook_secret: str,
+    setup_webhook_key: str,
     admin_user,
 ) -> None:
     """Test successful job creation via webhook endpoint."""
@@ -127,9 +96,9 @@ async def test_webhook_success(
         mock_resolved.parents = []
         mock_path.return_value.resolve.return_value = mock_resolved
 
-        with patch("app.api.routers.jobs._is_path_allowed", return_value=False):
+        with patch("app.api.routers.jobs._is_path_allowed", return_value=True):
             job_in = {"folder_path": path_str, "language": "en", "log_level": "INFO"}
-            headers = {"X-Webhook-Secret": setup_webhook_secret}
+            headers = {"X-Webhook-Key": setup_webhook_key}
 
             response = await test_client.post(
                 f"{API_PREFIX}/jobs/webhook", json=job_in, headers=headers
@@ -151,23 +120,3 @@ async def test_webhook_success(
             assert db_job is not None
             assert db_job.folder_path == path_str
             assert db_job.user_id == admin_user.id
-
-
-@pytest.mark.asyncio
-async def test_webhook_secret_not_configured(
-    test_client: AsyncClient, db_session: AsyncSession
-) -> None:
-    """Test that webhook endpoint returns 503 when secret is not configured."""
-    # Ensure no webhook_secret is set
-    app_settings = await db_session.get(AppSettings, 1)
-    if app_settings:
-        app_settings.webhook_secret = None
-        await db_session.commit()
-
-    job_in = {"folder_path": "/media/test", "log_level": "INFO"}
-    headers = {"X-Webhook-Secret": "any-secret"}
-
-    response = await test_client.post(f"{API_PREFIX}/jobs/webhook", json=job_in, headers=headers)
-
-    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-    assert "not configured" in response.json()["detail"]

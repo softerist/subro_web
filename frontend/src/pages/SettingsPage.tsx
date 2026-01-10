@@ -73,6 +73,13 @@ export default function SettingsPage() {
     "curl",
   );
 
+  // qBittorrent webhook configuration state
+  const [isConfiguringWebhook, setIsConfiguringWebhook] = useState(false);
+  const [webhookConfigResult, setWebhookConfigResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
     type: "deepl" | "google" | "regenerate_api" | null;
@@ -130,6 +137,42 @@ export default function SettingsPage() {
       console.error(error);
     } finally {
       setIsGeneratingKey(false);
+    }
+  };
+
+  // Configure qBittorrent webhook automatically
+  const handleConfigureQBittorrentWebhook = async () => {
+    setIsConfiguringWebhook(true);
+    setWebhookConfigResult(null);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL || ""}/api/v1/settings/webhook-key/configure-qbittorrent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        },
+      );
+      const data = await response.json();
+      setWebhookConfigResult({
+        success: data.success,
+        message: data.message,
+      });
+      if (data.success) {
+        setSuccess(data.message);
+        setTimeout(() => setSuccess(null), 5000);
+      } else {
+        setError(data.message);
+        setTimeout(() => setError(null), 5000);
+      }
+    } catch (_err) {
+      const message = "Failed to configure webhook. Check your connection.";
+      setWebhookConfigResult({ success: false, message });
+      setError(message);
+    } finally {
+      setIsConfiguringWebhook(false);
     }
   };
 
@@ -225,12 +268,8 @@ export default function SettingsPage() {
         ];
         let isEqual = false;
 
-        // Array comparison (for allowed_media_folders)
-        if (Array.isArray(value) && Array.isArray(originalValue)) {
-          isEqual = JSON.stringify(value) === JSON.stringify(originalValue);
-        }
         // Strict equality for primitives
-        else if (value === originalValue) {
+        if (value === originalValue) {
           isEqual = true;
         }
         // Handle empty string vs null/undefined mismatch
@@ -302,24 +341,33 @@ export default function SettingsPage() {
       let updatePayload: Partial<SettingsUpdate> = {};
       let successMsg = "";
 
-      if (confirmState.type === "deepl" && confirmState.index !== undefined) {
-        // DeepL Deletion
-        const newKeys = deeplKeys.filter((_, i) => i !== confirmState.index);
-        updatePayload = { deepl_api_keys: newKeys };
-        successMsg = "DeepL key removed successfully.";
-      } else if (confirmState.type === "google") {
-        // Google Cloud Removal
-        updatePayload = { google_cloud_credentials: "" };
-        successMsg = "Google Cloud configuration removed.";
-      } else if (confirmState.type === "regenerate_api") {
-        // API Key Regeneration
-        setIsGeneratingKey(true); // Local loading state for visual feedback elsewhere if needed
-        const createdKey = await usersApi.regenerateApiKey();
-        setGeneratedApiKey(createdKey.api_key);
-        setShowApiKey(true);
-        setUser({ ...user!, api_key_preview: createdKey.preview });
-        successMsg = "API key generated. This value is shown only once.";
-        // No updateSettings call needed here as it's a separate API endpoint
+      switch (confirmState.type) {
+        case "deepl":
+          // DeepL Deletion
+          // confirmState.index is guaranteed to be set for DeepL type deletions by UI logic
+          {
+            const newKeys = deeplKeys.filter(
+              (_, i) => i !== confirmState.index!,
+            );
+            updatePayload = { deepl_api_keys: newKeys };
+            successMsg = "DeepL key removed successfully.";
+          }
+          break;
+        case "google":
+          // Google Cloud Removal
+          updatePayload = { google_cloud_credentials: "" };
+          successMsg = "Google Cloud configuration removed.";
+          break;
+        case "regenerate_api":
+          // API Key Regeneration
+          {
+            const createdKey = await usersApi.regenerateApiKey();
+            setGeneratedApiKey(createdKey.api_key);
+            setShowApiKey(true);
+            setUser({ ...user!, api_key_preview: createdKey.preview });
+            successMsg = "API key generated. This value is shown only once.";
+          }
+          break;
       }
 
       if (Object.keys(updatePayload).length > 0) {
@@ -334,10 +382,13 @@ export default function SettingsPage() {
         // Clean up formData if it contained related pending changes
         setFormData((prev) => {
           const newData = { ...prev };
-          if (confirmState.type === "deepl") {
-            delete newData.deepl_api_keys;
-          } else if (confirmState.type === "google") {
-            delete newData.google_cloud_credentials;
+          switch (confirmState.type) {
+            case "deepl":
+              delete newData.deepl_api_keys;
+              break;
+            case "google":
+              delete newData.google_cloud_credentials;
+              break;
           }
           return newData;
         });
@@ -361,6 +412,18 @@ export default function SettingsPage() {
     setFormData({});
     if (settings?.deepl_api_keys) {
       setDeeplKeys(settings.deepl_api_keys);
+    }
+  };
+
+  const handleCopyDeveloperApiKey = async () => {
+    if (!generatedApiKey) return;
+
+    try {
+      await navigator.clipboard.writeText(generatedApiKey);
+      setSuccess("Copied!");
+      setTimeout(() => setSuccess(null), 2000);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -629,7 +692,7 @@ export default function SettingsPage() {
                         htmlFor="opensubtitles-api-key"
                         className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer"
                       >
-                        API Key
+                        OpenSubtitles API Key
                       </Label>
                       {settings?.opensubtitles_api_key &&
                       settings.opensubtitles_api_key.trim() !== "" ? (
@@ -815,11 +878,9 @@ export default function SettingsPage() {
                         if (!key.trim()) {
                           status = "not_connected";
                         } else {
-                          let suffix = key;
-                          if (key.length >= 8) {
-                            suffix = key.slice(-8);
-                          } else if (key.includes("...")) {
-                            suffix = key.replace(/^\.\.\./, "");
+                          let suffix = key.replace(/^\.\.\./, "");
+                          if (suffix.length >= 8) {
+                            suffix = suffix.slice(-8);
                           }
 
                           usage = settings?.deepl_usage?.find((u) =>
@@ -1275,31 +1336,63 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-8">
-              {/* Hero Status Section */}
-              <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-500/10 p-6">
-                <div className="relative z-10 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-emerald-500/20 flex items-center justify-center animate-pulse-subtle">
-                      <Check className="h-6 w-6 text-emerald-500" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider">
-                          Active
-                        </span>
-                        <h4 className="text-lg font-bold text-foreground">
-                          Webhook Ready
-                        </h4>
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Subro is listening for completion events.
-                        <HelpIcon tooltip="The webhook secret has been auto-generated and the API is ready to receive requests." />
+              {/* Auto-Configure Section */}
+              <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-primary/5 p-6">
+                <div className="relative z-10 space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <h4 className="text-lg font-bold text-foreground mb-2">
+                        Automatic Setup
+                      </h4>
+                      <p className="text-sm text-muted-foreground">
+                        Click below to automatically configure qBittorrent to
+                        download subtitles when torrents complete.
                       </p>
+                      <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+                        <li className="flex items-center gap-2">
+                          <span className="h-1 w-1 rounded-full bg-primary/60" />
+                          Generates a dedicated webhook key
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <span className="h-1 w-1 rounded-full bg-primary/60" />
+                          Configures qBittorrent to call Subro on completion
+                        </li>
+                      </ul>
                     </div>
                   </div>
+
+                  <Button
+                    onClick={handleConfigureQBittorrentWebhook}
+                    disabled={isConfiguringWebhook}
+                    className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 transition-all"
+                  >
+                    {isConfiguringWebhook ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Configuring...
+                      </>
+                    ) : (
+                      <>
+                        <Settings className="h-4 w-4 mr-2" />
+                        Configure Automatically
+                      </>
+                    )}
+                  </Button>
+
+                  {webhookConfigResult && (
+                    <div
+                      className={`mt-4 p-3 rounded-lg text-sm ${
+                        webhookConfigResult.success
+                          ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                          : "bg-destructive/10 border border-destructive/30 text-destructive"
+                      }`}
+                    >
+                      {webhookConfigResult.message}
+                    </div>
+                  )}
                 </div>
                 {/* Decorative background element */}
-                <div className="absolute -right-8 -bottom-8 h-32 w-32 bg-emerald-500/10 blur-3xl rounded-full" />
+                <div className="absolute -right-8 -bottom-8 h-32 w-32 bg-primary/10 blur-3xl rounded-full" />
               </div>
 
               {/* Visual Flow Diagram */}
@@ -1605,19 +1698,7 @@ export default function SettingsPage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        onClick={async () => {
-                          if (generatedApiKey) {
-                            try {
-                              await navigator.clipboard.writeText(
-                                generatedApiKey,
-                              );
-                              setSuccess("Copied!");
-                              setTimeout(() => setSuccess(null), 2000);
-                            } catch (err) {
-                              console.error(err);
-                            }
-                          }
-                        }}
+                        onClick={handleCopyDeveloperApiKey}
                         disabled={!generatedApiKey}
                         aria-label="Copy API key"
                       >
@@ -1747,8 +1828,10 @@ axios.post(url, data, { headers })
     "folder_path": "/media/movies/Inception",
     "log_level": "INFO"
   }'`;
-                          } else if (exampleTab === "python") {
-                            code = `import requests
+                          } else {
+                            switch (exampleTab) {
+                              case "python":
+                                code = `import requests
 
 url = "${window.location.origin}/api/v1/jobs/"
 headers = {
@@ -1762,8 +1845,9 @@ data = {
 
 response = requests.post(url, headers=headers, json=data)
 print(response.json())`;
-                          } else if (exampleTab === "node") {
-                            code = `const axios = require('axios');
+                                break;
+                              case "node":
+                                code = `const axios = require('axios');
 
 const url = '${window.location.origin}/api/v1/jobs/';
 const headers = {
@@ -1778,6 +1862,8 @@ const data = {
 axios.post(url, data, { headers })
   .then(response => console.log(response.data))
   .catch(error => console.error(error));`;
+                                break;
+                            }
                           }
                           try {
                             await navigator.clipboard.writeText(code);

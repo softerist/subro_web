@@ -231,9 +231,69 @@ def rename_torrent_file(
         return False
 
 
+def configure_webhook_autorun(
+    client: qbittorrentapi.Client,
+    script_path: str = "/opt/subro_web/scripts/qbittorrent-nox-webhook.sh",
+) -> bool:
+    """
+    Configure qBittorrent to run the webhook script on torrent completion.
+
+    Args:
+        client: An authenticated qBittorrent client instance.
+        script_path: Path to the webhook script on the host.
+
+    Returns:
+        bool: True if configuration was successful, False otherwise.
+    """
+    if not client or not client.is_logged_in:
+        logging.error("Cannot configure autorun: qBittorrent client not logged in.")
+        return False
+
+    try:
+        autorun_command = f'/usr/bin/bash {script_path} "%F"'
+        client.app.set_preferences(
+            {
+                "autorun_enabled": True,
+                "autorun_program": autorun_command,
+            }
+        )
+        logging.info(f"Configured qBittorrent autorun: {autorun_command}")
+        return True
+    except qbittorrentapi.exceptions.APIError as e:
+        logging.error(f"API Error configuring autorun: {e}")
+        return False
+    except Exception as e:
+        logging.error(f"Unexpected error configuring autorun: {e}", exc_info=True)
+        return False
+
+
+def get_autorun_config(client: qbittorrentapi.Client) -> dict | None:
+    """
+    Get the current autorun configuration from qBittorrent.
+
+    Returns:
+        dict with 'enabled' and 'program' keys, or None on error.
+    """
+    if not client or not client.is_logged_in:
+        logging.error("Cannot get autorun config: qBittorrent client not logged in.")
+        return None
+
+    try:
+        prefs = client.app.preferences
+        return {
+            "enabled": prefs.get("autorun_enabled", False),
+            "program": prefs.get("autorun_program", ""),
+        }
+    except Exception as e:
+        logging.error(f"Error getting autorun config: {e}", exc_info=True)
+        return None
+
+
 # Explicit Exports
 __all__ = [
-    "get_client",  # Expose if direct client access is needed elsewhere
+    "configure_webhook_autorun",
+    "get_autorun_config",
+    "get_client",
     "get_completed_torrents",
     "get_torrent_files",
     "login_to_qbittorrent",

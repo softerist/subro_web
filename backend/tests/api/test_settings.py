@@ -34,7 +34,8 @@ async def test_get_settings_admin(test_client: AsyncClient, db_session: AsyncSes
     # Check for some expected keys in SettingsRead
     assert "tmdb_api_key" in data
     assert "deepl_api_keys" in data
-    assert "webhook_secret" in data
+    assert "allowed_media_folders" in data
+    assert "webhook_secret" not in data
 
 
 @pytest.mark.asyncio

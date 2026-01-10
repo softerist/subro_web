@@ -66,6 +66,7 @@ from app.api.routers.settings import router as settings_router
 from app.api.routers.storage_paths import router as storage_paths_router
 from app.api.routers.translation_stats import router as translation_stats_router
 from app.api.routers.users import router as users_router
+from app.api.routers.webhook_keys import router as webhook_keys_router
 from app.api.websockets.job_logs import router as job_logs_websocket_router
 from app.core.rate_limit import limiter  # Import the limiter instance
 from app.core.request_context import RequestContextMiddleware
@@ -409,6 +410,10 @@ api_v1_router.include_router(
 )  # prefix is already "/translation-stats" in router
 # File download - requires admin auth
 api_v1_router.include_router(files_router)  # prefix is already "/files" in router
+# Webhook key management - requires admin auth
+api_v1_router.include_router(
+    webhook_keys_router
+)  # prefix is already "/settings/webhook-key" in router
 
 ws_api_v1_router = APIRouter()
 ws_api_v1_router.include_router(

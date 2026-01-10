@@ -42,10 +42,6 @@ class AppSettings(Base):
     qbittorrent_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     qbittorrent_password: Mapped[str | None] = mapped_column(Text, nullable=True)  # Encrypted
 
-    # --- Webhook Integration ---
-    # Auto-generated secret for qBittorrent webhook authentication (stored encrypted)
-    webhook_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
-
     # --- Paths ---
     # Stored as JSON array string (e.g., '["/mnt/media", "/data/videos"]')
     allowed_media_folders: Mapped[str | None] = mapped_column(Text, nullable=True)

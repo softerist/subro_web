@@ -439,7 +439,7 @@ scan-vulns: ## Scan production target image for CRITICAL vulnerabilities using T
 
 scan-secrets: ## Scan filesystem for secrets using Trivy
 	@echo "Scanning filesystem for secrets..."
-	@trivy fs --scanners secret --include-dev-deps --skip-dirs backend/.venv --skip-dirs frontend/node_modules .
+	@trivy fs --scanners secret --include-dev-deps --skip-dirs .venv --skip-dirs backend/.venv --skip-dirs frontend/node_modules .
 
 scan-sast: ## Scan code for security issues using Semgrep
 	@echo "Running Semgrep SAST scan..."
