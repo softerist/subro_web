@@ -28,6 +28,59 @@ project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+# Directory where webhook secret is written for external scripts
+WEBHOOK_SECRET_FILE = Path("/app/secrets/webhook_secret.txt")
+
+
+async def _ensure_webhook_secret(db: AsyncSession) -> None:
+    """
+    Ensure webhook_secret exists in app_settings.
+
+    If not set, generates a new secret and:
+    1. Stores it encrypted in the database
+    2. Writes the plaintext to a file for the webhook script to read
+    """
+    import secrets
+
+    from app.core.security import decrypt_value, encrypt_value
+
+    app_settings = await crud_app_settings.get(db)
+
+    # Check if secret already exists
+    if app_settings.webhook_secret:
+        try:
+            # Decrypt to verify it's valid and write to file
+            plaintext_secret = decrypt_value(app_settings.webhook_secret)
+            _write_webhook_secret_file(plaintext_secret)
+            logger.info("Webhook secret verified and synced to file.")
+            return
+        except ValueError:
+            logger.warning("Existing webhook_secret invalid, regenerating...")
+
+    # Generate new secret
+    new_secret = secrets.token_urlsafe(32)
+    encrypted_secret = encrypt_value(new_secret)
+
+    # Store in database
+    app_settings.webhook_secret = encrypted_secret
+    db.add(app_settings)
+    await db.commit()
+
+    # Write to file for webhook script access
+    _write_webhook_secret_file(new_secret)
+    logger.info("Generated new webhook secret and synced to file.")
+
+
+def _write_webhook_secret_file(secret: str) -> None:
+    """Write webhook secret to file for external script access."""
+    try:
+        WEBHOOK_SECRET_FILE.parent.mkdir(parents=True, exist_ok=True)
+        WEBHOOK_SECRET_FILE.write_text(secret)
+        WEBHOOK_SECRET_FILE.chmod(0o600)  # Read/write for owner only
+        logger.debug(f"Wrote webhook secret to {WEBHOOK_SECRET_FILE}")
+    except Exception as e:
+        logger.warning(f"Could not write webhook secret file: {e}")
+
 
 async def init_db(db: AsyncSession) -> None:
     """
@@ -57,6 +110,9 @@ async def init_db(db: AsyncSession) -> None:
         logger.info("Initial settings validation completed.")
     except Exception as e:
         logger.warning(f"Initial settings validation encountered issues: {e}")
+
+    # 1.2 Initialize Webhook Secret (auto-generate if not exists)
+    await _ensure_webhook_secret(db)
 
     # 2. Handle Default Storage Paths
     await create_default_paths(db)

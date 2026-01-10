@@ -12,6 +12,7 @@ services:
       - /mnt/usb3/Media:/mnt/usb3/Media
       - /tmp:/tmp
       - ../../logs:/app/logs
+      - ../../secrets:/app/secrets
     env_file:
       - ${PROJECT_ENV_FILE:-../.env.prod}
     networks:

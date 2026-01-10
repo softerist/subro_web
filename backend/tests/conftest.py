@@ -1,11 +1,10 @@
 # backend/tests/conftest.py
 import logging  # Added to configure logging
 import os
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
-import pytest
 import pytest_asyncio
 
 # Need to load .env before importing app.core.config
@@ -56,17 +55,6 @@ else:
         docker_port = int(os.getenv("TEST_DATABASE_PORT", "5432"))
         url = url.set(host=docker_host, port=docker_port)
     TEST_DATABASE_URL = url.render_as_string(hide_password=False)
-
-
-@pytest.fixture(scope="session")
-def event_loop(request: pytest.FixtureRequest) -> Generator:  # noqa: ARG001
-    """Create an instance of the default event loop for each test session."""
-    import asyncio
-
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    asyncio.set_event_loop(loop)
-    yield loop
-    loop.close()
 
 
 @pytest_asyncio.fixture(scope="function")

@@ -358,7 +358,7 @@ async def create_job(
     job_in: Annotated[JobCreate, Body(...)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(get_current_user_with_api_key_or_jwt)],
-    _request: Request,  # Required for SlowAPI
+    request: Request,  # noqa: ARG001
 ) -> Job:
     # Fetch dynamic allowed paths from DB
     db_paths = await crud.storage_path.get_multi(db)
@@ -383,6 +383,121 @@ async def create_job(
     )
 
     await _enqueue_celery_task_and_handle_errors(db, db_job_with_celery_id, current_user.email)
+
+    return db_job_with_celery_id
+
+
+@router.post(
+    "/webhook",
+    response_model=JobRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit a job via webhook (qBittorrent integration)",
+    description=(
+        "Allows external scripts (like qBittorrent webhook) to submit subtitle download jobs "
+        "using a pre-shared webhook secret. No user authentication required - uses X-Webhook-Secret header. "
+        "Jobs are attributed to the first admin user."
+    ),
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "description": "Invalid or missing webhook secret",
+            "content": {"application/json": {"example": {"detail": "Invalid webhook secret"}}},
+        },
+    },
+)
+@limiter.limit("30/minute")
+async def create_job_via_webhook(
+    job_in: Annotated[JobCreate, Body(...)],
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> Job:
+    """
+    Webhook endpoint for automated job submission.
+
+    Uses X-Webhook-Secret header for authentication instead of user credentials.
+    Jobs are attributed to the first admin user found in the system.
+    """
+    from sqlalchemy import select
+
+    from app.core.security import decrypt_value
+    from app.crud.crud_app_settings import crud_app_settings
+
+    # 1. Validate webhook secret
+    provided_secret = request.headers.get("X-Webhook-Secret")
+    if not provided_secret:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing X-Webhook-Secret header",
+        )
+
+    app_settings = await crud_app_settings.get(db)
+    if not app_settings.webhook_secret:
+        logger.error("Webhook secret not configured in database")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook not configured",
+        )
+
+    try:
+        stored_secret = decrypt_value(app_settings.webhook_secret)
+    except ValueError as err:
+        logger.warning("Stored webhook_secret is invalid, regenerating...")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook secret not configured - restart the server",
+        ) from err
+
+    if provided_secret != stored_secret:
+        logger.warning(
+            f"Invalid webhook secret from {request.client.host if request.client else 'unknown'}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid webhook secret",
+        )
+
+    # 2. Get the first admin user to attribute the job
+    stmt = (
+        select(User)
+        .where(
+            (User.role == "admin") | (User.is_superuser == True)  # noqa: E712
+        )
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    admin_user = result.scalar_one_or_none()
+
+    if not admin_user:
+        logger.error("No admin user found for webhook job attribution")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No admin user configured",
+        )
+
+    logger.info(f"Webhook job submission for path: {job_in.folder_path}")
+
+    # 3. Validate path and create job (reuse existing logic)
+    db_paths = await crud.storage_path.get_multi(db)
+    env_folders = settings.ALLOWED_MEDIA_FOLDERS or []
+    allowed_folders = list({str(f) for f in env_folders} | {str(p.path) for p in db_paths})
+
+    resolved_input_path = await _validate_and_resolve_job_path(
+        db, job_in.folder_path, allowed_folders, admin_user
+    )
+    normalized_job_folder_path_str = str(resolved_input_path)
+
+    job_create_internal = JobCreateInternal(
+        folder_path=normalized_job_folder_path_str,
+        language=job_in.language,
+        log_level=job_in.log_level,
+        user_id=admin_user.id,
+    )
+    db_job_with_celery_id = await _create_db_job_and_set_celery_id(
+        db, job_create_internal, f"webhook@{admin_user.email}"
+    )
+
+    await _enqueue_celery_task_and_handle_errors(
+        db, db_job_with_celery_id, f"webhook@{admin_user.email}"
+    )
 
     return db_job_with_celery_id
 

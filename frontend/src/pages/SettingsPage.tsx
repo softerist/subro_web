@@ -1255,6 +1255,22 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Webhook Status Banner */}
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                <div className="h-8 w-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                  <Check className="h-4 w-4 text-emerald-400" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium text-emerald-400">
+                    Webhook Ready
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    qBittorrent can now trigger subtitle downloads
+                    automatically.
+                  </p>
+                </div>
+              </div>
+
               {/* API Key Section */}
               <div className="bg-card/50 rounded-lg p-4 border border-border">
                 <div className="flex items-center justify-between mb-4">

@@ -62,9 +62,10 @@ ENCRYPTED_FIELDS = {
     "opensubtitles_api_key",
     "opensubtitles_username",
     "opensubtitles_password",
-    "deepl_api_keys",  # JSON array, entire string is encrypted
+    "deepl_api_keys",
     "qbittorrent_password",
-    "google_cloud_credentials",  # Full service account JSON
+    "google_cloud_credentials",
+    "webhook_secret",
 }
 
 # Fields stored as JSON arrays

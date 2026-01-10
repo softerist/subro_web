@@ -54,37 +54,48 @@ if [ -z "$LOADED_ENV" ]; then
 fi
 
 # Environment variables (configured in .env):
-# SUBRO_API_BASE_URL, SUBRO_API_KEY
+# SUBRO_API_BASE_URL (required)
 # Optional: PLEX_BASE_URL, PLEX_TOKEN, PLEX_SECTION_IDS (comma-separated), PLEX_SECTION_TOKENS (comma-separated)
 SUBRO_API_BASE_URL="${SUBRO_API_BASE_URL:-}"
-SUBRO_API_KEY="${SUBRO_API_KEY:-}"
 PLEX_BASE_URL="${PLEX_BASE_URL:-}"
 PLEX_TOKEN="${PLEX_TOKEN:-}"
 PLEX_SECTION_IDS="${PLEX_SECTION_IDS:-}"
 PLEX_SECTION_TOKENS="${PLEX_SECTION_TOKENS:-}"
 
-# Debug: Print first few chars of key to verify load (security safe)
-if [ -n "$SUBRO_API_KEY" ]; then
-   echo "SUBRO_API_KEY loaded (starts with: ${SUBRO_API_KEY:0:4}...)"
+# Read webhook secret from auto-generated file (created by backend on startup)
+WEBHOOK_SECRET_FILE="/opt/subro_web/secrets/webhook_secret.txt"
+if [ -f "$WEBHOOK_SECRET_FILE" ]; then
+    WEBHOOK_SECRET=$(cat "$WEBHOOK_SECRET_FILE")
+    echo "Webhook secret loaded from file (starts with: ${WEBHOOK_SECRET:0:4}...)"
 else
-   echo "SUBRO_API_KEY is empty"
+    # Fallback to legacy SUBRO_API_KEY if secret file doesn't exist (old deployments)
+    WEBHOOK_SECRET="${SUBRO_API_KEY:-}"
+    if [ -n "$WEBHOOK_SECRET" ]; then
+        echo "Using legacy SUBRO_API_KEY from .env"
+    else
+        echo "Error: Webhook secret file not found and no SUBRO_API_KEY set."
+        echo "       Expected file: $WEBHOOK_SECRET_FILE"
+        echo "       Run a new deployment or ensure the API container has started."
+        exit 1
+    fi
 fi
 
 echo "SUBRO_API_BASE_URL: $SUBRO_API_BASE_URL"
 
-if [ -z "$SUBRO_API_BASE_URL" ] || [ -z "$SUBRO_API_KEY" ]; then
-    echo "Error: SUBRO_API_BASE_URL and SUBRO_API_KEY must be set in the environment or .env file."
+if [ -z "$SUBRO_API_BASE_URL" ]; then
+    echo "Error: SUBRO_API_BASE_URL must be set in the environment or .env file."
     exit 1
 fi
 
-API_JOBS_URL="${SUBRO_API_BASE_URL%/}/jobs/"
+# Use the dedicated webhook endpoint (doesn't require user auth)
+API_WEBHOOK_URL="${SUBRO_API_BASE_URL%/}/jobs/webhook"
 
-echo "Submitting job to API..."
+echo "Submitting job to API webhook endpoint..."
 # -s: Silent
 # -L: Follow redirects
 # -X POST: Submission method
-RESPONSE=$(curl -sL -w "\nHTTP_STATUS:%{http_code}" -X POST "$API_JOBS_URL" \
-  -H "X-API-Key: $SUBRO_API_KEY" \
+RESPONSE=$(curl -sL -w "\nHTTP_STATUS:%{http_code}" -X POST "$API_WEBHOOK_URL" \
+  -H "X-Webhook-Secret: $WEBHOOK_SECRET" \
   -H "Content-Type: application/json" \
   -d "{\"folder_path\": \"$TORRENT_PATH\", \"log_level\": \"INFO\"}")
 
