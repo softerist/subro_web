@@ -136,6 +136,8 @@ export function ConfirmDialog({
               transition: { duration: 0.15, ease: "easeIn" },
             }}
             style={dialogStyle}
+            role="dialog"
+            aria-modal="true"
             className={`${hasPosition ? "" : "relative"} w-full max-w-[260px] overflow-hidden rounded-xl border border-border bg-popover/95 p-3 shadow-2xl backdrop-blur-2xl sm:p-3 z-[10000]`}
           >
             {/* Glossy Overlay */}

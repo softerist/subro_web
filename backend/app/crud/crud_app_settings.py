@@ -447,6 +447,9 @@ class CRUDAppSettings:
             qbittorrent_password=self._get_effective_and_mask(
                 db_settings, env_settings, "qbittorrent_password"
             ),
+            webhook_secret=self._get_effective_and_mask(
+                db_settings, env_settings, "webhook_secret"
+            ),
             allowed_media_folders=await self._get_combined_allowed_folders(
                 db, db_settings, env_settings
             ),
