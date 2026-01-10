@@ -122,6 +122,8 @@ docker compose -p subapp_dev -f "$DOCK_DIR/docker-compose.yml" -f "$DOCK_DIR/doc
 # This prevents Caddy from using dev config on first boot
 section_start "prod_caddyfile_init" "Initializing Caddyfile.prod"
 TEMPLATE="$DOCK_DIR/Caddyfile.template"
+TMP_CADDYFILE="$CADDYFILE_PROD.tmp"
+
 if [ ! -f "$TEMPLATE" ]; then
     error "Caddyfile.template not found at $TEMPLATE"
     exit 1
@@ -145,7 +147,6 @@ fi
 # Only regenerate if empty or missing (preserve existing config if valid)
 if [ ! -s "$CADDYFILE_PROD" ]; then
     log "Generating initial Caddyfile.prod (routing to $INIT_COLOR)..."
-    TMP_CADDYFILE="$CADDYFILE_PROD.tmp"
     sed "s/{{UPSTREAM_API}}/$INIT_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$INIT_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$TEMPLATE" > "$TMP_CADDYFILE"
 
     if [ -s "$TMP_CADDYFILE" ]; then
