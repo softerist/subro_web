@@ -318,10 +318,32 @@ if [ ! -s "$TMP_CADDYFILE" ]; then
 fi
 mv "$TMP_CADDYFILE" "$CADDYFILE_PROD"
 
-# Reload Caddy (in infra project)
-docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T caddy caddy reload --config /etc/caddy/Caddyfile.prod
+# Reload Caddy by restarting the container (exec reload doesn't always pick up bind-mount changes)
+log "Restarting Caddy to apply new configuration..."
+docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" restart caddy
+
+# Verify Caddy is routing to the new color
+sleep 3
+CADDY_UPSTREAM=$(docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T caddy grep -m1 "reverse_proxy" /etc/caddy/Caddyfile.prod 2>/dev/null || echo "")
+if echo "$CADDY_UPSTREAM" | grep -q "$NEW_COLOR"; then
+    success "Caddy now routing to $NEW_COLOR"
+else
+    warn "Caddy config verification failed - check /etc/caddy/Caddyfile.prod inside container"
+fi
 
 success "Traffic Switched"
+
+# Verify API responds correctly via the new routing
+log "Verifying API health via Caddy..."
+API_RESPONSE=$(docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T caddy \
+    wget -q -O - --timeout=10 "http://$NEW_COLOR-api-1:8000/api/v1/" 2>/dev/null || echo "")
+if echo "$API_RESPONSE" | grep -q '"version"'; then
+    API_VERSION=$(echo "$API_RESPONSE" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+    success "API responding correctly (version: $API_VERSION)"
+else
+    warn "API health check failed - response: $API_RESPONSE"
+fi
+
 section_end "prod_switch"
 
 # 5. Cleanup Inactive Color (and any orphaned containers)
