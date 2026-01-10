@@ -16,7 +16,7 @@ try:
     import requests
 except ImportError:
     print("Error: 'requests' library not found. Please install it: pip install requests")
-    requests = None  # Indicate library is missing
+    requests = None  # type: ignore[assignment]
 
 try:
     import deepl

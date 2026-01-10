@@ -77,7 +77,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     @property
     def api_key_preview(self) -> str | None:
         if not self.api_keys:
-            return None
+            if not self.api_key:
+                return None
+            prefix_len = 8
+            prefix = self.api_key[:prefix_len]
+            last4 = self.api_key[-4:] if len(self.api_key) >= 4 else self.api_key
+            return f"{prefix}...{last4}"
         now = datetime.now(UTC)
         active_keys = [
             key

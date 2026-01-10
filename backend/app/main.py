@@ -242,7 +242,7 @@ app.state.limiter = limiter
 if settings.ENVIRONMENT == "development":
     from fastapi.responses import RedirectResponse
 
-    @app.get("/", include_in_schema=False)
+    @app.get("/", include_in_schema=False, response_model=None)
     async def root_redirect() -> RedirectResponse | dict[str, str]:
         """Redirect root to API documentation in development."""
         if settings.DOCS_URL:

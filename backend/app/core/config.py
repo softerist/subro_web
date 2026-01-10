@@ -488,21 +488,21 @@ class Settings(BaseSettings):
             f"{driver_prefix}{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
+    @computed_field(repr=False)  # type: ignore[prop-decorator]
     @property
-    @computed_field(repr=False)
     def ASYNC_SQLALCHEMY_DATABASE_URL(self) -> str:
         return str(self._build_postgres_dsn(self.PRIMARY_DATABASE_URL_ENV, use_async=True))
 
+    @computed_field(repr=False)  # type: ignore[prop-decorator]
     @property
-    @computed_field(repr=False)
     def ASYNC_SQLALCHEMY_DATABASE_URL_WORKER(self) -> str:
         base_for_worker = (
             self.ASYNC_SQLALCHEMY_DATABASE_URL_WORKER_ENV or self.PRIMARY_DATABASE_URL_ENV
         )
         return str(self._build_postgres_dsn(base_for_worker, use_async=True))
 
+    @computed_field(repr=False)  # type: ignore[prop-decorator]
     @property
-    @computed_field(repr=False)
     def SYNC_SQLALCHEMY_DATABASE_URL(self) -> str:
         return str(self._build_postgres_dsn(self.PRIMARY_DATABASE_URL_ENV, use_async=False))
 

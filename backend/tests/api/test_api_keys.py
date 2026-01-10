@@ -8,7 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routers import jobs as jobs_router
-from app.core.api_key_auth import get_api_key_last4, get_api_key_prefix, hash_api_key
+from app.core.api_key_auth import (
+    generate_api_key,
+    get_api_key_last4,
+    get_api_key_prefix,
+    hash_api_key,
+)
 from app.core.config import settings
 from app.db.models.api_key import ApiKey
 
@@ -123,3 +128,63 @@ async def test_api_key_lifecycle_allows_job_access(
     )
     assert revoked_key_response.status_code == status.HTTP_401_UNAUTHORIZED
     assert revoked_key_response.json()["detail"] == "Invalid API Key"
+
+
+@pytest.mark.asyncio
+async def test_legacy_api_key_migrates_on_first_use(
+    test_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    if not settings.API_KEY_PEPPER:
+        pytest.skip("API_KEY_PEPPER not configured for API key tests.")
+
+    admin = UserFactory.create_admin(
+        session=db_session,
+        email="legacy_admin@example.com",
+        password="password123",
+    )
+    user = UserFactory.create_user(
+        session=db_session,
+        email="legacy_user@example.com",
+        password="password123",
+    )
+    legacy_key = generate_api_key()
+    user.api_key = legacy_key
+    await db_session.flush()
+
+    admin_headers = await login_user(test_client, admin.email, "password123")
+    job_dir = tmp_path / "legacy_key_job"
+    job_dir.mkdir()
+
+    allow_response = await test_client.post(
+        f"{API_PREFIX}/storage-paths/",
+        json={"path": str(job_dir), "label": "Legacy key test"},
+        headers=admin_headers,
+    )
+    assert allow_response.status_code == status.HTTP_201_CREATED, allow_response.text
+
+    monkeypatch.setattr(jobs_router.celery_app, "send_task", lambda *_args, **_kwargs: None)
+
+    job_payload = {"folder_path": str(job_dir)}
+    job_response = await test_client.post(
+        f"{API_PREFIX}/jobs/",
+        json=job_payload,
+        headers={"X-API-Key": legacy_key},
+    )
+    assert job_response.status_code == status.HTTP_201_CREATED, job_response.text
+
+    await db_session.refresh(user)
+    assert user.api_key is None
+
+    result = await db_session.execute(
+        select(ApiKey).where(ApiKey.user_id == user.id, ApiKey.revoked_at.is_(None))
+    )
+    api_key_record = result.scalars().first()
+    assert api_key_record is not None
+    assert api_key_record.prefix == get_api_key_prefix(legacy_key)
+    assert api_key_record.last4 == get_api_key_last4(legacy_key)
+    assert api_key_record.hashed_key == hash_api_key(legacy_key)
+    assert api_key_record.last_used_at is not None
+    assert api_key_record.use_count >= 1

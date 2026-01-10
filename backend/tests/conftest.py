@@ -17,8 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 project_root = Path(__file__).resolve().parents[2]
 load_dotenv(project_root / ".env")
 
-# Load test env values but don't override existing env vars (CI sets them explicitly).
-load_dotenv(Path(__file__).resolve().parents[1] / ".env.test", override=False)
+# Load test env values AND override existing env vars (ensure test settings take precedence).
+load_dotenv(Path(__file__).resolve().parents[1] / ".env.test", override=True)
 
 # Keep log output clean
 logging.getLogger("faker").setLevel(logging.WARNING)

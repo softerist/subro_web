@@ -79,6 +79,8 @@ const AuthBootstrap = ({ children }: { children: React.ReactNode }) => {
                 role: user.role ?? "user",
                 api_key_preview: user.api_key_preview ?? null,
                 is_superuser: user.is_superuser ?? false,
+                force_password_change: user.force_password_change ?? false,
+                preferences: user.preferences,
               });
             }
           } catch (_err) {

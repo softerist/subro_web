@@ -44,7 +44,10 @@ export function LoginForm({
         id: user.id,
         email: user.email,
         role: user.role ?? "user",
+        api_key_preview: user.api_key_preview ?? null,
         is_superuser: user.is_superuser ?? false,
+        force_password_change: user.force_password_change ?? false,
+        preferences: user.preferences,
       });
       navigate("/dashboard");
     } catch (_err) {

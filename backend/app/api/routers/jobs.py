@@ -358,7 +358,7 @@ async def create_job(
     job_in: Annotated[JobCreate, Body(...)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(get_current_user_with_api_key_or_jwt)],
-    request: Request | None = None,  # Required for SlowAPI  # noqa: ARG001
+    _request: Request,  # Required for SlowAPI
 ) -> Job:
     # Fetch dynamic allowed paths from DB
     db_paths = await crud.storage_path.get_multi(db)

@@ -35,7 +35,7 @@ except ImportError:
         )
 
         # Define a dummy function to avoid immediate crash, but scoring will be 0
-        def tokenize_and_normalize(_text: str | None) -> list[str]:
+        def tokenize_and_normalize(text: str | None) -> list[str]:  # type: ignore[misc] # noqa: ARG001
             return []
 
 

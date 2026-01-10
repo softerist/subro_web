@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
-from app.core.users import current_active_superuser
+from app.core.users import current_active_superuser, current_active_user
 from app.db.models.user import User
 from app.db.session import get_async_session
 from app.schemas.storage_path import StoragePathCreate, StoragePathRead, StoragePathUpdate
@@ -26,10 +26,7 @@ logger = logging.getLogger(__name__)
 @router.get("/", response_model=list[StoragePathRead])
 async def list_storage_paths(
     db: AsyncSession = Depends(get_async_session),
-    # Request implies "we can manually add specified folder paths so we can choose them later from dashboard".
-    # Assuming any active user can list, but maybe only admins can add?
-    # Let's start with basic active user for listing.
-    _current_user: User = Depends(current_active_superuser),
+    _current_user: User = Depends(current_active_user),
 ) -> list[StoragePathRead]:
     """List all storage paths."""
     return await crud.storage_path.get_multi(db=db, limit=1000)  # type: ignore[return-value]
@@ -39,47 +36,48 @@ async def list_storage_paths(
 async def create_storage_path(
     path_in: StoragePathCreate,
     db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(current_active_superuser),
+    current_user: User = Depends(current_active_user),
 ) -> StoragePathRead:
     """
     Create a new storage path.
-    Superusers only.
+    Standard users can only add subdirectories of existing paths.
+    Superusers can add any path.
     """
     # 1. Validate path exists on filesystem and is a directory
     p = Path(path_in.path)
     if not p.exists() or not p.is_dir():
-        # Security check: check ownership/permissions if needed?
-        # For now, just existence.
         detail = f"Path '{path_in.path}' does not exist or is not a directory."
         try:
-            # Try to resolve to ensure no funny business, though Pydantic might catch some
             resolved = p.resolve()
             if not resolved.exists():
-                # Should be caught above
                 pass
         except PermissionError as e:
             logger.error(f"PermissionError in create_storage_path: {e} | Path: {path_in.path}")
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from e
 
-    # 2. Check for duplicates (moved to IntegrityError handling during creation)
-    # existing = await crud.storage_path.get_by_path(db, path=path_in.path)
-    # if existing:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_400_BAD_REQUEST,
-    #         detail="Storage path already exists.",
-    #     )
-
     # 3. Enforce "Subdirectory Only" policy for Non-Superusers
     if not current_user.is_superuser:
-        # Prevent adding root dirs like / or /usr
-        # This route is currently restricted to superusers anyway via Dependency,
-        # but good to keep logic if we relax it later.
-        pass
+        existing_paths = await crud.storage_path.get_multi(db=db)
+        new_path_resolved = p.resolve()
+        is_subdir = False
+
+        for existing in existing_paths:
+            allowed_parent = Path(existing.path).resolve()
+            # Check if new path is inside allowed_parent
+            # Note: new_path must be a subdirectory, not the same directory
+            if allowed_parent in new_path_resolved.parents:
+                is_subdir = True
+                break
+
+        if not is_subdir:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Standard users can only add subdirectories of existing allowed storage paths.",
+            )
 
     try:
         storage_path = await crud.storage_path.create(db=db, obj_in=path_in)
     except Exception as e:
-        # IntegrityError likely
         logger.error(f"Error creating storage path: {e}")
         from sqlalchemy.exc import IntegrityError
 
@@ -101,27 +99,31 @@ async def delete_storage_path(
     db: AsyncSession = Depends(get_async_session),
     _current_user: User = Depends(current_active_superuser),
 ) -> None:
-    """Delete a storage path."""
+    """Delete a storage path. Only superusers can delete."""
     storage_path = await crud.storage_path.get(db=db, id=path_id)
     if not storage_path:
         raise HTTPException(status_code=404, detail="Storage path not found")
     await crud.storage_path.remove(db=db, id=path_id)
 
 
-@router.put("/{path_id}", response_model=StoragePathRead)
+@router.patch("/{path_id}", response_model=StoragePathRead)
 async def update_storage_path(
     path_id: UUID,
     path_in: StoragePathUpdate,
     db: AsyncSession = Depends(get_async_session),
-    _current_user: User = Depends(current_active_superuser),
+    _current_user: User = Depends(current_active_user),
 ) -> StoragePathRead:
-    """Update a storage path."""
+    """Update a storage path label."""
     storage_path = await crud.storage_path.get(db=db, id=path_id)
     if not storage_path:
         raise HTTPException(status_code=404, detail="Storage path not found")
 
-    # We only allow updating the label. If they provide a new path, we might ignore it or error.
-    # To keep it simple and safe for non-superusers, we only patch the label.
     update_data = {"label": path_in.label}
+    if path_in.path:
+        # Optionally prevent path updates or handle relinking?
+        # For safety, let's ignore path updates or error if they try to change path?
+        # The previous code implied we only patch label.
+        pass
+
     updated_path = await crud.storage_path.update(db=db, db_obj=storage_path, obj_in=update_data)
     return updated_path  # type: ignore[return-value]
