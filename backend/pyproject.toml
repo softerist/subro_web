@@ -172,8 +172,8 @@ version_files = [
 tag_format = "v$version"
 bump_message = "chore(release): bump version to $new_version"
 post_bump_hooks = [
-    "git push origin main develop --follow-tags",
-    "git push gitlab main develop --follow-tags"
+    "git push origin main develop --force --follow-tags",
+    "git push gitlab main develop --force --follow-tags"
 ]
 
 # Scripts moved to [project.scripts] section above
