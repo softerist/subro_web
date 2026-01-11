@@ -23,13 +23,9 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { useAuthStore } from "@/store/authStore";
 import { authApi } from "@/features/auth/api/auth";
 import { useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import packageJson from "../../../package.json";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MfaWarningBanner } from "@/components/common/MfaWarningBanner";
-
-const APP_VERSION = packageJson.version;
-const ENV_SUFFIX = import.meta.env.MODE === "development" ? "DEV" : "PROD";
-const VERSION_DISPLAY = `V${APP_VERSION}-${ENV_SUFFIX}`;
+import { api } from "@/lib/apiClient";
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
@@ -41,6 +37,19 @@ export default function DashboardLayout() {
   const touchStartXRef = useRef<number | null>(null);
   const menuWidthRef = useRef(288);
   const queryClient = useQueryClient();
+
+  const { data: versionData } = useQuery({
+    queryKey: ["appVersion"],
+    queryFn: async () => {
+      const res = await api.get("/v1/");
+      return res.data;
+    },
+    staleTime: 1000 * 60 * 60, // 1 hour
+  });
+
+  const versionDisplay = versionData?.version
+    ? `V${versionData.version}`
+    : "Loading...";
 
   const handleLogout = async () => {
     await authApi.logout();
@@ -180,7 +189,7 @@ export default function DashboardLayout() {
             </button>
           </div>
           <div className="text-[9px] text-muted-foreground font-mono tracking-wider w-fit mx-auto opacity-50 hover:opacity-100 transition-opacity">
-            {VERSION_DISPLAY}
+            {versionDisplay}
           </div>
         </div>
       </aside>
@@ -316,7 +325,7 @@ export default function DashboardLayout() {
               </div>
               <div className="flex flex-col items-center opacity-40">
                 <div className="text-[10px] text-muted-foreground font-mono tracking-wider">
-                  {VERSION_DISPLAY}
+                  {versionDisplay}
                 </div>
               </div>
             </div>
