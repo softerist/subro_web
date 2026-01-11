@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
+import { vi, describe, it, expect, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { UsersPage } from "../features/admin/pages/UsersPage";
 import { useAuthStore, type AuthState } from "@/store/authStore";

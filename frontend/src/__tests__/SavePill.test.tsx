@@ -21,7 +21,7 @@ describe("SavePill", () => {
       />,
     );
 
-    const pill = screen.getByText("Unsaved Changes");
+    screen.getByText("Unsaved Changes");
     fireEvent.click(screen.getByText("Save"));
     fireEvent.click(screen.getByText("Discard"));
     expect(onSave).toHaveBeenCalled();

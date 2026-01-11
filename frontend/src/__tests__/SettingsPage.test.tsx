@@ -171,7 +171,7 @@ const mockSettings = {
   google_usage: {
     total_characters: 0,
     this_month_characters: 0,
-    source: "google_cloud_monitoring",
+    source: "google_cloud_monitoring" as const,
   },
 } satisfies SettingsRead;
 
@@ -1203,7 +1203,7 @@ describe("SettingsPage", () => {
       google_usage: {
         total_characters: 1234,
         this_month_characters: 567,
-        source: "local_cache",
+        source: "google_cloud_monitoring_cached" as const,
         last_updated: "2024-01-01T00:00:00Z",
       },
     };

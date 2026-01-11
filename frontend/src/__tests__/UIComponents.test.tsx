@@ -145,7 +145,7 @@ describe("UI Components Coverage", () => {
       expect(screen.getByText("Card Title")).toBeInTheDocument();
       expect(screen.getByText("Card description")).toBeInTheDocument();
       expect(screen.getByText("Body content")).toBeInTheDocument();
-      const footer = screen.getByText("Footer content");
+      screen.getByText("Footer content");
       expect(footerRef.current).toBeInstanceOf(HTMLDivElement);
       expect(footerRef.current?.textContent).toContain("Footer content");
       expect(footerRef.current?.className).toContain("custom-footer");
@@ -153,11 +153,7 @@ describe("UI Components Coverage", () => {
   });
 
   describe("Form Components", () => {
-    const FormWrapper = ({
-      onReady,
-    }: {
-      onReady?: (methods: ReturnType<typeof useForm>) => void;
-    }) => {
+    const FormWrapper = ({ onReady }: { onReady?: (methods: any) => void }) => {
       const methods = useForm<{ email: string }>({
         defaultValues: { email: "" },
       });
@@ -237,7 +233,7 @@ describe("UI Components Coverage", () => {
 
         render() {
           if (this.state.error) {
-            return <div>{this.state.error.message}</div>;
+            return <div>{(this.state.error as Error).message}</div>;
           }
           return this.props.children;
         }

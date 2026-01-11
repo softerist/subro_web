@@ -145,7 +145,7 @@ const mockUsers: User[] = [
     email: "admin@example.com",
     first_name: "Admin",
     last_name: "User",
-    role: "superuser",
+    role: "admin",
     is_active: true,
     is_superuser: true,
     is_verified: true,
@@ -404,7 +404,7 @@ describe("UsersTable", () => {
     const superuser2 = {
       ...mockUsers[0],
       id: "super-2",
-      role: "superuser",
+      role: "admin" as const,
       is_superuser: true,
       email: "super2@example.com",
     };

@@ -2,7 +2,6 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { FlowDiagram } from "../components/common/FlowDiagram";
-import { HelpIcon } from "../components/common/HelpIcon";
 
 // Mock framer-motion to avoid animation issues
 vi.mock("framer-motion", () => ({
