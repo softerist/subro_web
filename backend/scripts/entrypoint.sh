@@ -54,6 +54,46 @@ is_true() {
     esac
 }
 
+# Parse DATABASE_URL into connection components for libpq tooling.
+# Outputs: host, port, user, password, dbname, sslmode (one per line).
+parse_database_url() {
+    command -v python >/dev/null 2>&1 || return 1
+
+    python - <<'PY'
+import os
+import sys
+from urllib.parse import parse_qs, unquote, urlparse
+
+url = os.environ.get("DATABASE_URL", "")
+if not url:
+    sys.exit(1)
+
+parsed = urlparse(url)
+if not parsed.scheme:
+    sys.exit(1)
+
+def clean(value: str) -> str:
+    return unquote(value) if value else ""
+
+host = parsed.hostname or ""
+try:
+    port = str(parsed.port) if parsed.port is not None else ""
+except ValueError:
+    port = ""
+user = clean(parsed.username or "")
+password = clean(parsed.password or "")
+dbname = parsed.path.lstrip("/") if parsed.path else ""
+sslmode = parse_qs(parsed.query).get("sslmode", [""])[0]
+
+print(host)
+print(port)
+print(user)
+print(password)
+print(dbname)
+print(sslmode)
+PY
+}
+
 # Generic retry function with exponential backoff
 # Usage: retry <max_attempts> <base_sleep> <command> [args...]
 retry() {
@@ -253,10 +293,42 @@ wait_for_db() {
     local start_time=$(date +%s)
     local time_budget="$WAIT_TIMEOUT"
     local db_check_url="$DATABASE_URL"
+    local db_host="$DB_HOST"
+    local db_port="$DB_PORT"
+    local db_user="${POSTGRES_USER:-}"
+    local db_password="${POSTGRES_PASSWORD:-}"
+    local db_name="${POSTGRES_DB:-}"
+    local db_sslmode=""
+    local -a db_parts=()
 
     if [[ "$db_check_url" == postgresql+*://* ]]; then
         log "Normalizing DATABASE_URL scheme for libpq readiness checks"
         db_check_url="postgresql://${db_check_url#postgresql+*://}"
+    elif [[ "$db_check_url" == postgres://* ]]; then
+        log "Normalizing DATABASE_URL scheme for libpq readiness checks"
+        db_check_url="postgresql://${db_check_url#postgres://}"
+    fi
+
+    local parsed_db_url
+    parsed_db_url="$(parse_database_url 2>/dev/null || true)"
+    if [ -n "$parsed_db_url" ]; then
+        mapfile -t db_parts <<< "$parsed_db_url"
+        if [ -n "${db_parts[0]:-}" ]; then
+            db_host="${db_parts[0]}"
+            db_port="${db_parts[1]:-$db_port}"
+            db_user="${db_parts[2]:-$db_user}"
+            db_password="${db_parts[3]:-$db_password}"
+            db_name="${db_parts[4]:-$db_name}"
+            db_sslmode="${db_parts[5]:-}"
+        fi
+    else
+        log "Warning: Unable to parse DATABASE_URL, falling back to POSTGRES_* variables"
+    fi
+
+    if [ -n "$db_host" ]; then
+        log "Database readiness target: host=$db_host port=$db_port db=${db_name:-unknown} user=${db_user:-unknown}"
+    else
+        log "Database readiness target: using DATABASE_URL"
     fi
 
     # Helper to check remaining time budget
@@ -274,7 +346,20 @@ wait_for_db() {
     if command -v pg_isready >/dev/null 2>&1; then
         log "Using pg_isready for initial database connectivity check"
 
-        while ! pg_isready -d "$db_check_url" -q 2>/dev/null; do
+        local -a pg_args=()
+        if [ -n "$db_host" ]; then
+            pg_args+=("-h" "$db_host" "-p" "$db_port")
+            [ -n "$db_user" ] && pg_args+=("-U" "$db_user")
+            [ -n "$db_name" ] && pg_args+=("-d" "$db_name")
+        else
+            pg_args+=("-d" "$db_check_url")
+        fi
+
+        local -a pg_env=()
+        [ -n "$db_password" ] && pg_env+=(PGPASSWORD="$db_password")
+        [ -n "$db_sslmode" ] && pg_env+=(PGSSLMODE="$db_sslmode")
+
+        while ! env "${pg_env[@]}" pg_isready "${pg_args[@]}" -q 2>/dev/null; do
             check_timeout || return 1
 
             local current_time=$(date +%s)
@@ -296,19 +381,38 @@ wait_for_db() {
             log "Verifying database authentication and query capability"
 
             local last_log_time=0
-            while ! psql "$db_check_url" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1; do
-                check_timeout || return 1
+            if [ -n "$db_host" ]; then
+                local -a psql_args=("-h" "$db_host" "-p" "$db_port")
+                [ -n "$db_user" ] && psql_args+=("-U" "$db_user")
+                [ -n "$db_name" ] && psql_args+=("-d" "$db_name")
+                while ! env "${pg_env[@]}" psql "${psql_args[@]}" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1; do
+                    check_timeout || return 1
 
-                # Log every 10 seconds to reduce noise
-                local current_time=$(date +%s)
-                local elapsed=$((current_time - start_time))
-                if [ $((elapsed - last_log_time)) -ge 10 ]; then
-                    log "Database authentication check failed, retrying... (${elapsed}s elapsed)"
-                    last_log_time=$elapsed
-                fi
+                    # Log every 10 seconds to reduce noise
+                    local current_time=$(date +%s)
+                    local elapsed=$((current_time - start_time))
+                    if [ $((elapsed - last_log_time)) -ge 10 ]; then
+                        log "Database authentication check failed, retrying... (${elapsed}s elapsed)"
+                        last_log_time=$elapsed
+                    fi
 
-                sleep 2
-            done
+                    sleep 2
+                done
+            else
+                while ! psql "$db_check_url" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1; do
+                    check_timeout || return 1
+
+                    # Log every 10 seconds to reduce noise
+                    local current_time=$(date +%s)
+                    local elapsed=$((current_time - start_time))
+                    if [ $((elapsed - last_log_time)) -ge 10 ]; then
+                        log "Database authentication check failed, retrying... (${elapsed}s elapsed)"
+                        last_log_time=$elapsed
+                    fi
+
+                    sleep 2
+                done
+            fi
 
             log "Database authentication verified successfully"
         else
@@ -319,7 +423,10 @@ wait_for_db() {
         log "WARNING: This only checks if port is open, not if database is ready"
         require_cmd nc
 
-        while ! nc -z "$DB_HOST" "$DB_PORT" >/dev/null 2>&1; do
+        local nc_host="${db_host:-$DB_HOST}"
+        local nc_port="${db_port:-$DB_PORT}"
+
+        while ! nc -z "$nc_host" "$nc_port" >/dev/null 2>&1; do
             check_timeout || return 1
 
             local current_time=$(date +%s)
