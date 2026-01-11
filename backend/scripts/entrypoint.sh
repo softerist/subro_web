@@ -544,7 +544,9 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 LOCK_TIMEOUT = int(os.environ.get("LOCK_TIMEOUT", "60"))
 
 try:
-    engine = create_engine(DATABASE_URL)
+    # Ensure we use a synchronous driver for the advisory lock
+    sync_url = DATABASE_URL.replace("+asyncpg", "") if "+asyncpg" in DATABASE_URL else DATABASE_URL
+    engine = create_engine(sync_url)
 
     with engine.connect() as conn:
         # Try to acquire lock with timeout (non-blocking)
