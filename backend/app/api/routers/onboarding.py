@@ -245,8 +245,17 @@ async def get_setup_status(
         setup_required: True if wizard should be shown (forced OR not completed)
         setup_forced: True if FORCE_INITIAL_SETUP is set
     """
-    state = await crud_app_settings.get_setup_state(db)
-    return SetupStatus(**state)
+    try:
+        state = await crud_app_settings.get_setup_state(db)
+        return SetupStatus(**state)
+    except Exception as e:
+        logger.error(f"Error retrieving setup status: {e}", exc_info=True)
+        # We return a fallback status if DB fails, or raise 500?
+        # Raising 500 allows frontend to see specific error if we return it in detail.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to check setup status: {e!s}",
+        ) from e
 
 
 @router.post(

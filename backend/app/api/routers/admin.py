@@ -388,14 +388,21 @@ async def get_open_signup_setting(
     session: AsyncSession = Depends(get_async_session),
 ) -> OpenSignupResponse:
     """Get the current open signup setting."""
-    result = await session.execute(select(AppSettings).where(AppSettings.id == 1))
-    app_settings = result.scalar_one_or_none()
+    try:
+        result = await session.execute(select(AppSettings).where(AppSettings.id == 1))
+        app_settings = result.scalar_one_or_none()
 
-    if not app_settings:
-        # Return default if settings don't exist yet
-        return OpenSignupResponse(open_signup=False)
+        if not app_settings:
+            # Return default if settings don't exist yet
+            return OpenSignupResponse(open_signup=False)
 
-    return OpenSignupResponse(open_signup=app_settings.open_signup)
+        return OpenSignupResponse(open_signup=app_settings.open_signup)
+    except Exception as e:
+        logger.error(f"Error retrieving open signup setting: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve setting: {e!s}",
+        ) from e
 
 
 @admin_router.patch(

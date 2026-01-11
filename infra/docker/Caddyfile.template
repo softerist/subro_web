@@ -34,7 +34,7 @@
 		# style-src 'self' 'unsafe-inline': Allow local styles and inline styles (required for CSS-in-JS/Tailwind)
 		# img-src 'self' data:: Allow local images and data URIs (base64)
 		# connect-src 'self' wss:: Allow XHR/Fetch to same origin and WebSockets to secure protocols
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:;"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss:;"
 	}
 }
 

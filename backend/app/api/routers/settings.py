@@ -41,7 +41,14 @@ async def get_settings(
     **Requires admin privileges.**
     """
     logger.debug(f"Settings retrieved by admin user: {current_user.email}")
-    return await crud_app_settings.to_read_schema(db)
+    try:
+        return await crud_app_settings.to_read_schema(db)
+    except Exception as e:
+        logger.error(f"Error retrieving settings: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve settings: {e!s}",
+        ) from e
 
 
 @router.put(
