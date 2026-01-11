@@ -793,9 +793,15 @@ verify_staging:
       echo "  • Caddy not configured for staging.secure.go.ro"
       echo "  • Network/firewall issues"
       echo ""
+      echo "=== SERVER-SIDE DEPLOYMENT LOG (last_deploy.log) ==="
+      ssh "$SSH_HOST" "cat ${STAGING_DEPLOY_DIR}/last_deploy.log || echo 'Log file not found'"
+      echo ""
+      echo "=== API CONTAINER LOGS (subro_staging-api-1) ==="
+      ssh "$SSH_HOST" "docker logs subro_staging-api-1 --tail 100 || echo 'Container not found'"
+      echo ""
       echo "Troubleshooting:"
       echo "  1. SSH: docker ps -a | grep staging"
-      echo "  2. Logs: docker logs subro-api-staging --tail 50"
+      echo "  2. Logs: docker logs subro_staging-api-1 --tail 50"
       echo "  3. Test: curl http://localhost:8000/api/v1/"
       exit 1
   environment:

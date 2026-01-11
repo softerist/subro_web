@@ -254,3 +254,4 @@ backend/celerybeat-sc*
 backend/exports/audit/audit_export*
 backend/.local/state*
 infra/docker/Caddyfile.prod
+GEMINI.md
