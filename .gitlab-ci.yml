@@ -131,8 +131,8 @@ variables:
 
     # Ensure infra directory exists
     mkdir -p infra
-    # Write base secrets
-    echo '${PROD_ENV_FILE}' | base64 -d > "infra/$${ENV_FILE_NAME}"
+    # Write base secrets and filter out dynamic variables that we will append later
+    echo '${PROD_ENV_FILE}' | base64 -d | grep -vE '^(DOCKER_IMAGE_|DEPLOY_COMMIT_SHA|USE_PREBUILT_IMAGES|DEPLOY_ENV)' > "infra/$${ENV_FILE_NAME}"
 
     # Append CI-specific variables
     {
@@ -960,7 +960,10 @@ verify_prod:
   timeout: 10m
   stage: verify
   image: alpine:3.20
-  needs: [deploy_prod]
+  needs:
+    - job: deploy_prod
+    - job: bump_version
+      artifacts: true
   environment:
     name: production
     url: https://$SSH_HOST/
@@ -969,6 +972,15 @@ verify_prod:
       when: on_success
   script:
     - apk add --no-cache curl jq openssh-client
+    - |
+      # Load expected version
+      if [ -f version.env ]; then
+        source version.env
+        EXPECTED_VERSION="${NEW_APP_VERSION:-}"
+      else
+        echo "Warning: version.env not found. Skipping strict version check."
+        EXPECTED_VERSION=""
+      fi
     - |-
       # SSH setup for remote diagnostics
       mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -997,6 +1009,10 @@ verify_prod:
       echo ""
 
       echo "🌐 Verifying API health..."
+      if [ -n "$EXPECTED_VERSION" ]; then
+        echo "  • Expecting Version: $EXPECTED_VERSION"
+      fi
+
       MAX_ATTEMPTS=12
       for i in $(seq 1 $MAX_ATTEMPTS); do
         # Try main health endpoint first
@@ -1004,15 +1020,33 @@ verify_prod:
 
         if echo "$RESPONSE" | grep -q '"version"'; then
           VERSION=$(echo "$RESPONSE" | jq -r '.version // "unknown"' 2>/dev/null || echo "unknown")
-          echo ""
-          echo "┌─────────────────────────────────────────────────────────────┐"
-          echo "│  ✅ Production verified successfully!                       │"
-          echo "├─────────────────────────────────────────────────────────────┤"
-          printf "│  • %-12s %-44s │\n" "Version:" "$VERSION"
-          printf "│  • %-12s %-44s │\n" "Color:" "$ACTIVE_COLOR"
-          printf "│  • %-12s %-44s │\n" "URL:" "https://$SSH_HOST/"
-          echo "└─────────────────────────────────────────────────────────────┘"
-          exit 0
+
+          # Strict version check
+          if [ -n "$EXPECTED_VERSION" ]; then
+            # Clean up versions for comparison (handle potential suffixes if mismatching)
+            # Just do direct string comparison first
+            if [[ "$VERSION" == *"$EXPECTED_VERSION"* ]] || [[ "$EXPECTED_VERSION" == *"$VERSION"* ]]; then
+                 CHECK_RESULT="✅ MATCH"
+            else
+                 CHECK_RESULT="❌ MISMATCH (Expected $EXPECTED_VERSION)"
+            fi
+          else
+            CHECK_RESULT="⚠️  NO CHECK"
+          fi
+
+          if [[ "$CHECK_RESULT" == *"✅"* ]] || [[ "$CHECK_RESULT" == *"NO CHECK"* ]]; then
+              echo ""
+              echo "┌─────────────────────────────────────────────────────────────┐"
+              echo "│  ✅ Production verified successfully!                       │"
+              echo "├─────────────────────────────────────────────────────────────┤"
+              printf "│  • %-12s %-44s │\n" "Version:" "$VERSION $CHECK_RESULT"
+              printf "│  • %-12s %-44s │\n" "Color:" "$ACTIVE_COLOR"
+              printf "│  • %-12s %-44s │\n" "URL:" "https://$SSH_HOST/"
+              echo "└─────────────────────────────────────────────────────────────┘"
+              exit 0
+          fi
+
+          echo "  ⏳ Version mismatch: Got $VERSION, Expected $EXPECTED_VERSION. Retrying..."
         fi
 
         echo "  ⏳ Attempt $i/$MAX_ATTEMPTS - waiting for API..."
@@ -1025,6 +1059,9 @@ verify_prod:
       echo "└─────────────────────────────────────────────────────────────┘"
       echo ""
       echo "Last response: $RESPONSE"
+      if [ -n "$EXPECTED_VERSION" ]; then
+        echo "Expected Version: $EXPECTED_VERSION"
+      fi
       echo ""
       echo "Troubleshooting:"
       echo "  1. Check container logs: docker logs \${ACTIVE_COLOR}-api-1 --tail 50"

@@ -283,7 +283,7 @@ def rebuild_srt_from_segments(segments: list[tuple[str, str, str]]) -> str:
 
         if not idx_str or "-->" not in ts_str:  # Check if timestamp line looks valid
             logger.warning(
-                f"Skipping segment {i+1} during rebuild due to invalid index ('{idx_str}') or timestamp ('{ts_str}')."
+                f"Skipping segment {i + 1} during rebuild due to invalid index ('{idx_str}') or timestamp ('{ts_str}')."
             )
             continue
 

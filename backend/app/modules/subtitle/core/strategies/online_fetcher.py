@@ -279,7 +279,7 @@ class OnlineFetcher(ProcessingStrategy):
             # Check if RO goal is already met by a higher-ranked candidate in *this run*
             if context.found_final_ro:
                 self.logger.debug(
-                    f"Skipping candidate (Lang: {candidate.get('language','N/A')}, Score: {score}): Final RO already found in this strategy run."
+                    f"Skipping candidate (Lang: {candidate.get('language', 'N/A')}, Score: {score}): Final RO already found in this strategy run."
                 )
                 continue
 

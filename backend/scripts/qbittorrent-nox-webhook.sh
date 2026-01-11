@@ -227,61 +227,93 @@ trap 'log_warning "Interrupted (INT/TERM). Cleaning up..."; exit 1' INT TERM
 # ============================================
 # Early argument handling
 # ============================================
-if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
-  show_help
-  exit 0
-fi
+TORRENT_PATH=""
+SUBRO_API_KEY_ARG=""
 
-# Health check mode
-if [ "${1:-}" = "--health" ]; then
-  echo "Running health check..."
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      show_help
+      exit 0
+      ;;
+    --health)
+      # Run health check logic immediately then exit
+      # (Use a function or block here to avoid duplication, but for now copying logic structure)
+      echo "Running health check..."
+      # Load minimal config for health check
+      SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+      REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-  # Load minimal config for health check
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+      for file in "$CONFIG_FILE" "$REPO_ROOT/.env" "/opt/subro_web/.env"; do
+        if [ -f "$file" ]; then
+          set -o allexport
+          # shellcheck disable=SC1090
+          source "$file" 2>/dev/null || true
+          set +o allexport
+          break
+        fi
+      done
 
-  for file in "$CONFIG_FILE" "$REPO_ROOT/.env" "/opt/subro_web/.env"; do
-    if [ -f "$file" ]; then
-      set -o allexport
-      # shellcheck disable=SC1090
-      source "$file" 2>/dev/null || true
-      set +o allexport
-      break
-    fi
-  done
+      if [ -f "$WEBHOOK_ENV_FILE" ]; then
+        # shellcheck disable=SC1090
+        source "$WEBHOOK_ENV_FILE" 2>/dev/null || true
+      fi
 
-  if [ -f "$WEBHOOK_ENV_FILE" ]; then
-    # shellcheck disable=SC1090
-    source "$WEBHOOK_ENV_FILE" 2>/dev/null || true
-  fi
+      if [ -z "${SUBRO_API_BASE_URL:-}" ]; then
+        echo "ERROR: SUBRO_API_BASE_URL not configured"
+        exit 1
+      fi
 
-  if [ -z "${SUBRO_API_BASE_URL:-}" ]; then
-    echo "ERROR: SUBRO_API_BASE_URL not configured"
-    exit 1
-  fi
+      echo "Checking API endpoint: $SUBRO_API_BASE_URL"
+      http_code=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" "${SUBRO_API_BASE_URL%/}/" 2>&1 || echo "000")
 
-  echo "Checking API endpoint: $SUBRO_API_BASE_URL"
+      if [ "$http_code" = "000" ]; then
+        echo "ERROR: Cannot connect to API"
+        exit 1
+      elif [ "$http_code" -ge 200 ] && [ "$http_code" -lt 500 ]; then
+        echo "SUCCESS: API is reachable (HTTP $http_code)"
+        exit 0
+      else
+        echo "WARNING: Unexpected response (HTTP $http_code)"
+        exit 1
+      fi
+      shift
+      ;;
+    --api-key=*)
+      SUBRO_API_KEY_ARG="${1#*=}"
+      shift
+      ;;
+    --api-key)
+      if [ -n "${2:-}" ]; then
+        SUBRO_API_KEY_ARG="$2"
+        shift 2
+      else
+        echo "ERROR: --api-key requires a value" >&2
+        exit 1
+      fi
+      ;;
+    -*)
+      # Ignore other flags or error? Let's ignore unknown flags to be safe with future qBittorrent params
+      log_warning "Unknown option: $1"
+      shift
+      ;;
+    *)
+      if [ -z "$TORRENT_PATH" ]; then
+        TORRENT_PATH="$1"
+      else
+        # If we already have a path, this might be extra args from qBittorrent?
+        # Just warn and ignore
+        log_warning "Ignoring extra argument: $1"
+      fi
+      shift
+      ;;
+  esac
+done
 
-  # Simple connectivity check
-  http_code=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" \
-    "${SUBRO_API_BASE_URL%/}/" 2>&1 || echo "000")
-
-  if [ "$http_code" = "000" ]; then
-    echo "ERROR: Cannot connect to API"
-    exit 1
-  elif [ "$http_code" -ge 200 ] && [ "$http_code" -lt 500 ]; then
-    echo "SUCCESS: API is reachable (HTTP $http_code)"
-    exit 0
-  else
-    echo "WARNING: Unexpected response (HTTP $http_code)"
-    exit 1
-  fi
-fi
-
-TORRENT_PATH="${1:-}"
 if [ -z "$TORRENT_PATH" ]; then
   echo "ERROR: No torrent path provided." >&2
-  echo "Usage: $0 <torrent_path>" >&2
+  echo "Usage: $0 <torrent_path> [--api-key KEY]" >&2
   exit 1
 fi
 
@@ -411,7 +443,10 @@ fi
 # ============================================
 # Webhook Secret Loading
 # ============================================
-if [ -f "$WEBHOOK_ENV_FILE" ]; then
+if [ -n "$SUBRO_API_KEY_ARG" ]; then
+  SUBRO_API_KEY="$SUBRO_API_KEY_ARG"
+  log_info "Using SUBRO_API_KEY from command line argument."
+elif [ -f "$WEBHOOK_ENV_FILE" ]; then
   set +u
   # shellcheck disable=SC1090
   source "$WEBHOOK_ENV_FILE"
@@ -421,7 +456,7 @@ elif [ -n "${SUBRO_API_KEY:-}" ]; then
   log_info "Using SUBRO_API_KEY from environment."
 else
   log_error "Webhook key not found."
-  log_error "Expected: $WEBHOOK_ENV_FILE or SUBRO_API_KEY in environment."
+  log_error "Expected: --api-key ARG, WEBHOOK_ENV_FILE, or SUBRO_API_KEY in environment."
   log_error "Generate a webhook key in Settings > qBittorrent in the Subro web UI."
   exit 1
 fi

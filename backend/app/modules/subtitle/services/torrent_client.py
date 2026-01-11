@@ -234,6 +234,7 @@ def rename_torrent_file(
 def configure_webhook_autorun(
     client: qbittorrentapi.Client,
     script_path: str = "/opt/subro_web/scripts/qbittorrent-nox-webhook.sh",
+    api_key: str | None = None,
 ) -> bool:
     """
     Configure qBittorrent to run the webhook script on torrent completion.
@@ -241,6 +242,7 @@ def configure_webhook_autorun(
     Args:
         client: An authenticated qBittorrent client instance.
         script_path: Path to the webhook script on the host.
+        api_key: Optional API key to pass to the script via --api-key argument.
 
     Returns:
         bool: True if configuration was successful, False otherwise.
@@ -251,13 +253,21 @@ def configure_webhook_autorun(
 
     try:
         autorun_command = f'/usr/bin/bash {script_path} "%F"'
+        if api_key:
+            # Append API key securely quoted
+            autorun_command += f' --api-key="{api_key}"'
+
         client.app.set_preferences(
             {
                 "autorun_enabled": True,
                 "autorun_program": autorun_command,
             }
         )
-        logging.info(f"Configured qBittorrent autorun: {autorun_command}")
+        # Log command with masked key for security
+        log_cmd = autorun_command
+        if api_key:
+            log_cmd = log_cmd.replace(api_key, "***")
+        logging.info(f"Configured qBittorrent autorun: {log_cmd}")
         return True
     except qbittorrentapi.exceptions.APIError as e:
         logging.error(f"API Error configuring autorun: {e}")
@@ -289,9 +299,44 @@ def get_autorun_config(client: qbittorrentapi.Client) -> dict | None:
         return None
 
 
+def disable_webhook_autorun(client: qbittorrentapi.Client) -> bool:
+    """
+    Disable qBittorrent autorun configuration.
+
+    Args:
+        client: An authenticated qBittorrent client instance.
+
+    Returns:
+        bool: True if disabled successfully, False otherwise.
+    """
+    if not client or not client.is_logged_in:
+        logging.error("Cannot disable autorun: qBittorrent client not logged in.")
+        return False
+
+    try:
+        client.app.set_preferences(
+            {
+                "autorun_enabled": False,
+                # Optionally clear the program, but disabling is sufficient and safer
+                # to avoid wiping unrelated configs if someone toggles it back manually?
+                # But requirement is "remove integration".
+                "autorun_program": "",
+            }
+        )
+        logging.info("Disabled qBittorrent autorun.")
+        return True
+    except qbittorrentapi.exceptions.APIError as e:
+        logging.error(f"API Error disabling autorun: {e}")
+        return False
+    except Exception as e:
+        logging.error(f"Unexpected error disabling autorun: {e}", exc_info=True)
+        return False
+
+
 # Explicit Exports
 __all__ = [
     "configure_webhook_autorun",
+    "disable_webhook_autorun",
     "get_autorun_config",
     "get_client",
     "get_completed_torrents",

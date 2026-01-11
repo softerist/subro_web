@@ -590,7 +590,7 @@ async def _handle_runtime_error(
     response = {
         "job_id": job_db_id_str,
         "status": JobStatus.FAILED.value,
-        "error": f"Task execution failed (RuntimeError): {str(e)[:settings.JOB_RESULT_MESSAGE_MAX_LEN]}",
+        "error": f"Task execution failed (RuntimeError): {str(e)[: settings.JOB_RESULT_MESSAGE_MAX_LEN]}",
         "error_type": "AsyncTaskRuntimeError",
         "exit_code": -501,  # Default exit code for this handler
     }
@@ -623,7 +623,7 @@ async def _handle_database_error(
     response = {
         "job_id": job_db_id_str,
         "status": JobStatus.FAILED.value,
-        "error": f"Database error: {str(db_e)[:settings.JOB_RESULT_MESSAGE_MAX_LEN]}",
+        "error": f"Database error: {str(db_e)[: settings.JOB_RESULT_MESSAGE_MAX_LEN]}",
         "error_type": "AsyncTaskSQLAlchemyError",
         "exit_code": -503,
     }
@@ -657,7 +657,7 @@ async def _handle_unexpected_error(
     response = {
         "job_id": job_db_id_str,
         "status": JobStatus.FAILED.value,
-        "error": f"Task execution failed unexpectedly: {str(e)[:settings.JOB_RESULT_MESSAGE_MAX_LEN]}",
+        "error": f"Task execution failed unexpectedly: {str(e)[: settings.JOB_RESULT_MESSAGE_MAX_LEN]}",
         "error_type": "AsyncTaskUnhandledException",
         "exit_code": -502,
     }

@@ -89,7 +89,7 @@ logger = logging.getLogger(__name__)
 
 # --- Lifespan Management ---
 @asynccontextmanager
-async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:  # noqa: C901
     logger.info(f"Starting up {settings.APP_NAME} v{settings.APP_VERSION}...")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
 
@@ -183,6 +183,18 @@ async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning(
             "LIFESPAN_HOOK: FIRST_SUPERUSER_EMAIL or FIRST_SUPERUSER_PASSWORD not set. Skipping superuser creation."
         )
+
+    # 3. Ensure Webhook Key (Auto-generation)
+    if db_session_module.FastAPISessionLocal:
+        async with db_session_module.FastAPISessionLocal() as session:
+            try:
+                from app.api.routers.webhook_keys import ensure_default_webhook_key
+
+                await ensure_default_webhook_key(session)
+            except Exception as e:
+                logger.error(
+                    f"LIFESPAN_HOOK: Error ensuring default webhook key: {e}", exc_info=True
+                )
 
     yield  # Application runs here
 

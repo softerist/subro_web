@@ -34,12 +34,12 @@ def main():
 
     for i in range(args.mock_stdout_lines):
         time.sleep(interval)
-        print(f"[MOCK] Processing file {i+1}/{args.mock_stdout_lines}...")
+        print(f"[MOCK] Processing file {i + 1}/{args.mock_stdout_lines}...")
         sys.stdout.flush()
 
     # 5. Simulate errors if requested
     for i in range(args.mock_stderr_lines):
-        print(f"[MOCK ERROR] Simulated error message {i+1}", file=sys.stderr)
+        print(f"[MOCK ERROR] Simulated error message {i + 1}", file=sys.stderr)
         sys.stderr.flush()
 
     time.sleep(interval)

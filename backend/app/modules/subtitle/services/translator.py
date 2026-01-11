@@ -361,7 +361,7 @@ def chunk_text_list_for_translation(  # noqa: C901
         # This simple check handles the *batch* limit. API might still reject oversized individual strings.
         if text_len > max_length:
             logger.warning(
-                f"Single text segment #{i+1} ({text_len} {'bytes' if use_bytes else 'chars'}) "
+                f"Single text segment #{i + 1} ({text_len} {'bytes' if use_bytes else 'chars'}) "
                 f"exceeds batch max_length {max_length}. Sending as its own potentially oversized batch. "
                 f"API may reject it."
             )
@@ -517,7 +517,7 @@ def rebuild_srt_from_segments(segments: list[tuple[str, str, str]]) -> str:
 
         if not idx_str or "-->" not in ts_str:  # Check if timestamp line looks valid
             logger.warning(
-                f"Skipping segment {i+1} during rebuild due to invalid index ('{idx_str}') or timestamp ('{ts_str}')."
+                f"Skipping segment {i + 1} during rebuild due to invalid index ('{idx_str}') or timestamp ('{ts_str}')."
             )
             continue
 
@@ -845,7 +845,7 @@ class TranslationManager:
                 }
                 status = "VALID" if is_valid else "QUOTA EXCEEDED"
                 logger.info(
-                    f"  [Key {index+1} ..{key_suffix}]: Usage {count}/{effective_limit} chars. Status: {status}"
+                    f"  [Key {index + 1} ..{key_suffix}]: Usage {count}/{effective_limit} chars. Status: {status}"
                 )
                 if is_valid:
                     valid_count += 1
@@ -855,7 +855,7 @@ class TranslationManager:
             else:  # Usage check failed entirely (e.g., invalid key, network error)
                 self.deepl_usage_cache[index] = {"count": 0, "limit": 0, "valid": False}
                 logger.warning(
-                    f"  [Key {index+1} ..{key_suffix}]: Failed usage check. Marking INVALID."
+                    f"  [Key {index + 1} ..{key_suffix}]: Failed usage check. Marking INVALID."
                 )
                 invalid_count += 1
 
@@ -891,7 +891,7 @@ class TranslationManager:
 
         if not is_truly_valid and is_valid:  # Was marked valid but count >= limit now
             logger.warning(
-                f"DeepL Key {key_index+1} is now out of quota ({count}/{limit}). Marking invalid temporarily."
+                f"DeepL Key {key_index + 1} is now out of quota ({count}/{limit}). Marking invalid temporarily."
             )
             self.deepl_usage_cache[key_index]["valid"] = False  # Mark invalid in cache
             is_valid = False  # Reflect this in the return value
@@ -916,7 +916,7 @@ class TranslationManager:
 
             if not usage:  # Cache entry missing
                 logger.warning(
-                    f"Key index {next_index+1} not found in usage cache during switch attempt."
+                    f"Key index {next_index + 1} not found in usage cache during switch attempt."
                 )
                 continue
 
@@ -939,7 +939,7 @@ class TranslationManager:
                         else "***"
                     )
                     logger.info(
-                        f"Switched to DeepL key {next_index+1} (..{key_suffix}). Available chars: ~{available}"
+                        f"Switched to DeepL key {next_index + 1} (..{key_suffix}). Available chars: ~{available}"
                     )
                 self.current_deepl_key_index = next_index
                 return True  # Usable key found
@@ -947,7 +947,7 @@ class TranslationManager:
             else:  # Key was marked valid but has no quota left
                 if is_valid:  # Mark it invalid in cache now if we just discovered it's full
                     logger.warning(
-                        f"DeepL Key {next_index+1} found to have no quota ({count}/{limit}) during switch. Marking invalid."
+                        f"DeepL Key {next_index + 1} found to have no quota ({count}/{limit}) during switch. Marking invalid."
                     )
                     self.deepl_usage_cache[next_index]["valid"] = False
 
@@ -985,12 +985,12 @@ class TranslationManager:
         # Pre-flight quota check
         if available <= 0:
             logger.warning(
-                f"DeepL Key {key_index+1} (..{key_suffix}) has no available quota ({available})."
+                f"DeepL Key {key_index + 1} (..{key_suffix}) has no available quota ({available})."
             )
             raise deepl.QuotaExceededException("Pre-flight check: No available quota.")
         if chars_to_bill > available:
             logger.warning(
-                f"Estimated billing {chars_to_bill} exceeds available quota {available} for key {key_index+1} (..{key_suffix})."
+                f"Estimated billing {chars_to_bill} exceeds available quota {available} for key {key_index + 1} (..{key_suffix})."
             )
             raise deepl.QuotaExceededException(
                 f"Pre-flight check: Billing ({chars_to_bill}) exceeds available quota ({available})."
@@ -1019,7 +1019,7 @@ class TranslationManager:
             src_lang = source_language.upper() if source_language else None
 
             logger.debug(
-                f"DeepL translating chunk ({len(text_to_send)}/{chars_to_bill} sent/billed chars) with key {key_index+1} (..{key_suffix}). Target: {tg_lang}, Source: {src_lang or 'auto'}"
+                f"DeepL translating chunk ({len(text_to_send)}/{chars_to_bill} sent/billed chars) with key {key_index + 1} (..{key_suffix}). Target: {tg_lang}, Source: {src_lang or 'auto'}"
             )
 
             result = translator.translate_text(
@@ -1039,7 +1039,7 @@ class TranslationManager:
                 self.deepl_usage_cache[key_index]["count"] += chars_to_bill
                 new_count = self.deepl_usage_cache[key_index]["count"]
                 limit = self.deepl_usage_cache[key_index].get("limit", 0)
-                logger.debug(f"Updated DeepL Key {key_index+1} usage cache: {new_count}/{limit}")
+                logger.debug(f"Updated DeepL Key {key_index + 1} usage cache: {new_count}/{limit}")
 
             if truncated:
                 translated_text += " [[TRUNCATED]]"
@@ -1049,26 +1049,26 @@ class TranslationManager:
         except deepl.DeepLException as e:
             # Specific DeepL errors are caught and handled by the caller (e.g., key switch)
             logger.error(
-                f"DeepL API error on chunk with key {key_index+1} (..{key_suffix}): {type(e).__name__} - {e}"
+                f"DeepL API error on chunk with key {key_index + 1} (..{key_suffix}): {type(e).__name__} - {e}"
             )
             if isinstance(e, deepl.AuthorizationException):
                 if key_index in self.deepl_usage_cache:
                     self.deepl_usage_cache[key_index]["valid"] = False
                 logger.error(
-                    f"Marked DeepL Key {key_index+1} as INVALID due to Authorization error."
+                    f"Marked DeepL Key {key_index + 1} as INVALID due to Authorization error."
                 )
             elif isinstance(e, deepl.QuotaExceededException):
                 if key_index in self.deepl_usage_cache:
                     limit = self.deepl_usage_cache[key_index].get("limit", 0)
                     self.deepl_usage_cache[key_index]["count"] = limit  # Assume full usage
                     self.deepl_usage_cache[key_index]["valid"] = False  # Mark invalid
-                logger.warning(f"DeepL Key {key_index+1} hit quota limit. Marked invalid.")
+                logger.warning(f"DeepL Key {key_index + 1} hit quota limit. Marked invalid.")
             # Re-raise the specific DeepL error for caller
             raise e
         except Exception as e:
             # Catch unexpected errors during the process
             logger.error(
-                f"Unexpected error during DeepL chunk translation with key {key_index+1} (..{key_suffix}): {e}",
+                f"Unexpected error during DeepL chunk translation with key {key_index + 1} (..{key_suffix}): {e}",
                 exc_info=True,
             )
             # Wrap in a generic DeepLException or re-raise
@@ -1125,12 +1125,12 @@ class TranslationManager:
         # Pre-flight quota check
         if available <= 0:
             logger.warning(
-                f"DeepL Key {key_index+1} (..{key_suffix}) has no available quota ({available}) for list."
+                f"DeepL Key {key_index + 1} (..{key_suffix}) has no available quota ({available}) for list."
             )
             raise deepl.QuotaExceededException("Pre-flight check: No available quota for list.")
         if chars_to_bill > available:
             logger.warning(
-                f"List billing {chars_to_bill} exceeds available quota {available} for key {key_index+1} (..{key_suffix})."
+                f"List billing {chars_to_bill} exceeds available quota {available} for key {key_index + 1} (..{key_suffix})."
             )
             raise deepl.QuotaExceededException(
                 f"Pre-flight check: List billing ({chars_to_bill}) exceeds available quota ({available})."
@@ -1146,7 +1146,7 @@ class TranslationManager:
             src_lang = source_language.upper() if source_language else None
 
             logger.debug(
-                f"DeepL translating list ({len(texts_to_send_api)} non-empty/{len(texts)} total segments, {chars_to_bill} billed chars) with key {key_index+1} (..{key_suffix}). Target: {tg_lang}, Source: {src_lang or 'auto'}"
+                f"DeepL translating list ({len(texts_to_send_api)} non-empty/{len(texts)} total segments, {chars_to_bill} billed chars) with key {key_index + 1} (..{key_suffix}). Target: {tg_lang}, Source: {src_lang or 'auto'}"
             )
 
             # Call API with only non-empty texts
@@ -1183,31 +1183,31 @@ class TranslationManager:
                 self.deepl_usage_cache[key_index]["count"] += chars_to_bill
                 new_count = self.deepl_usage_cache[key_index]["count"]
                 limit = self.deepl_usage_cache[key_index].get("limit", 0)
-                logger.debug(f"Updated DeepL Key {key_index+1} usage cache: {new_count}/{limit}")
+                logger.debug(f"Updated DeepL Key {key_index + 1} usage cache: {new_count}/{limit}")
 
             return final_translations, chars_to_bill
 
         except deepl.DeepLException as e:
             # Handle specific errors and update cache/state as before
             logger.error(
-                f"DeepL API error on list with key {key_index+1} (..{key_suffix}): {type(e).__name__} - {e}"
+                f"DeepL API error on list with key {key_index + 1} (..{key_suffix}): {type(e).__name__} - {e}"
             )
             if isinstance(e, deepl.AuthorizationException):
                 if key_index in self.deepl_usage_cache:
                     self.deepl_usage_cache[key_index]["valid"] = False
-                logger.error(f"Marked DeepL Key {key_index+1} as INVALID.")
+                logger.error(f"Marked DeepL Key {key_index + 1} as INVALID.")
             elif isinstance(e, deepl.QuotaExceededException):
                 if key_index in self.deepl_usage_cache:
                     limit = self.deepl_usage_cache[key_index].get("limit", 0)
                     self.deepl_usage_cache[key_index]["count"] = limit
                     self.deepl_usage_cache[key_index]["valid"] = False
                 logger.warning(
-                    f"DeepL Key {key_index+1} hit quota limit during list. Marked invalid."
+                    f"DeepL Key {key_index + 1} hit quota limit during list. Marked invalid."
                 )
             raise e  # Re-raise for caller
         except Exception as e:
             logger.error(
-                f"Unexpected error during DeepL list translation with key {key_index+1} (..{key_suffix}): {e}",
+                f"Unexpected error during DeepL list translation with key {key_index + 1} (..{key_suffix}): {e}",
                 exc_info=True,
             )
             raise deepl.DeepLException(
@@ -1484,7 +1484,7 @@ class TranslationManager:
                     ) as e:
                         last_exception_batch = e
                         logger.warning(
-                            f"Batch {batch_idx}: DeepL Key {current_key_idx_batch+1} failed: {type(e).__name__}. Attempting key switch or fallback."
+                            f"Batch {batch_idx}: DeepL Key {current_key_idx_batch + 1} failed: {type(e).__name__}. Attempting key switch or fallback."
                         )
                         # Try switching key. If successful and key *changed*, retry.
                         if (
@@ -1504,7 +1504,7 @@ class TranslationManager:
                     except Exception as e:  # Catch other unexpected errors
                         last_exception_batch = e
                         logger.error(
-                            f"Batch {batch_idx}: Unexpected DeepL error on Key {current_key_idx_batch+1}: {e}. Falling back.",
+                            f"Batch {batch_idx}: Unexpected DeepL error on Key {current_key_idx_batch + 1}: {e}. Falling back.",
                             exc_info=True,
                         )
                         translated_batch_texts = None
@@ -1554,7 +1554,7 @@ class TranslationManager:
                                 google_billed_total += chunk_billed
                             else:
                                 logger.error(
-                                    f"Google fallback failed for sub-chunk {sub_batch_idx+1}/{len(google_sub_batches)} within Batch {batch_idx}. Marking batch as partially failed."
+                                    f"Google fallback failed for sub-chunk {sub_batch_idx + 1}/{len(google_sub_batches)} within Batch {batch_idx}. Marking batch as partially failed."
                                 )
                                 google_batch_success = False
                                 # Append original texts for the failed sub-chunk with markers
@@ -1571,7 +1571,7 @@ class TranslationManager:
 
                         except Exception as e:
                             logger.error(
-                                f"Unexpected error during Google fallback sub-chunk {sub_batch_idx+1} of Batch {batch_idx}: {e}",
+                                f"Unexpected error during Google fallback sub-chunk {sub_batch_idx + 1} of Batch {batch_idx}: {e}",
                                 exc_info=True,
                             )
                             google_batch_success = False
@@ -1787,7 +1787,7 @@ class TranslationManager:
                     ) as e:
                         last_exception_chunk = e
                         logger.warning(
-                            f"Chunk {chunk_idx}: DeepL Key {current_key_idx_chunk+1} failed: {type(e).__name__}. Switching key."
+                            f"Chunk {chunk_idx}: DeepL Key {current_key_idx_chunk + 1} failed: {type(e).__name__}. Switching key."
                         )
                         if (
                             self._switch_deepl_key()
@@ -1805,7 +1805,7 @@ class TranslationManager:
                     except Exception as e:
                         last_exception_chunk = e
                         logger.error(
-                            f"Chunk {chunk_idx}: Unexpected DeepL error with key {current_key_idx_chunk+1}: {e}",
+                            f"Chunk {chunk_idx}: Unexpected DeepL error with key {current_key_idx_chunk + 1}: {e}",
                             exc_info=True,
                         )
                         translated_chunk_text = None  # Ensure fallback
@@ -2132,7 +2132,7 @@ class TranslationManager:
 
             # Update the snapshot of DeepL key usage based on the current cache state
             for key_idx, usage_info in self.deepl_usage_cache.items():
-                key_id = f"key_{key_idx+1}"  # Consistent identifier
+                key_id = f"key_{key_idx + 1}"  # Consistent identifier
                 snapshot = cast(dict[str, Any], log_data["deepl_keys_snapshot"])
                 snapshot[key_id] = {
                     "count": usage_info.get("count", "N/A"),
