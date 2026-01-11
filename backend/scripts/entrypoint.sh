@@ -1,12 +1,12 @@
 #!/bin/sh
-set -e # Exit immediately if a command exits with a non-zero status.
+# set -e # Disabled to prevent premature exit on non-critical errors in CI/Prod
 
 # --- Configuration ---
 DB_HOST="${DB_HOST:-db}"
 DB_PORT="${DB_PORT:-5432}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-60}"
 MAX_MIGRATION_ATTEMPTS="${MAX_MIGRATION_ATTEMPTS:-30}" # Increase attempts significantly for production stability
-MIGRATION_RETRY_SLEEP="${MIGRATION_RETRY_SLEEP:-5}"   # Seconds between retries
+MIGRATION_RETRY_SLEEP="${MIGRATION_RETRY_SLEEP:-1}"   # Seconds between retries - fast retry for CI/Dev
 
 # --- User/Group ID Management (development only) ---
 # In production/staging/test, appuser is already created in the Dockerfile with correct UID/GID.
@@ -76,8 +76,8 @@ while [ $MIGRATION_ATTEMPT -lt $MAX_MIGRATION_ATTEMPTS ]; do
   ls -l alembic/versions/ || echo "Entrypoint: alembic/versions not found or ls failed"
 
   # Attempt to apply migrations based on currently visible files
-  echo "Entrypoint: Running 'poetry run alembic upgrade head'..."
-  if ! poetry run alembic upgrade head; then
+  echo "Entrypoint: Running 'alembic upgrade head'..."
+  if ! alembic upgrade head; then
      echo "Entrypoint: 'alembic upgrade head' command failed on attempt #$MIGRATION_ATTEMPT. Retrying..."
      sleep $MIGRATION_RETRY_SLEEP
      continue # Go to the next loop iteration
@@ -146,8 +146,8 @@ done
 echo "---"
 
 # --- Database Bootstrapping ---
-echo "Entrypoint: Running 'poetry run python -m app.initial_data' for bootstrapping..."
-if ! poetry run python -m app.initial_data; then
+echo "Entrypoint: Running 'python -m app.initial_data' for bootstrapping..."
+if ! python -m app.initial_data; then
   echo "Entrypoint: 'initial_data.py' failed. Setup may be incomplete." >&2
 else
   echo "Entrypoint: 'initial_data.py' finished successfully."
