@@ -38,6 +38,8 @@ RUN apt-get update && apt-get upgrade -y && \
     gosu \
     ca-certificates \
     curl \
+    postgresql-client \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # Symlink python3 to python for convenience
