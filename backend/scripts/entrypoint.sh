@@ -131,8 +131,26 @@ RUN_BOOTSTRAP="${RUN_BOOTSTRAP:-true}"
 USE_ADVISORY_LOCK="${USE_ADVISORY_LOCK:-false}"
 LOCK_TIMEOUT="${LOCK_TIMEOUT:-60}"
 
-# Validate required environment variables
-: "${DATABASE_URL:?ERROR: DATABASE_URL environment variable is required}"
+# Sync DB_HOST/DB_PORT with possibly provided POSTGRES_SERVER/POSTGRES_PORT
+DB_HOST="${POSTGRES_SERVER:-$DB_HOST}"
+DB_PORT="${POSTGRES_PORT:-$DB_PORT}"
+
+# Construct DATABASE_URL if missing but components exist
+if [ -z "${DATABASE_URL:-}" ] && [ -n "${POSTGRES_USER:-}" ] && [ -n "${POSTGRES_PASSWORD:-}" ]; then
+    log "DATABASE_URL missing, constructing from components..."
+    # Map POSTGRES_DB to 'subappdb' if missing to match config.py defaults
+    DB_NAME="${POSTGRES_DB:-subappdb}"
+    DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+    # Export it so python/alembic/etc can see it
+    export DATABASE_URL
+fi
+
+# Validate required information for database connection
+if [ -z "${DATABASE_URL:-}" ]; then
+    log_error "DATABASE_URL is missing and could not be reconstructed from POSTGRES_* variables."
+    log_error "Please ensure DATABASE_URL or (POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_SERVER, POSTGRES_DB) are set."
+    exit 1
+fi
 
 # Validate numeric configurations
 is_positive_int "$WAIT_TIMEOUT" || {
