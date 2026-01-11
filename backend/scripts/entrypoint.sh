@@ -252,6 +252,12 @@ log "Waiting for PostgreSQL (timeout: ${WAIT_TIMEOUT}s)"
 wait_for_db() {
     local start_time=$(date +%s)
     local time_budget="$WAIT_TIMEOUT"
+    local db_check_url="$DATABASE_URL"
+
+    if [[ "$db_check_url" == postgresql+*://* ]]; then
+        log "Normalizing DATABASE_URL scheme for libpq readiness checks"
+        db_check_url="postgresql://${db_check_url#postgresql+*://}"
+    fi
 
     # Helper to check remaining time budget
     check_timeout() {
@@ -268,7 +274,7 @@ wait_for_db() {
     if command -v pg_isready >/dev/null 2>&1; then
         log "Using pg_isready for initial database connectivity check"
 
-        while ! pg_isready -d "$DATABASE_URL" -q 2>/dev/null; do
+        while ! pg_isready -d "$db_check_url" -q 2>/dev/null; do
             check_timeout || return 1
 
             local current_time=$(date +%s)
@@ -290,7 +296,7 @@ wait_for_db() {
             log "Verifying database authentication and query capability"
 
             local last_log_time=0
-            while ! psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1; do
+            while ! psql "$db_check_url" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1; do
                 check_timeout || return 1
 
                 # Log every 10 seconds to reduce noise
