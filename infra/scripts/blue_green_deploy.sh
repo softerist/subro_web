@@ -138,7 +138,7 @@ else
     INIT_COLOR="blue"  # Default to blue for fresh deployments
 fi
 
-DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$ENV_FILE" | tail -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
 if [ -z "$DOMAIN_NAME" ]; then
     error "DOMAIN_NAME not found in $ENV_FILE"
     exit 1
@@ -305,7 +305,7 @@ fi
 
 # Prepare new Caddyfile content
 # Read DOMAIN_NAME from env file for expansion
-DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$ENV_FILE" | tail -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
 if [ -z "$DOMAIN_NAME" ]; then
     error "DOMAIN_NAME not found in $ENV_FILE"; exit 1
 fi
