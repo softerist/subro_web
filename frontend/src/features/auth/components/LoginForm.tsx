@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Loader2, ShieldCheck, ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ export function LoginForm({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
+  const [step, setStep] = useState<"email" | "password">("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -129,7 +130,28 @@ export function LoginForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    loginMutation.mutate({ username: email, password });
+
+    if (step === "email") {
+      if (!email.trim()) {
+        setError("Please enter your email.");
+        return;
+      }
+      // Simple email regex validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setError("Please enter a valid email address.");
+        return;
+      }
+      setStep("password");
+    } else {
+      loginMutation.mutate({ username: email, password });
+    }
+  };
+
+  const handleBackToEmail = () => {
+    setStep("email");
+    setError(null);
+    setPassword(""); // Optional: clear password when going back?
   };
 
   const handleMfaSubmit = (e: React.FormEvent) => {
@@ -212,58 +234,91 @@ export function LoginForm({
     );
   }
 
-  // Normal login form
+  // Normal login form (Step-based)
   return (
     <div className={cn("grid gap-6", className)} {...props}>
       <form onSubmit={handleSubmit} action="/login" method="post">
         <div className={cn("grid gap-4")}>
-          <div className="grid gap-2">
-            <Label htmlFor="email" className="text-foreground">
-              Email
-            </Label>
-            <Input
-              id="email"
-              name="email"
-              placeholder="name@example.com"
-              type="email"
-              autoCapitalize="none"
-              autoComplete="email"
-              autoCorrect="off"
-              disabled={isLoading}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="password" className="text-foreground">
-              Password
-            </Label>
-            <Input
-              id="password"
-              name="password"
-              placeholder="Password"
-              type="password"
-              autoComplete="current-password"
-              disabled={isLoading}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <div className="flex justify-end">
-            <a
-              href="/forgot-password"
-              className="text-sm text-primary hover:underline"
-            >
-              Forgot password?
-            </a>
-          </div>
+          {step === "email" ? (
+            <div className="grid gap-2 animate-in fade-in slide-in-from-right-4 duration-300">
+              <Label htmlFor="email" className="text-foreground">
+                Email
+              </Label>
+              <Input
+                id="email"
+                name="email"
+                placeholder="name@example.com"
+                type="email"
+                autoCapitalize="none"
+                autoComplete="username"
+                autoCorrect="off"
+                disabled={isLoading}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoFocus
+                required
+              />
+            </div>
+          ) : (
+            <div className="grid gap-4 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="flex items-center justify-between p-2 border rounded-md bg-muted/20">
+                <div className="text-sm font-medium truncate px-1">{email}</div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleBackToEmail}
+                  className="h-8 text-xs text-muted-foreground hover:text-primary"
+                >
+                  Edit
+                </Button>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="password" className="text-foreground">
+                  Password
+                </Label>
+                <Input
+                  id="password"
+                  name="password"
+                  placeholder="Password"
+                  type="password"
+                  autoComplete="current-password"
+                  disabled={isLoading}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoFocus
+                  required
+                />
+              </div>
+              <div className="flex justify-end">
+                <a
+                  href="/forgot-password"
+                  className="text-sm text-primary hover:underline"
+                >
+                  Forgot password?
+                </a>
+              </div>
+            </div>
+          )}
+
           {error && <p className="text-sm text-red-400">{error}</p>}
+
           <Button disabled={isLoading}>
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Sign In
+            {step === "email" ? "Next" : "Sign In"}
           </Button>
+
+          {step === "password" && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={handleBackToEmail}
+              disabled={isLoading}
+              className="mt-[-0.5rem]"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back
+            </Button>
+          )}
         </div>
       </form>
     </div>
