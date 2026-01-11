@@ -63,7 +63,7 @@ class Settings(BaseSettings):
 
     # --- Core Application Settings ---
     APP_NAME: str = Field(default="Subtitle Downloader", validation_alias="APP_NAME")
-    APP_VERSION: str = Field(default="0.1.4-PROD", validation_alias="APP_VERSION")
+    APP_VERSION: str = Field(default="0.1.5-PROD", validation_alias="APP_VERSION")
     APP_DESCRIPTION: str = Field(
         default="API for managing subtitle download jobs and user authentication.",
         validation_alias="APP_DESCRIPTION",
