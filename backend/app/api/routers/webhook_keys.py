@@ -405,17 +405,17 @@ async def configure_qbittorrent_webhook(
             },
         )
 
-        return QBittorrentConfigureResponse(
-            success=True,
-            message="qBittorrent webhook configured successfully! Subtitles will be downloaded automatically when torrents complete.",
-            webhook_key_generated=True,
-            qbittorrent_configured=True,
-            details={
-                "key_preview": new_key.preview,
-                "script_path": script_path,
-                "autorun_command": f'/usr/bin/bash {script_path} "%F" --api-key="***"',
-            },
-        )
+    return QBittorrentConfigureResponse(
+        success=True,
+        message="qBittorrent webhook configured successfully! Subtitles will be downloaded automatically when torrents complete.",
+        webhook_key_generated=True,
+        qbittorrent_configured=True,
+        details={
+            "key_preview": new_key.preview,
+            "script_path": script_path,
+            "autorun_command": f'/usr/bin/bash {script_path} "%F" --api-key="***"',
+        },
+    )
 
     @router.delete(
         "/configure-qbittorrent",

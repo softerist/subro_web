@@ -18,6 +18,12 @@ from app.main import app
 API_PREFIX = settings.API_V1_STR
 
 
+@pytest.fixture(autouse=True)
+async def create_test_partitions():
+    """Override the autouse fixture from api/conftest.py to avoid DB connection."""
+    pass
+
+
 @pytest.fixture
 def mock_db_session():
     """Create a mock database session."""
@@ -145,22 +151,18 @@ async def test_configure_qbittorrent_connection_failure(
                 "app.modules.subtitle.services.torrent_client.login_to_qbittorrent",
                 return_value=None,
             ) as mock_login:
-                # Mock file writing to avoid side effects
-                with patch(
-                    "app.api.routers.webhook_keys._write_key_to_env_file", return_value=True
-                ):
-                    response = await client_with_mock_db.post(
-                        f"{API_PREFIX}/settings/webhook-key/configure-qbittorrent"
-                    )
+                response = await client_with_mock_db.post(
+                    f"{API_PREFIX}/settings/webhook-key/configure-qbittorrent"
+                )
 
-                    assert response.status_code == status.HTTP_200_OK
-                    data = response.json()
-                    assert data["success"] is False
-                    assert "Failed to connect" in data["message"]
-                    assert data["webhook_key_generated"] is True
-                    assert data["qbittorrent_configured"] is False
-                    assert data["details"]["step"] == "connect_qbittorrent"
-                    mock_login.assert_called_once()
+                assert response.status_code == status.HTTP_200_OK
+                data = response.json()
+                assert data["success"] is False
+                assert "Failed to connect" in data["message"]
+                assert data["webhook_key_generated"] is True
+                assert data["qbittorrent_configured"] is False
+                assert data["details"]["step"] == "connect_qbittorrent"
+                mock_login.assert_called_once()
     finally:
         pass
 
@@ -191,19 +193,16 @@ async def test_configure_qbittorrent_autorun_failure(
                     "app.modules.subtitle.services.torrent_client.configure_webhook_autorun",
                     return_value=False,
                 ) as mock_config:
-                    with patch(
-                        "app.api.routers.webhook_keys._write_key_to_env_file", return_value=True
-                    ):
-                        response = await client_with_mock_db.post(
-                            f"{API_PREFIX}/settings/webhook-key/configure-qbittorrent"
-                        )
+                    response = await client_with_mock_db.post(
+                        f"{API_PREFIX}/settings/webhook-key/configure-qbittorrent"
+                    )
 
-                        assert response.status_code == status.HTTP_200_OK
-                        data = response.json()
-                        assert data["success"] is False
-                        assert "failed to configure autorun" in data["message"]
-                        assert data["details"]["step"] == "configure_autorun"
-                        mock_config.assert_called_once()
+                    assert response.status_code == status.HTTP_200_OK
+                    data = response.json()
+                    assert data["success"] is False
+                    assert "failed to configure autorun" in data["message"]
+                    assert data["details"]["step"] == "configure_autorun"
+                    mock_config.assert_called_once()
     finally:
         pass
 
@@ -234,22 +233,18 @@ async def test_configure_qbittorrent_success(
                     "app.modules.subtitle.services.torrent_client.configure_webhook_autorun",
                     return_value=True,
                 ) as mock_config:
-                    with patch(
-                        "app.api.routers.webhook_keys._write_key_to_env_file", return_value=True
-                    ) as mock_write:
-                        response = await client_with_mock_db.post(
-                            f"{API_PREFIX}/settings/webhook-key/configure-qbittorrent"
-                        )
+                    response = await client_with_mock_db.post(
+                        f"{API_PREFIX}/settings/webhook-key/configure-qbittorrent"
+                    )
 
-                        assert response.status_code == status.HTTP_200_OK
-                        data = response.json()
-                        assert data["success"] is True
-                        assert "configured successfully" in data["message"]
-                        assert data["webhook_key_generated"] is True
-                        assert data["qbittorrent_configured"] is True
+                    assert response.status_code == status.HTTP_200_OK
+                    data = response.json()
+                    assert data["success"] is True
+                    assert "configured successfully" in data["message"]
+                    assert data["webhook_key_generated"] is True
+                    assert data["qbittorrent_configured"] is True
 
-                        mock_write.assert_called_once()
-                        mock_config.assert_called_once()
+                    mock_config.assert_called_once()
 
     finally:
         app.dependency_overrides.clear()
