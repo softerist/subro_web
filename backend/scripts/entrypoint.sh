@@ -103,10 +103,13 @@ retry() {
 
     local attempt=1
     while [ "$attempt" -le "$max_attempts" ]; do
-        if "$@"; then
+        set +e
+        "$@"
+        local exit_code=$?
+        set -e
+        if [ "$exit_code" -eq 0 ]; then
             return 0
         fi
-        local exit_code=$?
 
         if [ "$attempt" -ge "$max_attempts" ]; then
             log_error "Command failed after $max_attempts attempts"
@@ -168,7 +171,7 @@ BOOTSTRAP_RETRY_ATTEMPTS="${BOOTSTRAP_RETRY_ATTEMPTS:-3}"
 BOOTSTRAP_RETRY_SLEEP="${BOOTSTRAP_RETRY_SLEEP:-2}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
 RUN_BOOTSTRAP="${RUN_BOOTSTRAP:-true}"
-USE_ADVISORY_LOCK="${USE_ADVISORY_LOCK:-false}"
+USE_ADVISORY_LOCK="${USE_ADVISORY_LOCK:-true}"
 LOCK_TIMEOUT="${LOCK_TIMEOUT:-60}"
 
 # Sync DB_HOST/DB_PORT with possibly provided POSTGRES_SERVER/POSTGRES_PORT
