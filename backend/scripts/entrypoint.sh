@@ -5,7 +5,7 @@ set -e # Exit immediately if a command exits with a non-zero status.
 DB_HOST="${DB_HOST:-db}"
 DB_PORT="${DB_PORT:-5432}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-60}"
-MAX_MIGRATION_ATTEMPTS="${MAX_MIGRATION_ATTEMPTS:-5}" # Increase attempts
+MAX_MIGRATION_ATTEMPTS="${MAX_MIGRATION_ATTEMPTS:-30}" # Increase attempts significantly for production stability
 MIGRATION_RETRY_SLEEP="${MIGRATION_RETRY_SLEEP:-5}"   # Seconds between retries
 
 # --- User/Group ID Management (development only) ---
@@ -156,9 +156,9 @@ fi
 # --- Final Check and Execution ---
 if [ "$MIGRATIONS_UP_TO_DATE" != "true" ]; then
   echo "Error: Failed to confirm database migrations are up-to-date after $MAX_MIGRATION_ATTEMPTS attempts." >&2
-  echo "Warning: Proceeding to start application, but migrations might be inconsistent or not fully applied." >&2
-  # Decide if you want to exit here instead of proceeding:
-  # exit 1
+  # Fail fast: Do not start the application if the DB schema is not ready.
+  # This relies on Docker's restart policy to retry the whole container.
+  exit 1
 fi
 
 echo "Entrypoint: Migration check loop finished. Starting main application command..."
