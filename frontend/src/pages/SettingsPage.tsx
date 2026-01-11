@@ -79,6 +79,7 @@ export default function SettingsPage() {
     success: boolean;
     message: string;
   } | null>(null);
+  const [isConfigured, setIsConfigured] = useState(false);
 
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
@@ -162,6 +163,7 @@ export default function SettingsPage() {
       });
       if (data.success) {
         setSuccess(data.message);
+        setIsConfigured(true);
         setTimeout(() => setSuccess(null), 5000);
       } else {
         setError(data.message);
@@ -169,6 +171,42 @@ export default function SettingsPage() {
       }
     } catch (_err) {
       const message = "Failed to configure webhook. Check your connection.";
+      setWebhookConfigResult({ success: false, message });
+      setError(message);
+    } finally {
+      setIsConfiguringWebhook(false);
+    }
+  };
+
+  const handleRemoveQBittorrentWebhook = async () => {
+    setIsConfiguringWebhook(true);
+    setWebhookConfigResult(null);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL || ""}/api/v1/settings/webhook-key/configure-qbittorrent`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        },
+      );
+      const data = await response.json();
+      setWebhookConfigResult({
+        success: data.success,
+        message: data.message,
+      });
+      if (data.success) {
+        setSuccess(data.message);
+        setIsConfigured(false);
+        setTimeout(() => setSuccess(null), 5000);
+      } else {
+        setError(data.message);
+        setTimeout(() => setError(null), 5000);
+      }
+    } catch (_err) {
+      const message = "Failed to remove webhook configuration.";
       setWebhookConfigResult({ success: false, message });
       setError(message);
     } finally {
@@ -198,6 +236,20 @@ export default function SettingsPage() {
         // to avoid overwriting user typing.
         // But here we just set it initially.
         setDeeplKeys(data.deepl_api_keys);
+      }
+
+      // Load webhook status
+      const statusRes = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL || ""}/api/v1/settings/webhook-key/status`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        },
+      );
+      if (statusRes.ok) {
+        const status = await statusRes.json();
+        setIsConfigured(status.configured);
       }
     } catch (_err) {
       setError("Failed to load settings");
@@ -1342,39 +1394,60 @@ export default function SettingsPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <h4 className="text-lg font-bold text-foreground mb-2">
-                        Automatic Setup
+                        {isConfigured
+                          ? "Integration Active"
+                          : "Automatic Setup"}
                       </h4>
                       <p className="text-sm text-muted-foreground">
-                        Click below to automatically configure qBittorrent to
-                        download subtitles when torrents complete.
+                        {isConfigured
+                          ? "qBittorrent is configured to notify Subro when downloads complete."
+                          : "Click below to automatically configure qBittorrent to download subtitles when torrents complete."}
                       </p>
                       <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
                         <li className="flex items-center gap-2">
                           <span className="h-1 w-1 rounded-full bg-primary/60" />
-                          Generates a dedicated webhook key
+                          {isConfigured
+                            ? "Webhook key is active"
+                            : "Generates a dedicated webhook key"}
                         </li>
                         <li className="flex items-center gap-2">
                           <span className="h-1 w-1 rounded-full bg-primary/60" />
-                          Configures qBittorrent to call Subro on completion
+                          {isConfigured
+                            ? "Subro is listening for completion events"
+                            : "Configures qBittorrent to call Subro on completion"}
                         </li>
                       </ul>
                     </div>
                   </div>
 
                   <Button
-                    onClick={handleConfigureQBittorrentWebhook}
+                    onClick={
+                      isConfigured
+                        ? handleRemoveQBittorrentWebhook
+                        : handleConfigureQBittorrentWebhook
+                    }
                     disabled={isConfiguringWebhook}
-                    className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 transition-all"
+                    className={`w-full sm:w-auto text-white transition-all shadow-lg ${
+                      isConfigured
+                        ? "bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 shadow-red-500/20 hover:shadow-red-500/40"
+                        : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-500/20 hover:shadow-emerald-500/40"
+                    }`}
                   >
                     {isConfiguringWebhook ? (
                       <>
                         <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Configuring...
+                        {isConfigured ? "Removing..." : "Configuring..."}
                       </>
                     ) : (
                       <>
-                        <Settings className="h-4 w-4 mr-2" />
-                        Configure Automatically
+                        {isConfigured ? (
+                          <Trash2 className="h-4 w-4 mr-2" />
+                        ) : (
+                          <Settings className="h-4 w-4 mr-2" />
+                        )}
+                        {isConfigured
+                          ? "Remove Integration"
+                          : "Configure Automatically"}
                       </>
                     )}
                   </Button>
