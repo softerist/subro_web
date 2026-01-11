@@ -40,6 +40,8 @@ services:
       - ../../logs:/app/logs
     env_file:
       - ${PROJECT_ENV_FILE:-../.env.prod}
+    environment:
+      - CELERY_HEALTHCHECK_CHECK_WORKERS=false
     networks:
       - internal_net
     healthcheck:
