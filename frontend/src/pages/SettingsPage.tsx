@@ -19,6 +19,7 @@ import {
 import { FlowDiagram } from "@/components/common/FlowDiagram";
 import { HelpIcon } from "@/components/common/HelpIcon";
 import { usersApi } from "@/lib/users";
+import { api } from "@/lib/apiClient";
 import { useAuthStore } from "@/store/authStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -146,17 +147,10 @@ export default function SettingsPage() {
     setIsConfiguringWebhook(true);
     setWebhookConfigResult(null);
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL || ""}/api/v1/settings/webhook-key/configure-qbittorrent`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        },
+      const response = await api.post(
+        "/v1/settings/webhook-key/configure-qbittorrent",
       );
-      const data = await response.json();
+      const data = response.data;
       setWebhookConfigResult({
         success: data.success,
         message: data.message,
@@ -182,17 +176,10 @@ export default function SettingsPage() {
     setIsConfiguringWebhook(true);
     setWebhookConfigResult(null);
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL || ""}/api/v1/settings/webhook-key/configure-qbittorrent`,
-        {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        },
+      const response = await api.delete(
+        "/v1/settings/webhook-key/configure-qbittorrent",
       );
-      const data = await response.json();
+      const data = response.data;
       setWebhookConfigResult({
         success: data.success,
         message: data.message,
@@ -239,17 +226,11 @@ export default function SettingsPage() {
       }
 
       // Load webhook status
-      const statusRes = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL || ""}/api/v1/settings/webhook-key/status`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        },
-      );
-      if (statusRes.ok) {
-        const status = await statusRes.json();
-        setIsConfigured(status.configured);
+      try {
+        const statusRes = await api.get("/v1/settings/webhook-key/status");
+        setIsConfigured(statusRes.data.configured);
+      } catch {
+        // Silently ignore webhook status errors (endpoint may not exist or user lacks permission)
       }
     } catch (_err) {
       setError("Failed to load settings");

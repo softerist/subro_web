@@ -89,10 +89,19 @@ vi.mock("lucide-react", () => ({
   Save: () => <div data-testid="icon-save" />,
 }));
 
-// Mock API and store
 vi.mock("@/lib/settingsApi", () => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
+}));
+
+// Mock apiClient for webhook endpoints - use vi.hoisted to avoid hoisting issues
+const mockApi = vi.hoisted(() => ({
+  get: vi.fn(),
+  post: vi.fn(),
+  delete: vi.fn(),
+}));
+vi.mock("@/lib/apiClient", () => ({
+  api: mockApi,
 }));
 
 vi.mock("@/lib/users", () => ({
@@ -189,6 +198,8 @@ describe("SettingsPage", () => {
     vi.clearAllMocks();
     vi.mocked(getSettings).mockResolvedValue(mockSettings);
     vi.mocked(updateSettings).mockResolvedValue(mockSettings);
+    // Default mock for webhook status check
+    mockApi.get.mockResolvedValue({ data: { configured: false } });
     // Default mock for admin user
     const state = {
       user: {
@@ -391,16 +402,12 @@ describe("SettingsPage", () => {
 
   it("handles webhook configuration network failure", async () => {
     const user = createUser();
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
 
     // 1. Initial status check (success)
-    fetchSpy.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ configured: false }),
-    } as Response);
+    mockApi.get.mockResolvedValueOnce({ data: { configured: false } });
 
     // 2. Configure request (failure)
-    fetchSpy.mockRejectedValueOnce(new Error("network"));
+    mockApi.post.mockRejectedValueOnce(new Error("network"));
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -421,8 +428,6 @@ describe("SettingsPage", () => {
         ).length,
       ).toBeGreaterThan(0);
     });
-
-    fetchSpy.mockRestore();
   });
 
   afterEach(() => {
@@ -433,11 +438,8 @@ describe("SettingsPage", () => {
   });
 
   it("renders and handles tab switching", async () => {
-    // Need to mock fetch for status check in default render
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({
-      ok: true,
-      json: async () => ({ configured: false }),
-    } as Response);
+    // Mock api.get for status check in default render
+    mockApi.get.mockResolvedValue({ data: { configured: false } });
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -1061,23 +1063,18 @@ describe("SettingsPage", () => {
   it("handles qbittorrent webhook auto configuration success and error", async () => {
     const user = createUser();
     const timeoutSpy = vi.spyOn(global, "setTimeout");
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      // 1. Initial status check
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ configured: false }),
-      } as Response)
-      // 2. Success response
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ success: true, message: "Configured!" }),
-      } as unknown as Response)
-      // 3. Error response
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ success: false, message: "Failed to configure" }),
-      } as unknown as Response);
+
+    // Mock api calls for webhook configuration
+    // 1. Initial status check (configured: false)
+    mockApi.get.mockResolvedValueOnce({ data: { configured: false } });
+    // 2. Success response for configure
+    mockApi.post.mockResolvedValueOnce({
+      data: { success: true, message: "Configured!" },
+    });
+    // 3. Error response for remove
+    mockApi.delete.mockResolvedValueOnce({
+      data: { success: false, message: "Failed to configure" },
+    });
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -1094,7 +1091,9 @@ describe("SettingsPage", () => {
     await user.click(configureBtn);
 
     await waitFor(() => {
-      expect(fetchSpy).toHaveBeenCalledTimes(2); // Status + Configure
+      expect(mockApi.post).toHaveBeenCalledWith(
+        "/v1/settings/webhook-key/configure-qbittorrent",
+      );
       expect(screen.getAllByText("Configured!").length).toBeGreaterThan(0);
     });
     expect(timeoutSpy).toHaveBeenCalled();
@@ -1114,13 +1113,15 @@ describe("SettingsPage", () => {
 
     // Trigger error path on second call
     // Note: After success, button text changes to "Remove Integration"
-    // To trigger error path, we need to click the *new* button
     const removeBtn = screen.getByRole("button", {
       name: /Remove Integration/i,
     });
     await user.click(removeBtn);
 
     await waitFor(() => {
+      expect(mockApi.delete).toHaveBeenCalledWith(
+        "/v1/settings/webhook-key/configure-qbittorrent",
+      );
       expect(screen.getAllByText("Failed to configure").length).toBeGreaterThan(
         0,
       );
@@ -1140,7 +1141,6 @@ describe("SettingsPage", () => {
       ),
     );
 
-    fetchSpy.mockRestore();
     timeoutSpy.mockRestore();
   });
 

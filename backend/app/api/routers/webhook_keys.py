@@ -417,60 +417,56 @@ async def configure_qbittorrent_webhook(
         },
     )
 
-    @router.delete(
-        "/configure-qbittorrent",
-        status_code=status.HTTP_200_OK,
-        summary="Remove qBittorrent integration",
-        description="Revokes the webhook key and disables the autorun script in qBittorrent.",
+
+@router.delete(
+    "/configure-qbittorrent",
+    status_code=status.HTTP_200_OK,
+    summary="Remove qBittorrent integration",
+    description="Revokes the webhook key and disables the autorun script in qBittorrent.",
+)
+async def remove_qbittorrent_configuration(
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_admin_user),
+) -> dict[str, Any]:
+    """Remove qBittorrent integration."""
+    from app.modules.subtitle.services.torrent_client import (
+        disable_webhook_autorun,
+        login_to_qbittorrent,
     )
-    async def remove_qbittorrent_configuration(
-        db: AsyncSession = Depends(get_async_session),
-        current_user: User = Depends(get_current_active_admin_user),
-    ) -> dict[str, Any]:
-        """Remove qBittorrent integration."""
 
-        from app.modules.subtitle.services.torrent_client import (
-            login_to_qbittorrent,
-        )
+    logger.info(f"Removing qBittorrent integration requested by: {current_user.email}")
 
-        logger.info(f"Removing qBittorrent integration requested by: {current_user.email}")
+    # 1. Revoke keys
+    result = await db.execute(
+        select(WebhookKey).where(WebhookKey.is_active == True)  # noqa: E712
+    )
 
-        # 1. Revoke keys
+    keys = result.scalars().all()
 
-        result = await db.execute(
-            select(WebhookKey).where(WebhookKey.is_active == True)  # noqa: E712
-        )
+    for key in keys:
+        key.is_active = False
+        db.add(key)
 
-        keys = result.scalars().all()
+    await db.commit()
 
-        for key in keys:
-            key.is_active = False
+    # 2. Disable in qBittorrent
+    qb_status = "not_connected"
 
-            db.add(key)
+    client = login_to_qbittorrent()
 
-        await db.commit()
-
-        # 2. Disable in qBittorrent
-
-        qb_status = "not_connected"
-
-        client = login_to_qbittorrent()
-
-        if client:
-            if disable_webhook_autorun(client):
-                qb_status = "disabled"
-
-            else:
-                qb_status = "failed_to_disable"
-
+    if client:
+        if disable_webhook_autorun(client):
+            qb_status = "disabled"
         else:
-            qb_status = "connection_failed"
+            qb_status = "failed_to_disable"
+    else:
+        qb_status = "connection_failed"
 
-        return {
-            "success": True,
-            "message": "Integration removed.",
-            "details": {"keys_revoked": len(keys), "qbittorrent_status": qb_status},
-        }
+    return {
+        "success": True,
+        "message": "Integration removed.",
+        "details": {"keys_revoked": len(keys), "qbittorrent_status": qb_status},
+    }
 
 
 async def ensure_default_webhook_key(db: AsyncSession) -> None:
