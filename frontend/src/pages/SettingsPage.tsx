@@ -1509,9 +1509,8 @@ export default function SettingsPage() {
                           .
                         </p>
                         <div className="space-y-2">
-                          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
-                            Command to Paste
-                            <span
+                                                  <div className="text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
+                                                    Command to Paste                            <span
                               className="text-emerald-500 cursor-pointer hover:underline"
                               onClick={async () => {
                                 const cmd = `/usr/bin/bash /opt/subro_web/scripts/qbittorrent-nox-webhook.sh "%F"`;
@@ -1526,7 +1525,7 @@ export default function SettingsPage() {
                             >
                               Click to copy
                             </span>
-                          </Label>
+                          </div>
                           <div
                             className="p-3 bg-muted/50 rounded-lg font-mono text-xs border border-border cursor-pointer hover:bg-muted transition-colors break-all"
                             onClick={async () => {
