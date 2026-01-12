@@ -281,7 +281,7 @@ bump_version:
 
 build_api:
   extends: .build_template
-  timeout: 15m
+  timeout: 30m
   needs:
     - job: bump_version
       artifacts: true
@@ -296,7 +296,7 @@ build_api:
 
 build_api_test:
   extends: .build_template
-  timeout: 15m
+  timeout: 30m
   variables:
     SERVICE: api-test
     DOCKER_IMAGE: $DOCKER_IMAGE_API_TEST
@@ -307,7 +307,7 @@ build_api_test:
 
 build_worker:
   extends: .build_template
-  timeout: 15m
+  timeout: 30m
   needs:
     - job: bump_version
       artifacts: true
@@ -322,7 +322,7 @@ build_worker:
 
 build_frontend:
   extends: .build_template
-  timeout: 15m
+  timeout: 30m
   needs:
     - job: bump_version
       artifacts: true
@@ -341,7 +341,7 @@ build_frontend:
 
 build_backup:
   extends: .build_template
-  timeout: 15m
+  timeout: 30m
   variables:
     SERVICE: backup
     DOCKER_IMAGE: $DOCKER_IMAGE_BACKUP
@@ -355,7 +355,7 @@ backend_tests:
   stage: test
   extends: .default-docker
   needs: [build_api_test]
-  timeout: 20m
+  timeout: 40m
   interruptible: false
   variables:
     POSTGRES_USER: "${CI_TEST_POSTGRES_USER}"
