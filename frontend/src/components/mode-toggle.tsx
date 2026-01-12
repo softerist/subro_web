@@ -20,6 +20,7 @@ export function ModeToggle() {
         checked={isDark}
         onCheckedChange={toggleTheme}
         className="data-[state=checked]:bg-primary"
+        aria-label="Toggle theme"
       />
       <Moon className="h-4 w-4 text-muted-foreground" />
       <Label htmlFor="theme-mode" className="sr-only">
