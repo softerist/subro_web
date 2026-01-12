@@ -2144,7 +2144,7 @@ describe("SettingsPage Coverage", () => {
     );
 
     // Trigger a change to enable save
-    const input = screen.getByLabelText("TMDB API Key");
+    const input = await screen.findByLabelText("TMDB API Key");
     fireEvent.change(input, { target: { value: "CHANGE" } });
 
     await waitFor(() =>
