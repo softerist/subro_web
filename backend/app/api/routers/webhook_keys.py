@@ -317,7 +317,6 @@ async def configure_qbittorrent_webhook(
     from app.crud.crud_app_settings import crud_app_settings
     from app.modules.subtitle.services.torrent_client import (
         configure_webhook_autorun,
-        disable_webhook_autorun,
         login_to_qbittorrent,
     )
 
