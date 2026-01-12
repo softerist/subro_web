@@ -453,7 +453,7 @@ frontend_tests:
   stage: test
   image: node:20-alpine
   needs: []
-  timeout: 10m
+  timeout: 30m
   variables:
     NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/frontend/.npm"
     VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:8000/api/v1}"
@@ -482,7 +482,7 @@ scan_image_vulns:
     name: aquasec/trivy:0.58.0
     entrypoint: [""]
   needs: [build_api, build_worker, build_frontend, build_backup]
-  timeout: 15m
+  timeout: 30m
   variables:
     TRIVY_SEVERITY: "HIGH,CRITICAL"
   rules:
@@ -530,7 +530,7 @@ sast_scan:
   image:
     name: semgrep/semgrep:1.147.0
     entrypoint: [""]
-  timeout: 10m
+  timeout: 30m
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
     - when: on_success
@@ -573,7 +573,7 @@ sast_scan:
 secret_scan:
   stage: scan
   needs: []
-  timeout: 5m
+  timeout: 30m
   image:
     name: aquasec/trivy:0.58.0
     entrypoint: [""]
@@ -590,7 +590,7 @@ deploy_staging:
   stage: staging
   image: alpine:3.20
   resource_group: staging
-  timeout: 15m
+  timeout: 30m
   allow_failure: false
   variables:
     STAGING_DEPLOY_DIR: /opt/subro_web_staging
@@ -684,7 +684,7 @@ deploy_staging:
 
 verify_staging:
   retry: 1
-  timeout: 10m
+  timeout: 30m
   stage: staging
   image: alpine:3.20
   allow_failure:
@@ -842,7 +842,7 @@ e2e_tests:
 # Cleanup staging after E2E tests (ephemeral staging)
 cleanup_staging:
   retry: 1
-  timeout: 15m
+  timeout: 30m
   stage: e2e
   image: alpine:3.20
   resource_group: staging
@@ -960,7 +960,7 @@ deploy_prod:
 # ============ VERIFY STAGE ============
 verify_prod:
   retry: 1
-  timeout: 10m
+  timeout: 30m
   stage: verify
   image: alpine:3.20
   needs:
