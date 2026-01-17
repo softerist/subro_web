@@ -97,9 +97,9 @@ async def test_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, N
     Injects the function-scoped test database session.
     """
 
-    async def override_get_async_session_for_test() -> (
-        AsyncGenerator[AsyncSession, None]
-    ):  # Changed name for clarity
+    async def override_get_async_session_for_test() -> AsyncGenerator[
+        AsyncSession, None
+    ]:  # Changed name for clarity
         """Dependency override to use the test db session."""
         try:
             yield db_session

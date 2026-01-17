@@ -184,9 +184,9 @@ class MockProcessController:
 
 
 @pytest_asyncio.fixture
-async def mock_subprocess_protocol() -> (
-    AsyncGenerator[tuple[AsyncMock, AsyncMock, AsyncMock], None]
-):
+async def mock_subprocess_protocol() -> AsyncGenerator[
+    tuple[AsyncMock, AsyncMock, AsyncMock], None
+]:
     process_mock = AsyncMock(spec=asyncio.subprocess.Process)
     process_mock.pid = 12345
 
@@ -503,9 +503,9 @@ async def test_execute_subtitle_downloader_task_script_timeout(
         except (json.JSONDecodeError, IndexError, KeyError, TypeError):
             continue
 
-    assert (
-        last_status_publish_call is not None
-    ), "No FAILED status message published to Redis on timeout"
+    assert last_status_publish_call is not None, (
+        "No FAILED status message published to Redis on timeout"
+    )
     args, _ = last_status_publish_call
     message_data = json.loads(args[1])
     assert args[0] == expected_channel

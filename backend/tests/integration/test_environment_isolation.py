@@ -65,9 +65,9 @@ class TestEnvironmentConfiguration:
 
         if settings.ENVIRONMENT == "production":
             # In production, URL should contain explicit host
-            assert (
-                "infra-db-1" in db_url or settings.POSTGRES_SERVER in db_url
-            ), f"Database URL should contain explicit host, got: {db_url}"
+            assert "infra-db-1" in db_url or settings.POSTGRES_SERVER in db_url, (
+                f"Database URL should contain explicit host, got: {db_url}"
+            )
 
 
 class TestSetupDatabaseIsolation:
@@ -123,9 +123,9 @@ class TestConfigurationConsistency:
     def test_secret_key_is_set(self) -> None:
         """Verify SECRET_KEY is configured (not default)."""
         assert settings.SECRET_KEY, "SECRET_KEY must be set"
-        assert (
-            len(settings.SECRET_KEY) >= 32
-        ), "SECRET_KEY should be at least 32 characters for security"
+        assert len(settings.SECRET_KEY) >= 32, (
+            "SECRET_KEY should be at least 32 characters for security"
+        )
 
     def test_jwt_secrets_are_unique(self) -> None:
         """Verify JWT secrets are distinct from each other."""
@@ -141,9 +141,9 @@ class TestConfigurationConsistency:
             secrets.append(settings.VERIFICATION_TOKEN_SECRET)
 
         # All secrets should be unique
-        assert len(secrets) == len(
-            set(secrets)
-        ), "JWT secrets should be unique from each other to prevent token confusion attacks"
+        assert len(secrets) == len(set(secrets)), (
+            "JWT secrets should be unique from each other to prevent token confusion attacks"
+        )
 
     def test_cors_origins_configured(self) -> None:
         """Verify CORS origins are configured in non-development environments."""
