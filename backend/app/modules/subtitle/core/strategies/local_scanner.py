@@ -92,11 +92,11 @@ class LocalScanner(ProcessingStrategy):
                             processed_content
                         )
                         # Save to standard path
-                        file_utils.write_srt_file(target_ro_path, processed_content)
+                        written_path = file_utils.write_srt_file(target_ro_path, processed_content)
 
-                        if Path(target_ro_path).exists():
+                        if Path(written_path).exists():
                             self.logger.info(
-                                f"Saved processed local subtitle to standard path: {target_ro_path}"
+                                f"Saved processed local subtitle to standard path: {written_path}"
                             )
                             # Remove original non-standard file
                             try:
@@ -111,7 +111,7 @@ class LocalScanner(ProcessingStrategy):
 
                             # Update context
                             context.found_final_ro = True
-                            context.final_ro_sub_path_or_status = target_ro_path
+                            context.final_ro_sub_path_or_status = written_path
                             local_ro_processed = True
                             break  # Exit loop after finding and processing one RO file
                         else:

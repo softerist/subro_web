@@ -497,7 +497,7 @@ class OnlineFetcher(ProcessingStrategy):
                         str(temp_bin_path)
                     )  # Reads with detected encoding
                     file_utils.write_srt_file(
-                        extracted_sub_file_source_path, content_str
+                        extracted_sub_file_source_path, content_str, allow_fallback=False
                     )  # Writes as UTF-8 BOM
                     self.logger.debug(
                         f"Decoded and saved OpenSubtitles sub to temp SRT: {extracted_sub_file_source_path}"
@@ -550,14 +550,14 @@ class OnlineFetcher(ProcessingStrategy):
                 )
 
                 # Write to final destination using utility (handles UTF-8 BOM)
-                file_utils.write_srt_file(target_save_path, processed_content)
+                written_path = file_utils.write_srt_file(target_save_path, processed_content)
 
                 # Verify write success
-                if Path(target_save_path).exists() and Path(target_save_path).stat().st_size > 0:
+                if Path(written_path).exists() and Path(written_path).stat().st_size > 0:
                     self.logger.info(
-                        f"Saved processed subtitle to final destination: {target_save_path}"
+                        f"Saved processed subtitle to final destination: {written_path}"
                     )
-                    final_subtitle_path = target_save_path
+                    final_subtitle_path = written_path
                 else:
                     raise RuntimeError(
                         f"Failed to write valid processed subtitle file to {target_save_path}"

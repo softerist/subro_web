@@ -667,7 +667,9 @@ def check_and_extract_embedded_subtitle(  # noqa: C901
                     else:
                         # Use file_utils if available, otherwise basic write
                         if "file_utils" in globals() and hasattr(file_utils, "write_srt_file"):
-                            file_utils.write_srt_file(target_sub_path, processed_content)
+                            target_sub_path = file_utils.write_srt_file(
+                                target_sub_path, processed_content
+                            )
                         else:
                             with Path(target_sub_path).open("w", encoding="utf-8") as f:
                                 f.write(processed_content)
@@ -1089,7 +1091,9 @@ def extract_embedded_stream_by_index(  # noqa: C901
                                 processed_content
                             )
                             if processed_content and processed_content.strip():
-                                file_utils.write_srt_file(output_subtitle_path, processed_content)
+                                file_utils.write_srt_file(
+                                    output_subtitle_path, processed_content, allow_fallback=False
+                                )
                                 processed = True
                             else:
                                 logger.warning(

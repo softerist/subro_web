@@ -277,7 +277,9 @@ def post_process_completed_torrents(target_directory: str) -> None:  # noqa: C90
                                 processed_content
                             )
                             if processed_content != sub_content:
-                                file_utils.write_srt_file(original_full_path, processed_content)
+                                file_utils.write_srt_file(
+                                    original_full_path, processed_content, allow_fallback=False
+                                )
                                 logger.info(
                                     f"{log_prefix}Applied fixes to existing RO file: {Path(original_full_path).name}"
                                 )
@@ -299,7 +301,9 @@ def post_process_completed_torrents(target_directory: str) -> None:  # noqa: C90
                             processed_content = subtitle_parser.ensure_correct_timestamp_format(
                                 processed_content
                             )
-                            file_utils.write_srt_file(temp_ro_path, processed_content)
+                            file_utils.write_srt_file(
+                                temp_ro_path, processed_content, allow_fallback=False
+                            )
 
                             # Attempt rename via qBittorrent API
                             if torrent_client.rename_torrent_file(

@@ -1,4 +1,5 @@
 import codecs  # For reading/writing with specific encodings like utf-8-sig
+import hashlib
 import logging
 import os
 import re  # For filename manipulation
@@ -177,21 +178,81 @@ def read_srt_file(file_path: str) -> str:
     raise OSError(f"Could not read file {file_path_str} with attempted encodings.")
 
 
-def write_srt_file(file_path: str, content: str) -> None:
-    """Writes content to an SRT file using UTF-8 with BOM encoding."""
-    file_path_str = str(file_path)  # Ensure string path
+def _ensure_writable_target(target_path: Path) -> None:
     try:
-        # Ensure the directory exists using pathlib
-        Path(file_path_str).parent.mkdir(parents=True, exist_ok=True)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise PermissionError(
+            f"Cannot create or access directory '{target_path.parent}': {e}"
+        ) from e
 
-        # Write with utf-8-sig to include BOM (Byte Order Mark)
-        with codecs.open(file_path_str, "w", encoding="utf-8-sig") as file:
-            # Ensure consistent line endings (replace \r\n and \r with \n)
-            content_normalized = content.replace("\r\n", "\n").replace("\r", "\n")
-            file.write(content_normalized)
-        logging.debug(
-            f"Successfully wrote {len(content)} chars to {Path(file_path_str).name} (UTF-8 w/ BOM)."
+    if not os.access(str(target_path.parent), os.W_OK):
+        raise PermissionError(
+            f"Target directory is not writable: '{target_path.parent}'. "
+            "Fix permissions or set SUBTITLE_FALLBACK_DIR."
         )
+
+    if target_path.exists() and not os.access(str(target_path), os.W_OK):
+        raise PermissionError(
+            f"Target file is not writable: '{target_path}'. "
+            "Fix permissions or set SUBTITLE_FALLBACK_DIR."
+        )
+
+
+def _write_srt_to_path(target_path: Path, content: str) -> None:
+    # Write with utf-8-sig to include BOM (Byte Order Mark)
+    with codecs.open(str(target_path), "w", encoding="utf-8-sig") as file:
+        # Ensure consistent line endings (replace \r\n and \r with \n)
+        content_normalized = content.replace("\r\n", "\n").replace("\r", "\n")
+        file.write(content_normalized)
+
+
+def _resolve_fallback_srt_path(primary_path: Path) -> Path | None:
+    fallback_root = os.getenv("SUBTITLE_FALLBACK_DIR")
+    if not fallback_root:
+        return None
+
+    try:
+        path_hash = hashlib.sha256(str(primary_path.parent).encode("utf-8")).hexdigest()[:12]
+        return Path(fallback_root) / path_hash / primary_path.name
+    except Exception:
+        return None
+
+
+def write_srt_file(file_path: str, content: str, *, allow_fallback: bool = True) -> str:
+    """
+    Writes content to an SRT file using UTF-8 with BOM encoding.
+
+    If allow_fallback is True and the target directory is not writable, this function will
+    attempt to write to a fallback directory defined by SUBTITLE_FALLBACK_DIR.
+    """
+    file_path_str = str(file_path)  # Ensure string path
+    primary_path = Path(file_path_str)
+    try:
+        _ensure_writable_target(primary_path)
+        _write_srt_to_path(primary_path, content)
+        logging.debug(
+            f"Successfully wrote {len(content)} chars to {primary_path.name} (UTF-8 w/ BOM)."
+        )
+        return file_path_str
+    except PermissionError as perm_err:
+        fallback_path = _resolve_fallback_srt_path(primary_path) if allow_fallback else None
+        if fallback_path:
+            try:
+                _ensure_writable_target(fallback_path)
+                _write_srt_to_path(fallback_path, content)
+                logging.warning(
+                    "Primary subtitle path not writable (%s). Wrote to fallback path: %s",
+                    primary_path,
+                    fallback_path,
+                )
+                return str(fallback_path)
+            except Exception as fallback_err:
+                logging.error(
+                    "Fallback write failed for %s: %s", fallback_path, fallback_err, exc_info=True
+                )
+        logging.error(f"Error writing SRT file {file_path_str}: {perm_err}", exc_info=True)
+        raise
     except Exception as e:
         logging.error(f"Error writing SRT file {file_path_str}: {e}", exc_info=True)
         raise  # Re-raise error to signal failure
