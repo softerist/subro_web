@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.log_utils import sanitize_for_log as _sanitize_for_log
 from app.core.security import decrypt_value, encrypt_value
 from app.core.users import get_current_active_admin_user
 from app.db.models.user import User
@@ -27,14 +28,6 @@ router = APIRouter(prefix="/settings/webhook-key", tags=["Webhook Key"])
 # Allowed IPs for localhost-only endpoint
 LOCALHOST_IPS = {"127.0.0.1", "::1", "localhost"}
 DOCKER_GATEWAY_PREFIXES = ("172.17.", "172.18.", "172.19.", "172.20.", "172.21.")
-
-
-def _sanitize_for_log(value: str) -> str:
-    """Sanitize user-controlled strings for safe logging.
-
-    Removes newlines and carriage returns to prevent log injection/forging.
-    """
-    return value.replace("\n", "").replace("\r", "")
 
 
 class WebhookKeyResponse(BaseModel):

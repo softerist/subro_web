@@ -10,20 +10,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
 from app.core.config import settings
+from app.core.log_utils import sanitize_for_log as _sanitize_for_log
 from app.core.security import current_active_superuser
 from app.db.models.user import User
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/files", tags=["Files"])
-
-
-def _sanitize_for_log(value: str) -> str:
-    """Sanitize user-controlled strings for safe logging.
-
-    Removes newlines and carriage returns to prevent log injection/forging.
-    """
-    return value.replace("\n", "").replace("\r", "")
 
 
 @router.get(
@@ -51,13 +44,17 @@ async def download_file(
             detail="File not found",
         ) from e
     except RuntimeError as e:  # e.g. symlink loop
-        logger.warning(f"Path resolution failed for download '{path}': {e}")
+        logger.warning("Path resolution failed for download '%s': %s", _sanitize_for_log(path), e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Path could not be resolved.",
         ) from e
     except Exception as e:  # NOSONAR
-        logger.warning(f"Unexpected error during path resolution for download '{path}': {e}")
+        logger.warning(
+            "Unexpected error during path resolution for download '%s': %s",
+            _sanitize_for_log(path),
+            e,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Path resolution failed.",

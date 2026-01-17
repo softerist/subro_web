@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import crud
 from app.core.api_key_auth import get_current_user_with_api_key_or_jwt
 from app.core.config import settings
+from app.core.log_utils import sanitize_for_log as _sanitize_for_log
 from app.core.rate_limit import get_api_key_or_ip, limiter
 from app.core.security import current_active_user
 from app.db.models.job import Job, JobStatus
@@ -428,11 +429,10 @@ async def create_job_via_webhook(
 
     validated_key = await validate_webhook_key(webhook_key, db, required_scope="jobs:create")
     if validated_key:
-        logger.info(f"Webhook authenticated via X-Webhook-Key: {validated_key.preview}")
+        logger.info("Webhook authenticated via X-Webhook-Key: %s", validated_key.preview)
     else:
-        logger.warning(
-            f"Invalid webhook key from {request.client.host if request.client else 'unknown'}"
-        )
+        client_host = request.client.host if request.client else "unknown"
+        logger.warning("Invalid webhook key from %s", _sanitize_for_log(client_host))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid webhook key",
@@ -456,7 +456,7 @@ async def create_job_via_webhook(
             detail="No admin user configured",
         )
 
-    logger.info(f"Webhook job submission for path: {job_in.folder_path}")
+    logger.info("Webhook job submission for path: %s", _sanitize_for_log(job_in.folder_path))
 
     # 3. Validate path and create job (reuse existing logic)
     db_paths = await crud.storage_path.get_multi(db)
@@ -504,7 +504,12 @@ async def list_jobs(
     ] = 100,
 ) -> list[Job]:  # Use List for Python < 3.9
     logger.info(
-        f"User '{current_user.email}' (ID: {current_user.id}, Superuser: {current_user.is_superuser}) listing jobs. Skip: {skip}, Limit: {limit}"
+        "User '%s' (ID: %s, Superuser: %s) listing jobs. Skip: %d, Limit: %d",
+        _sanitize_for_log(current_user.email),
+        current_user.id,
+        current_user.is_superuser,
+        skip,
+        limit,
     )
     if current_user.is_superuser:
         jobs = await crud.job.get_multi(db, skip=skip, limit=limit)
@@ -517,7 +522,7 @@ async def list_jobs(
         jobs is None
     ):  # crud.job.get_multi might return None on error or if not found (though usually empty list)
         jobs = []
-    logger.info(f"Found {len(jobs)} jobs for user '{current_user.email}'.")
+    logger.info("Found %d jobs for user '%s'.", len(jobs), _sanitize_for_log(current_user.email))
     return jobs
 
 
@@ -552,22 +557,37 @@ async def get_job_details(
     current_user: Annotated[User, Depends(current_active_user)],
 ) -> Job:
     logger.info(
-        f"User '{current_user.email}' (ID: {current_user.id}) requesting details for job ID: {job_id}"
+        "User '%s' (ID: %s) requesting details for job ID: %s",
+        _sanitize_for_log(current_user.email),
+        current_user.id,
+        job_id,
     )
     job = await crud.job.get(db, id=job_id)  # Assuming crud.job.get fetches the job
     if not job:
-        logger.warning(f"Job ID {job_id} not found when requested by user '{current_user.email}'.")
+        logger.warning(
+            "Job ID %s not found when requested by user '%s'.",
+            job_id,
+            _sanitize_for_log(current_user.email),
+        )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="JOB_NOT_FOUND")
 
     if not current_user.is_superuser and job.user_id != current_user.id:
-        logger.warning(  # Changed to warning as it's a denied access, not an error in system logic
-            f"User '{current_user.email}' (ID: {current_user.id}) FORBIDDEN from accessing job ID {job_id} owned by user ID {job.user_id}."
+        logger.warning(
+            "User '%s' (ID: %s) FORBIDDEN from accessing job ID %s owned by user ID %s.",
+            _sanitize_for_log(current_user.email),
+            current_user.id,
+            job_id,
+            job.user_id,
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="NOT_AUTHORIZED_TO_ACCESS_JOB"
         )
 
-    logger.info(f"Successfully retrieved job ID {job_id} for user '{current_user.email}'.")
+    logger.info(
+        "Successfully retrieved job ID %s for user '%s'.",
+        job_id,
+        _sanitize_for_log(current_user.email),
+    )
     return job
 
 
@@ -596,18 +616,28 @@ async def delete_or_cancel_job(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ) -> Job:
-    logger.info(f"User '{current_user.email}' attempting to cancel/delete job '{job_id}'.")
+    logger.info(
+        "User '%s' attempting to cancel/delete job '%s'.",
+        _sanitize_for_log(current_user.email),
+        job_id,
+    )
 
     job = await crud.job.get(db, id=job_id)
     if not job:
         logger.warning(
-            f"Cancel/Delete request for non-existent job '{job_id}' by user '{current_user.email}'."
+            "Cancel/Delete request for non-existent job '%s' by user '%s'.",
+            job_id,
+            _sanitize_for_log(current_user.email),
         )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="JOB_NOT_FOUND")
 
     # Authorization check
     if not current_user.is_superuser and job.user_id != current_user.id:
-        logger.warning(f"User '{current_user.email}' unauthorized to modify job '{job_id}'.")
+        logger.warning(
+            "User '%s' unauthorized to modify job '%s'.",
+            _sanitize_for_log(current_user.email),
+            job_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="NOT_AUTHORIZED_TO_MODIFY_JOB"
         )
@@ -617,7 +647,9 @@ async def delete_or_cancel_job(
 
     if celery_task_id_to_revoke:
         logger.info(
-            f"Job '{job_id}' being deleted has active task '{celery_task_id_to_revoke}'. Sending revoke signal."
+            "Job '%s' being deleted has active task '%s'. Sending revoke signal.",
+            job_id,
+            celery_task_id_to_revoke,
         )
         try:
             # We send SIGTERM to the worker process.
@@ -627,13 +659,15 @@ async def delete_or_cancel_job(
             celery_app.control.revoke(celery_task_id_to_revoke, terminate=True, signal="SIGTERM")
         except Exception as e:
             logger.error(
-                f"Failed to send revoke command for Celery task_id '{celery_task_id_to_revoke}': {e}"
+                "Failed to send revoke command for Celery task_id '%s': %s",
+                celery_task_id_to_revoke,
+                e,
             )
             # We proceed to delete anyway, as the user requested removal.
 
     # Always Delete
     try:
-        logger.info(f"Removing job '{job_id}' from database.")
+        logger.info("Removing job '%s' from database.", job_id)
         await db.delete(job)
         await db.commit()
         # Returns the job object as it was before deletion (with old status)

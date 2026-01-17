@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
+from app.core.log_utils import sanitize_for_log as _sanitize_for_log
 from app.core.users import current_active_superuser, current_active_user
 from app.db.models.user import User
 from app.db.session import get_async_session
@@ -21,14 +22,6 @@ router = APIRouter(
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _sanitize_for_log(value: str) -> str:
-    """Sanitize user-controlled strings for safe logging.
-
-    Removes newlines and carriage returns to prevent log injection/forging.
-    """
-    return value.replace("\n", "").replace("\r", "")
 
 
 @router.get("/", response_model=list[StoragePathRead])

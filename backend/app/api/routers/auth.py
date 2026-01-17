@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.log_utils import sanitize_for_log as _sanitize_for_log
 from app.core.rate_limit import get_real_client_ip, limiter
 from app.core.request_context import set_actor
 from app.core.security_logger import security_log
@@ -80,7 +81,7 @@ async def _apply_login_delay(db: AsyncSession, email: str) -> None:
 
     delay_status = await get_progressive_delay(db, email)
     if delay_status.is_suspended:
-        logger.warning(f"Login attempt for suspended user: {email}")
+        logger.warning("Login attempt for suspended user: %s", _sanitize_for_log(email))
         # Fetch user manually for audit log (DelayStatus doesn't have user object)
         from sqlalchemy import select
 
@@ -100,14 +101,16 @@ async def _apply_login_delay(db: AsyncSession, email: str) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="LOGIN_ACCOUNT_SUSPENDED")
 
     if delay_status.is_locked:
-        logger.warning(f"Login attempt for locked user: {email}")
+        logger.warning("Login attempt for locked user: %s", _sanitize_for_log(email))
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=delay_status.message or "LOGIN_ACCOUNT_LOCKED",
         )
 
     if delay_status.delay_seconds > 0:
-        logger.info(f"Applying {delay_status.delay_seconds}s delay for {email}")
+        logger.info(
+            "Applying %ss delay for %s", delay_status.delay_seconds, _sanitize_for_log(email)
+        )
         await asyncio.sleep(delay_status.delay_seconds)
 
 
@@ -142,7 +145,9 @@ async def _raise_inactive_user(
     client_ip: str,
     email: str,
 ) -> None:
-    logger.warning(f"Login attempt for inactive user: {user.email} (ID: {user.id})")
+    logger.warning(
+        "Login attempt for inactive user: %s (ID: %s)", _sanitize_for_log(user.email), user.id
+    )
     security_log.failed_login(client_ip, email, "USER_INACTIVE")
     await audit_service.log_event(
         db,
@@ -208,13 +213,13 @@ async def _maybe_require_mfa(
     if trusted_device_token:
         is_trusted = await verify_trusted_device(db, str(user.id), trusted_device_token)
         if is_trusted:
-            logger.info(f"Trusted device login for {user.email}, skipping MFA")
+            logger.info("Trusted device login for %s, skipping MFA", _sanitize_for_log(user.email))
             return None
         # Invalid trusted device, require MFA
-        logger.info(f"MFA required for {user.email} (invalid trusted device)")
+        logger.info("MFA required for %s (invalid trusted device)", _sanitize_for_log(user.email))
     else:
         # No trusted device, require MFA
-        logger.info(f"MFA required for {user.email}")
+        logger.info("MFA required for %s", _sanitize_for_log(user.email))
 
     _set_mfa_cookie(response, str(user.id))
     return {"requires_mfa": True, "message": "MFA verification required"}
@@ -242,7 +247,11 @@ async def custom_login(
     user_agent = request.headers.get("User-Agent")
     email = credentials.username.lower()
 
-    logger.debug(f"Login attempt for user: {email} from IP: {client_ip}")
+    logger.debug(
+        "Login attempt for user: %s from IP: %s",
+        _sanitize_for_log(email),
+        _sanitize_for_log(client_ip),
+    )
 
     # Apply progressive delay based on failed attempts (exponential backoff)
     await _apply_login_delay(db, email)
@@ -263,7 +272,7 @@ async def custom_login(
     # We allow login but flag the response so frontend shows persistent warning
     mfa_setup_required = user.is_superuser and not user.mfa_enabled
     if mfa_setup_required:
-        logger.warning(f"Superuser {user.email} logged in without MFA enabled")
+        logger.warning("Superuser %s logged in without MFA enabled", _sanitize_for_log(user.email))
 
     # Check if MFA is required
     mfa_response = await _maybe_require_mfa(request, response, db, user)
@@ -287,7 +296,7 @@ async def custom_login(
         samesite=cookie_transport.cookie_samesite,
     )
 
-    logger.info(f"User logged in successfully: {user.email} (ID: {user.id})")
+    logger.info("User logged in successfully: %s (ID: %s)", _sanitize_for_log(user.email), user.id)
 
     # Return token with MFA setup warning for admins without MFA
     result: dict[str, str | bool] = {"access_token": access_token, "token_type": "bearer"}
@@ -373,7 +382,7 @@ async def custom_refresh(
         samesite=cookie_transport.cookie_samesite,
     )
 
-    logger.info(f"Token refreshed for user: {user.email} (ID: {user.id})")
+    logger.info("Token refreshed for user: %s (ID: %s)", _sanitize_for_log(user.email), user.id)
     return Token(access_token=new_access_token, token_type="bearer")
 
 
@@ -464,7 +473,8 @@ async def change_password(
     )
     if not verified:
         logger.warning(
-            f"Password change failed for {current_user.email}: incorrect current password"
+            "Password change failed for %s: incorrect current password",
+            _sanitize_for_log(current_user.email),
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect."
@@ -494,7 +504,10 @@ async def change_password(
         },
     )
 
-    logger.info(f"Password changed successfully for {current_user.email}. Sessions invalidated.")
+    logger.info(
+        "Password changed successfully for %s. Sessions invalidated.",
+        _sanitize_for_log(current_user.email),
+    )
     from app.db.session import FastAPISessionLocal
 
     if FastAPISessionLocal:
@@ -519,7 +532,9 @@ async def custom_logout(
     db: AsyncSession = Depends(get_async_session),
 ) -> dict[str, str]:
     logger.info(
-        f"Logout attempt for {current_user.email}. Deleting cookie: {cookie_transport.cookie_name}"
+        "Logout attempt for %s. Deleting cookie: %s",
+        _sanitize_for_log(current_user.email),
+        cookie_transport.cookie_name,
     )
 
     # Audit Log: Logout
@@ -598,7 +613,7 @@ async def register_user(
         )
         await db.commit()
 
-        logger.info(f"New user registered: {created_user.email}")
+        logger.info("New user registered: %s", _sanitize_for_log(created_user.email))
         return UserRead.model_validate(created_user)
 
     except exceptions.UserAlreadyExists:

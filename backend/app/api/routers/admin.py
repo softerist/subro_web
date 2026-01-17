@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 # Project-specific imports
 from app.core.config import settings  # Ensures settings is available
+from app.core.log_utils import sanitize_for_log as _sanitize_for_log
 from app.core.users import (
     UserManager,  # For type hinting
     current_active_superuser,
@@ -90,7 +91,7 @@ async def list_users_admin(
     )
     result = await session.execute(stmt)
     users = result.scalars().all()
-    logger.info(f"Admin listed {len(users)} users (skip={skip}, limit={limit}).")
+    logger.info("Admin listed %d users (skip=%d, limit=%d).", len(users), skip, limit)
     return users
 
 
@@ -104,7 +105,7 @@ async def get_user_by_id_admin(
     target_user: User = Depends(get_target_user_or_404),
 ) -> User:
     """Retrieves details for a specific user by their ID."""
-    logger.info(f"Admin retrieved details for user_id: {target_user.id}")
+    logger.info("Admin retrieved details for user_id: %s", target_user.id)
     return target_user
 
 
@@ -354,7 +355,9 @@ async def delete_user_by_id_admin(
 
         await session.commit()
         logger.info(
-            f"Admin permanently deleted user: {user_email_to_delete} (ID: {user_id_to_delete})"
+            "Admin permanently deleted user: %s (ID: %s)",
+            _sanitize_for_log(user_email_to_delete),
+            user_id_to_delete,
         )
     except Exception as e:  # Catching a general Exception here
         await session.rollback()
@@ -447,7 +450,10 @@ async def update_open_signup_setting(
 
     await session.commit()
     logger.info(
-        f"Superuser {current_user.email} changed open_signup from {old_value} to {update_data.open_signup}"
+        "Superuser %s changed open_signup from %s to %s",
+        _sanitize_for_log(current_user.email),
+        old_value,
+        update_data.open_signup,
     )
 
     return OpenSignupResponse(open_signup=app_settings.open_signup)
