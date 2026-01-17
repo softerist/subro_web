@@ -171,16 +171,16 @@ class Translator(ProcessingStrategy):
                     )
 
                 # Save the translated content (using file_utils for consistency)
-                file_utils.write_srt_file(target_ro_path, result.translated_content)
+                written_path = file_utils.write_srt_file(target_ro_path, result.translated_content)
 
                 # Verify save
-                if Path(target_ro_path).exists() and Path(target_ro_path).stat().st_size > 0:
+                if Path(written_path).exists() and Path(written_path).stat().st_size > 0:
                     self.logger.info(
-                        f"Subtitle Translation successful to '{Path(target_ro_path).name}' (using {result.service_used})."
+                        f"Subtitle Translation successful to '{Path(written_path).name}' (using {result.service_used})."
                     )
                     # Update context: RO goal achieved
                     context.found_final_ro = True
-                    context.final_ro_sub_path_or_status = target_ro_path
+                    context.final_ro_sub_path_or_status = written_path
                     # Optional: Clear the final_en_sub_path now that RO exists?
                     # context.final_en_sub_path = None
                     # context.found_final_en = False # Or keep EN info? Let's keep EN for now.

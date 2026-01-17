@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re  # Added for regex parsing and SRT corrections
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -124,6 +125,36 @@ NLTK_PUNKT_AVAILABLE = False
 TRANSLATION_LOG_FILE = "translation_log.json"  # Default
 
 
+def _is_writable_log_path(path: Path) -> bool:
+    try:
+        if path.exists():
+            return os.access(str(path), os.W_OK)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return os.access(str(path.parent), os.W_OK)
+    except OSError:
+        return False
+
+
+def _resolve_translation_log_file() -> str:
+    candidates: list[Path] = []
+    env_override = os.getenv("TRANSLATION_LOG_FILE") or os.getenv("TRANSLATION_LOG_PATH")
+    if env_override:
+        candidates.append(Path(env_override))
+
+    candidates.append(Path("/app/logs/translation_log.json"))
+    try:
+        candidates.append(Path(__file__).resolve().parents[3] / "logs" / "translation_log.json")
+    except Exception:
+        pass
+    candidates.append(Path(tempfile.gettempdir()) / "subro_web" / "logs" / "translation_log.json")
+
+    for candidate in candidates:
+        if _is_writable_log_path(candidate):
+            return str(candidate)
+
+    return "translation_log.json"
+
+
 def _ensure_initialized() -> None:
     """
     Performs one-time initialization (NLTK check, Log file path) that requires logging to be ready.
@@ -138,24 +169,7 @@ def _ensure_initialized() -> None:
     else:
         NLTK_PUNKT_AVAILABLE = False
 
-    # Preferred: Docker container path
-    container_log_path = Path("/app/logs/translation_log.json")
-
-    if container_log_path.parent.exists():
-        # We are likely in the container or have the structure set up
-        TRANSLATION_LOG_FILE = str(container_log_path)
-    else:
-        # Fallback: resolve app/logs relative to this file, independent of CWD.
-        try:
-            local_app_logs = Path(__file__).resolve().parents[3] / "logs" / "translation_log.json"
-            if local_app_logs.parent.exists():
-                TRANSLATION_LOG_FILE = str(local_app_logs)
-            else:
-                # Last resort: absolute fallback or CWD
-                TRANSLATION_LOG_FILE = "translation_log.json"
-        except Exception as e:
-            logger.warning(f"Could not resolve optimal log path: {e}. Using default.")
-            TRANSLATION_LOG_FILE = "translation_log.json"
+    TRANSLATION_LOG_FILE = _resolve_translation_log_file()
 
     logger.info(f"Translation log file path set to: {TRANSLATION_LOG_FILE}")
 
@@ -2063,15 +2077,33 @@ class TranslationManager:
 
         # 2. Update JSON Log (Maintain for backward compatibility/backup)
         try:
+            log_path = Path(TRANSLATION_LOG_FILE)
+            if not _is_writable_log_path(log_path):
+                logger.warning(
+                    "Translation log path not writable or accessible: %s. Skipping JSON log.",
+                    TRANSLATION_LOG_FILE,
+                )
+                return
+
             log_data: dict[str, Any] = {
                 "log_schema_version": "1.1",  # Add versioning
                 "cumulative_totals": {"deepl": 0, "google": 0, "overall": 0, "last_updated": None},
                 "jobs": [],
                 "deepl_keys_snapshot": {},
             }
-            if Path(TRANSLATION_LOG_FILE).exists():
+            try:
+                log_exists = log_path.exists()
+            except PermissionError as e:
+                logger.warning(
+                    "No permission to access translation log file '%s': %s. Skipping JSON log.",
+                    TRANSLATION_LOG_FILE,
+                    e,
+                )
+                return
+
+            if log_exists:
                 try:
-                    with Path(TRANSLATION_LOG_FILE).open(encoding="utf-8") as f:
+                    with log_path.open(encoding="utf-8") as f:
                         log_data = cast(dict[str, Any], json.load(f))
                     # Migrate older log formats
                     if "total_chars" in log_data and "cumulative_totals" not in log_data:
@@ -2143,12 +2175,12 @@ class TranslationManager:
 
             # Write updated log data back to file
             try:
-                log_dir = Path(TRANSLATION_LOG_FILE).parent
+                log_dir = log_path.parent
                 if log_dir and not log_dir.exists():
                     log_dir.mkdir(parents=True, exist_ok=True)
                     logger.info(f"Created directory for log file: {log_dir}")
 
-                with Path(TRANSLATION_LOG_FILE).open("w", encoding="utf-8") as f:
+                with log_path.open("w", encoding="utf-8") as f:
                     json.dump(log_data, f, indent=2, ensure_ascii=False)
 
             except OSError as e:
