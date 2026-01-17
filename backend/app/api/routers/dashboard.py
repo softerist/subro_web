@@ -134,7 +134,7 @@ async def reorder_tiles(
             .where(DashboardTile.id == item.id)
             .values(order_index=item.order_index)
         )
-        # nosemgrep: generic-sql-fastapi, fastapi-aiosqlite-sqli - SQLAlchemy uses parameterized WHERE, item.id is validated UUID
+        # nosemgrep: fastapi-without-url-path-aiosqlite-sqli, generic-sql-fastapi - SQLAlchemy ORM parameterized
         await db.execute(stmt)
 
     await db.commit()

@@ -89,7 +89,7 @@ async def list_users_admin(
             User.created_at.desc() if hasattr(User, "created_at") else User.id.desc()
         )  # Defensive check
     )
-    # nosemgrep: generic-sql-fastapi, fastapi-aiosqlite-sqli - SQLAlchemy ORM uses parameterized .offset()/.limit()
+    # nosemgrep: fastapi-without-url-path-aiosqlite-sqli, generic-sql-fastapi - SQLAlchemy ORM parameterized
     result = await session.execute(stmt)
     users = result.scalars().all()
     logger.info("Admin listed %d users (skip=%d, limit=%d).", len(users), skip, limit)
