@@ -18,6 +18,7 @@ class SettingsBase(BaseModel):
     """Base schema with common fields for settings."""
 
     # qBittorrent (non-sensitive)
+    qbittorrent_connection_mode: str | None = None  # "direct" | "docker_host" | "custom"
     qbittorrent_host: str | None = None
     qbittorrent_port: int | None = None
     qbittorrent_username: str | None = None

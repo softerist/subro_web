@@ -37,10 +37,16 @@ class AppSettings(Base):
     deepl_api_keys: Mapped[str | None] = mapped_column(Text, nullable=True)  # Encrypted JSON array
 
     # --- qBittorrent Settings ---
+    qbittorrent_connection_mode: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, default="direct"
+    )  # "direct" | "docker_host" | "custom"
     qbittorrent_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
     qbittorrent_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     qbittorrent_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     qbittorrent_password: Mapped[str | None] = mapped_column(Text, nullable=True)  # Encrypted
+    qbittorrent_webhook_key_encrypted: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # Encrypted raw webhook key for script retrieval
 
     # --- Paths ---
     # Stored as JSON array string (e.g., '["/mnt/media", "/data/videos"]')

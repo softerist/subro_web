@@ -441,32 +441,12 @@ if [ "$DRY_RUN" = "true" ]; then
 fi
 
 # ============================================
-# Webhook Secret Loading
-# ============================================
-if [ -n "$SUBRO_API_KEY_ARG" ]; then
-  SUBRO_API_KEY="$SUBRO_API_KEY_ARG"
-  log_info "Using SUBRO_API_KEY from command line argument."
-elif [ -f "$WEBHOOK_ENV_FILE" ]; then
-  set +u
-  # shellcheck disable=SC1090
-  source "$WEBHOOK_ENV_FILE"
-  set -u
-  log_info "Webhook key loaded from: $WEBHOOK_ENV_FILE"
-elif [ -n "${SUBRO_API_KEY:-}" ]; then
-  log_info "Using SUBRO_API_KEY from environment."
-else
-  log_error "Webhook key not found."
-  log_error "Expected: --api-key ARG, WEBHOOK_ENV_FILE, or SUBRO_API_KEY in environment."
-  log_error "Generate a webhook key in Settings > qBittorrent in the Subro web UI."
-  exit 1
-fi
-
-# ============================================
 # Environment Variable Validation
 # ============================================
 SUBRO_API_BASE_URL="${SUBRO_API_BASE_URL:-}"
 if [ -z "$SUBRO_API_BASE_URL" ]; then
   log_error "SUBRO_API_BASE_URL is not set."
+  log_error "Set it in /opt/subro_web/.env or as an environment variable."
   exit 1
 fi
 
@@ -475,17 +455,71 @@ if [[ ! "$SUBRO_API_BASE_URL" =~ ^https?:// ]]; then
   exit 1
 fi
 
-SUBRO_API_KEY="${SUBRO_API_KEY:-}"
-if [ -z "$SUBRO_API_KEY" ]; then
-  log_error "SUBRO_API_KEY is empty after loading secrets."
-  exit 1
+# ============================================
+# Webhook Secret Loading
+# ============================================
+# Priority: 1. Command line arg, 2. Environment variable, 3. Fetch from Subro API
+if [ -n "$SUBRO_API_KEY_ARG" ]; then
+  SUBRO_API_KEY="$SUBRO_API_KEY_ARG"
+  log_info "Using SUBRO_API_KEY from command line argument."
+elif [ -n "${SUBRO_API_KEY:-}" ]; then
+  log_info "Using SUBRO_API_KEY from environment."
+elif [ -f "$WEBHOOK_ENV_FILE" ]; then
+  set +u
+  # shellcheck disable=SC1090
+  source "$WEBHOOK_ENV_FILE"
+  set -u
+  log_info "Webhook key loaded from: $WEBHOOK_ENV_FILE"
 fi
 
-if [[ -n "$SUBRO_API_KEY" && ! "$SUBRO_API_KEY" =~ ^[a-zA-Z0-9_-]{20,}$ ]]; then
-  log_warning "SUBRO_API_KEY doesn't look like a standard API key/token (continuing anyway)."
+# If still no key, fetch from Subro API (localhost-only endpoint)
+if [ -z "${SUBRO_API_KEY:-}" ]; then
+  log_info "Fetching API key from Subro API..."
+
+  KEY_ENDPOINT="${SUBRO_API_BASE_URL%/}/settings/webhook-key/current-key"
+  key_response=$(curl -s --max-time 10 "$KEY_ENDPOINT" 2>&1)
+
+  if echo "$key_response" | grep -q '"key"'; then
+    # Extract key using jq if available, otherwise use grep/sed
+    if command -v jq >/dev/null 2>&1; then
+      SUBRO_API_KEY=$(echo "$key_response" | jq -r '.key' 2>/dev/null)
+    else
+      SUBRO_API_KEY=$(echo "$key_response" | grep -o '"key":"[^"]*"' | sed 's/"key":"//;s/"$//')
+    fi
+
+    if [ -n "$SUBRO_API_KEY" ] && [ "$SUBRO_API_KEY" != "null" ]; then
+      log_info "API key fetched successfully from Subro API"
+    else
+      log_error "Failed to parse API key from response"
+      log_error "Response: $key_response"
+      exit 1
+    fi
+  else
+    log_error "Failed to fetch API key from Subro API"
+    log_error "Endpoint: $KEY_ENDPOINT"
+    log_error "Response: $key_response"
+    log_error "Make sure you've configured qBittorrent integration in the Subro web UI."
+    exit 1
+  fi
 fi
 
 log_info "API Base URL: $SUBRO_API_BASE_URL"
+
+# ============================================
+# Path Translation (Host -> Container)
+# ============================================
+# When qBittorrent runs on the host but Subro runs in Docker,
+# the paths may be different. Configure mappings in the env file:
+#   PATH_MAP_SRC="/root/Downloads"
+#   PATH_MAP_DST="/data/downloads"
+PATH_MAP_SRC="${PATH_MAP_SRC:-/root/Downloads}"
+PATH_MAP_DST="${PATH_MAP_DST:-/data/downloads}"
+
+if [[ "$TORRENT_PATH" == "$PATH_MAP_SRC"* ]]; then
+  ORIGINAL_PATH="$TORRENT_PATH"
+  TORRENT_PATH="${TORRENT_PATH/$PATH_MAP_SRC/$PATH_MAP_DST}"
+  log_info "Path translated: $ORIGINAL_PATH -> $TORRENT_PATH"
+fi
 
 # ============================================
 # Function: Submit job to Subro API

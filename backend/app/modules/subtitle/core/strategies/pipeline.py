@@ -46,17 +46,13 @@ class SubtitlePipeline:
         logger.info(f"Starting Pipeline for: {video_basename}")
 
         overall_success = False
+        critical_failure = False
         try:
             # --- Execute Strategies Sequentially ---
             for strategy in self._strategies:
                 strategy_start_time = time.monotonic()
                 logger.info(f"Executing Strategy: {strategy.name}...")
 
-                # --- Early Exit Condition Check ---
-                # If the primary goal (finding a definitive RO subtitle) is already met,
-                # skip strategies that primarily search for subtitles (e.g., scanners, fetchers).
-                # We might still run Translator (won't do anything if RO found) and Synchronizer.
-                # Customize this logic if finer control is needed.
                 if context.found_final_ro and strategy.name in [
                     "LocalScanner",
                     "OnlineFetcher",
@@ -66,7 +62,6 @@ class SubtitlePipeline:
                         f"Skipping strategy '{strategy.name}': Final RO subtitle already found."
                     )
                     continue
-                # Add more sophisticated skip conditions if needed (e.g., skip translation if skip flag set)
 
                 # --- Execute Strategy ---
                 try:
@@ -78,7 +73,7 @@ class SubtitlePipeline:
                         exc_info=True,
                     )
                     context.add_error(strategy.name, f"Execution failed: {strategy_exec_err}")
-                    strategy_success = False  # Treat unexpected error as failure
+                    strategy_success = False
 
                 strategy_duration = time.monotonic() - strategy_start_time
                 logger.info(
@@ -95,6 +90,7 @@ class SubtitlePipeline:
                         )
                         # Ensure we don't accidentally report success if a critical step failed
                         overall_success = False
+                        critical_failure = True  # Mark that a critical strategy failed
                         break  # Stop the pipeline
                     else:
                         logger.warning(
@@ -113,7 +109,13 @@ class SubtitlePipeline:
                     # Pipeline continues to allow subsequent steps like synchronization.
 
             # --- Final Status Determination (After all strategies run) ---
-            if context.found_final_ro:
+            if critical_failure:
+                logger.error(
+                    f"Pipeline Result: Critical strategy failed for {video_basename}. Marking as FAILED."
+                )
+                overall_success = False
+
+            elif context.found_final_ro:
                 # Check if the RO result is valid (path exists or it's embedded text)
                 ro_path = context.final_ro_sub_path_or_status
                 if ro_path == "embedded_text_ro":
@@ -137,9 +139,10 @@ class SubtitlePipeline:
                 logger.info(
                     f"Pipeline Result: Final EN subtitle selected (File: {Path(context.final_en_sub_path).name}) for {video_basename} (RO not found/processed)."
                 )
-                overall_success = (
-                    True  # Count finding a valid EN file as success if RO wasn't found
-                )
+
+                # Check if we intended to translate but failed (though critical_failure should catch this)
+                # This is a fallback success case only if no critical failures occurred.
+                overall_success = True
             else:
                 # No RO and no valid final EN path found
                 logger.warning(

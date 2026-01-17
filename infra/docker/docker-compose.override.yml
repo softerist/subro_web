@@ -13,7 +13,8 @@ services:
       # Preserve the container's virtual environment even when mounting code
       - /app/.venv
       # Mount qBittorrent download folder for subtitle processing
-      # Mounted to /downloads to avoid container's /root permission issues
+      # Mount to /data/downloads (not /root which has permission issues in container)
+      - /root/Downloads:/data/downloads
       - ${HOST_DOWNLOADS_PATH}:${CONTAINER_DOWNLOADS_PATH}
     # PYTHONPATH is inherited from the base docker-compose.yml
     # environment:
@@ -33,6 +34,7 @@ services:
       - /app/.venv
       - ${HOST_MEDIA_PATH}:${CONTAINER_MEDIA_PATH} # Media folder mount
       # Mount qBittorrent download folder for subtitle processing
+      - /root/Downloads:/data/downloads
       - ${HOST_DOWNLOADS_PATH}:${CONTAINER_DOWNLOADS_PATH}
     # PYTHONPATH is inherited from the base docker-compose.yml
     # environment:

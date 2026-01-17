@@ -432,6 +432,7 @@ class CRUDAppSettings:
             ),
             deepl_api_keys=active_deepl_keys,
             deepl_usage=deepl_usage,
+            qbittorrent_connection_mode=db_settings.qbittorrent_connection_mode or "direct",
             qbittorrent_host=self._get_effective_plain(
                 db_settings, env_settings, "qbittorrent_host"
             )

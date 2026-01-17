@@ -148,7 +148,7 @@ async def test_configure_qbittorrent_connection_failure(
             # Mock login failure
             # Patch the SOURCE module where login_to_qbittorrent is defined
             with patch(
-                "app.modules.subtitle.services.torrent_client.login_to_qbittorrent",
+                "app.modules.subtitle.services.torrent_client.login_to_qbittorrent_with_settings",
                 return_value=None,
             ) as mock_login:
                 response = await client_with_mock_db.post(
@@ -185,7 +185,7 @@ async def test_configure_qbittorrent_autorun_failure(
             mock_qb_client = MagicMock()
             # Patch the SOURCE module
             with patch(
-                "app.modules.subtitle.services.torrent_client.login_to_qbittorrent",
+                "app.modules.subtitle.services.torrent_client.login_to_qbittorrent_with_settings",
                 return_value=mock_qb_client,
             ):
                 # Mock autorun config failure - Patch the SOURCE module
@@ -225,7 +225,7 @@ async def test_configure_qbittorrent_success(
             mock_qb_client = MagicMock()
             # Patch the SOURCE module
             with patch(
-                "app.modules.subtitle.services.torrent_client.login_to_qbittorrent",
+                "app.modules.subtitle.services.torrent_client.login_to_qbittorrent_with_settings",
                 return_value=mock_qb_client,
             ):
                 # Mock autorun config success - Patch the SOURCE module

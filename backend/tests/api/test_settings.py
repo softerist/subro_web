@@ -100,3 +100,27 @@ async def test_settings_forbidden_for_standard_user(
 
     response = await test_client.get(f"{API_PREFIX}/settings", headers=headers)
     assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_update_qbittorrent_connection_mode_admin(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Test that qbittorrent_connection_mode can be updated by admin."""
+    admin = UserFactory.create_user(
+        session=db_session, email="admin_qb_mode@example.com", is_superuser=True
+    )
+    await db_session.flush()
+    headers = await login_user(test_client, admin.email, "password123")
+
+    with patch("app.api.routers.settings.validate_all_settings"):
+        update_data = {
+            "qbittorrent_connection_mode": "docker_host",
+            "qbittorrent_host": "host.docker.internal",
+        }
+        response = await test_client.put(
+            f"{API_PREFIX}/settings", json=update_data, headers=headers
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["qbittorrent_connection_mode"] == "docker_host"
+        assert response.json()["qbittorrent_host"] == "host.docker.internal"

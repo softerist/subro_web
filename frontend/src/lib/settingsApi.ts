@@ -15,6 +15,7 @@ export interface SettingsUpdate {
   opensubtitles_username?: string | null;
   opensubtitles_password?: string | null;
   deepl_api_keys?: string[];
+  qbittorrent_connection_mode?: string | null;
   qbittorrent_host?: string | null;
   qbittorrent_port?: number | null;
   qbittorrent_username?: string | null;

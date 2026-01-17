@@ -8,12 +8,13 @@ import secrets
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.security import decrypt_value, encrypt_value
 from app.core.users import get_current_active_admin_user
 from app.db.models.user import User
 from app.db.models.webhook_key import WebhookKey
@@ -22,6 +23,10 @@ from app.db.session import get_async_session
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/settings/webhook-key", tags=["Webhook Key"])
+
+# Allowed IPs for localhost-only endpoint
+LOCALHOST_IPS = {"127.0.0.1", "::1", "localhost"}
+DOCKER_GATEWAY_PREFIXES = ("172.17.", "172.18.", "172.19.", "172.20.", "172.21.")
 
 
 class WebhookKeyResponse(BaseModel):
@@ -75,6 +80,84 @@ def _hash_webhook_key(raw_key: str) -> str:
         raw_key.encode(),
         hashlib.sha256,
     ).hexdigest()
+
+
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP from request, handling proxies."""
+    # Check X-Forwarded-For header first (for reverse proxies)
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        # Take the first IP (original client)
+        return forwarded.split(",")[0].strip()
+    # Fall back to direct client IP
+    if request.client:
+        return request.client.host
+    return "unknown"
+
+
+def _is_localhost_request(client_ip: str) -> bool:
+    """Check if request is from localhost or Docker gateway."""
+    if client_ip in LOCALHOST_IPS:
+        return True
+    # Check Docker gateway IPs (172.17.x.x - 172.21.x.x)
+    if any(client_ip.startswith(prefix) for prefix in DOCKER_GATEWAY_PREFIXES):
+        return True
+    return False
+
+
+@router.get(
+    "/current-key",
+    include_in_schema=False,  # Hide from OpenAPI docs for security
+    summary="Get current webhook key (localhost only)",
+)
+async def get_current_webhook_key(
+    request: Request,
+    db: AsyncSession = Depends(get_async_session),
+) -> dict[str, str]:
+    """
+    Retrieve the current qBittorrent webhook key.
+
+    Security:
+    - Only accessible from localhost (127.0.0.1, ::1) or Docker gateway
+    - Used by the webhook script to authenticate with the API
+    - Audit logged for security monitoring
+    """
+    from app.crud.crud_app_settings import crud_app_settings
+
+    # 1. Validate client IP - localhost only
+    client_ip = _get_client_ip(request)
+
+    if not _is_localhost_request(client_ip):
+        logger.warning(f"Rejected webhook key retrieval from non-localhost IP: {client_ip}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint is only accessible from localhost",
+        )
+
+    # 2. Get encrypted key from database
+    app_settings = await crud_app_settings.get(db)
+
+    if not app_settings.qbittorrent_webhook_key_encrypted:
+        logger.info(f"Webhook key retrieval attempted but no key configured (from {client_ip})")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No webhook key is configured. Use the Settings page to configure qBittorrent.",
+        )
+
+    # 3. Decrypt the key
+    try:
+        raw_key = decrypt_value(app_settings.qbittorrent_webhook_key_encrypted)
+    except Exception as e:
+        logger.error(f"Failed to decrypt webhook key: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to decrypt webhook key",
+        ) from None
+
+    # 4. Audit log successful retrieval
+    logger.info(f"Webhook key retrieved successfully from {client_ip}")
+
+    return {"key": raw_key}
 
 
 @router.get(
@@ -317,7 +400,7 @@ async def configure_qbittorrent_webhook(
     from app.crud.crud_app_settings import crud_app_settings
     from app.modules.subtitle.services.torrent_client import (
         configure_webhook_autorun,
-        login_to_qbittorrent,
+        login_to_qbittorrent_with_settings,
     )
 
     logger.info(f"Auto-configure qBittorrent requested by: {current_user.email}")
@@ -332,6 +415,22 @@ async def configure_qbittorrent_webhook(
             message="qBittorrent host not configured. Please fill in the qBittorrent connection details first.",
             details={"step": "validate_credentials"},
         )
+
+    # Get effective settings from database (decrypt password)
+    effective_host = app_settings.qbittorrent_host
+    effective_port = app_settings.qbittorrent_port or 8080
+    effective_username = app_settings.qbittorrent_username or ""
+
+    # Decrypt password if present
+    effective_password = ""
+    if app_settings.qbittorrent_password:
+        from app.core.security import decrypt_value
+
+        try:
+            effective_password = decrypt_value(app_settings.qbittorrent_password)
+        except Exception as e:
+            logger.warning(f"Failed to decrypt qBittorrent password: {e}")
+            effective_password = ""
 
     # Step 2: Generate webhook key
 
@@ -370,9 +469,19 @@ async def configure_qbittorrent_webhook(
 
     await db.refresh(new_key)
 
-    # Step 3: Connect to qBittorrent and configure
+    # Step 2b: Store encrypted key in app_settings for secure script retrieval
+    app_settings.qbittorrent_webhook_key_encrypted = encrypt_value(raw_key)
+    await db.commit()
+    logger.info("Stored encrypted webhook key in app_settings")
 
-    client = login_to_qbittorrent()
+    # Step 3: Connect to qBittorrent using DB settings
+
+    client = login_to_qbittorrent_with_settings(
+        host=effective_host,
+        port=effective_port,
+        username=effective_username,
+        password=effective_password,
+    )
 
     if not client:
         return QBittorrentConfigureResponse(
@@ -386,11 +495,11 @@ async def configure_qbittorrent_webhook(
             },
         )
 
-    # Configure autorun WITH key
+    # Configure autorun WITHOUT api_key - script fetches key from /current-key endpoint
 
     script_path = "/opt/subro_web/scripts/qbittorrent-nox-webhook.sh"
 
-    configured = configure_webhook_autorun(client, script_path, api_key=raw_key)
+    configured = configure_webhook_autorun(client, script_path)  # No api_key parameter
 
     if not configured:
         return QBittorrentConfigureResponse(
@@ -404,6 +513,9 @@ async def configure_qbittorrent_webhook(
             },
         )
 
+    # Step 4: Update /opt/subro_web/.env with required settings
+    env_updated = _update_webhook_env_config()
+
     return QBittorrentConfigureResponse(
         success=True,
         message="qBittorrent webhook configured successfully! Subtitles will be downloaded automatically when torrents complete.",
@@ -412,7 +524,8 @@ async def configure_qbittorrent_webhook(
         details={
             "key_preview": new_key.preview,
             "script_path": script_path,
-            "autorun_command": f'/usr/bin/bash {script_path} "%F" --api-key="***"',
+            "autorun_command": f'/usr/bin/bash {script_path} "%F"',
+            "env_file_updated": env_updated,
         },
     )
 
@@ -546,3 +659,57 @@ async def ensure_default_webhook_key(db: AsyncSession) -> None:
 
         except Exception as e:
             logger.warning(f"Error attempting to configure qBittorrent on startup: {e}")
+
+
+def _update_webhook_env_config() -> bool:
+    """
+    Updates the /opt/subro_web/.env file with path mapping and API URL.
+    Returns True if updated successfully, False otherwise.
+    """
+    env_file_path = "/opt/subro_web/.env"
+    try:
+        import os
+        from pathlib import Path
+
+        env_path = Path(env_file_path)
+
+        # Get the API base URL from env or use default
+        api_base_url = f"http://localhost:{os.environ.get('APP_PORT', '8001')}/api/v1"
+
+        # Read existing env or start fresh
+        existing_content = ""
+        if env_path.exists():
+            existing_content = env_path.read_text()
+
+        # Variables to update/add
+        env_updates = {
+            "SUBRO_API_BASE_URL": api_base_url,
+            "PATH_MAP_SRC": "/root/Downloads",
+            "PATH_MAP_DST": "/data/downloads",
+        }
+
+        # Parse existing and update
+        lines = existing_content.strip().split("\n") if existing_content.strip() else []
+        updated_keys = set()
+
+        for i, line in enumerate(lines):
+            for key, value in env_updates.items():
+                if line.startswith(f"{key}="):
+                    lines[i] = f'{key}="{value}"'
+                    updated_keys.add(key)
+                    break
+
+        # Add missing keys
+        for key, value in env_updates.items():
+            if key not in updated_keys:
+                lines.append(f'{key}="{value}"')
+
+        # Write back
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        env_path.write_text("\n".join(lines) + "\n")
+        logger.info(f"Updated {env_file_path} with webhook settings")
+        return True
+
+    except Exception as e:
+        logger.warning(f"Failed to update {env_file_path}: {e}")
+        return False

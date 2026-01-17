@@ -51,21 +51,57 @@ def get_client() -> qbittorrentapi.Client | None:
 
 def login_to_qbittorrent() -> qbittorrentapi.Client | None:
     """
-    Attempts to log in to the qBittorrent client.
+    Attempts to log in to the qBittorrent client using environment variables.
 
     Returns:
         qbittorrentapi.Client or None: The logged-in client instance or None if login fails.
     """
-    client = get_client()
-    if not client:
-        return None  # Initialization failed
+    return login_to_qbittorrent_with_settings(
+        host=QBITTORRENT_HOST,
+        port=QBITTORRENT_PORT,
+        username=QBITTORRENT_USERNAME,
+        password=QBITTORRENT_PASSWORD,
+    )
+
+
+def login_to_qbittorrent_with_settings(
+    host: str | None,
+    port: int | None,
+    username: str | None,
+    password: str | None,
+) -> qbittorrentapi.Client | None:
+    """
+    Attempts to log in to the qBittorrent client using provided settings.
+
+    Args:
+        host: qBittorrent host address
+        port: qBittorrent port
+        username: qBittorrent username
+        password: qBittorrent password
+
+    Returns:
+        qbittorrentapi.Client or None: The logged-in client instance or None if login fails.
+    """
+    if not host:
+        logging.error("qBittorrent host is not configured.")
+        return None
+
+    effective_port = port or 8080
 
     try:
-        logging.info(
-            f"Attempting to log in to qBittorrent @ {QBITTORRENT_HOST}:{QBITTORRENT_PORT}..."
+        client = qbittorrentapi.Client(
+            host=host,
+            port=effective_port,
+            username=username or "",
+            password=password or "",
         )
-        client.auth_log_in()  # This might raise exceptions on failure
-        # Verify login status if possible (older versions might not have is_logged_in reliably)
+    except Exception as e:
+        logging.error(f"Failed to initialize qBittorrent client: {e}", exc_info=True)
+        return None
+
+    try:
+        logging.info(f"Attempting to log in to qBittorrent @ {host}:{effective_port}...")
+        client.auth_log_in()
         if client.is_logged_in:
             api_version = client.app.version
             webui_version = client.app.web_api_version
@@ -74,21 +110,17 @@ def login_to_qbittorrent() -> qbittorrentapi.Client | None:
             )
             return client
         else:
-            # Should not happen if auth_log_in succeeded without error, but safety check
             logging.error(
                 "qBittorrent login appeared to succeed but client status is not logged in."
             )
             return None
     except qbittorrentapi.LoginFailed as e:
         logging.error(
-            f"qBittorrent login failed for user '{QBITTORRENT_USERNAME}' at "
-            f"{QBITTORRENT_HOST}:{QBITTORRENT_PORT}: {e}"
+            f"qBittorrent login failed for user '{username}' at {host}:{effective_port}: {e}"
         )
         return None
     except qbittorrentapi.exceptions.APIConnectionError as e:
-        logging.error(
-            f"Could not connect to qBittorrent at {QBITTORRENT_HOST}:{QBITTORRENT_PORT}: {e}"
-        )
+        logging.error(f"Could not connect to qBittorrent at {host}:{effective_port}: {e}")
         return None
     except qbittorrentapi.exceptions.APIError as e:
         logging.error(f"qBittorrent API error during login: {e}")
@@ -234,15 +266,16 @@ def rename_torrent_file(
 def configure_webhook_autorun(
     client: qbittorrentapi.Client,
     script_path: str = "/opt/subro_web/scripts/qbittorrent-nox-webhook.sh",
-    api_key: str | None = None,
 ) -> bool:
     """
     Configure qBittorrent to run the webhook script on torrent completion.
 
+    The script fetches the API key from the Subro API at runtime for security.
+    No sensitive data is stored in qBittorrent's configuration.
+
     Args:
         client: An authenticated qBittorrent client instance.
         script_path: Path to the webhook script on the host.
-        api_key: Optional API key to pass to the script via --api-key argument.
 
     Returns:
         bool: True if configuration was successful, False otherwise.
@@ -252,10 +285,8 @@ def configure_webhook_autorun(
         return False
 
     try:
+        # Simple command - script fetches API key from /current-key endpoint
         autorun_command = f'/usr/bin/bash {script_path} "%F"'
-        if api_key:
-            # Append API key securely quoted
-            autorun_command += f' --api-key="{api_key}"'
 
         client.app.set_preferences(
             {
@@ -263,11 +294,7 @@ def configure_webhook_autorun(
                 "autorun_program": autorun_command,
             }
         )
-        # Log command with masked key for security
-        log_cmd = autorun_command
-        if api_key:
-            log_cmd = log_cmd.replace(api_key, "***")
-        logging.info(f"Configured qBittorrent autorun: {log_cmd}")
+        logging.info(f"Configured qBittorrent autorun: {autorun_command}")
         return True
     except qbittorrentapi.exceptions.APIError as e:
         logging.error(f"API Error configuring autorun: {e}")

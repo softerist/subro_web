@@ -1509,8 +1509,9 @@ export default function SettingsPage() {
                           .
                         </p>
                         <div className="space-y-2">
-                                                  <div className="text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
-                                                    Command to Paste                            <span
+                          <div className="text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
+                            Command to Paste{" "}
+                            <span
                               className="text-emerald-500 cursor-pointer hover:underline"
                               onClick={async () => {
                                 const cmd = `/usr/bin/bash /opt/subro_web/scripts/qbittorrent-nox-webhook.sh "%F"`;
@@ -1554,6 +1555,80 @@ export default function SettingsPage() {
                     qBittorrent connection (Optional)
                   </h4>
                   <HelpIcon tooltip="These credentials allow Subro to manually query your qBittorrent instance if needed." />
+                </div>
+
+                {/* Connection Mode Selector */}
+                <div className="pl-10 space-y-3 max-w-xl">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                    Connection Mode
+                  </Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateField(
+                          "qbittorrent_connection_mode",
+                          "docker_host",
+                        );
+                        updateField("qbittorrent_host", "host.docker.internal");
+                      }}
+                      className={`p-4 rounded-xl border text-left transition-all ${
+                        (formData.qbittorrent_connection_mode ||
+                          settings?.qbittorrent_connection_mode) ===
+                        "docker_host"
+                          ? "border-primary bg-primary/10 shadow-md"
+                          : "border-border hover:border-primary/50 hover:bg-accent/30"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">🐳</span>
+                        <span className="font-semibold text-foreground">
+                          Docker → Host
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        qBittorrent runs on the server (not in Docker)
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateField("qbittorrent_connection_mode", "direct");
+                        updateField("qbittorrent_host", "");
+                      }}
+                      className={`p-4 rounded-xl border text-left transition-all ${
+                        (formData.qbittorrent_connection_mode ||
+                          settings?.qbittorrent_connection_mode ||
+                          "direct") === "direct" &&
+                        (formData.qbittorrent_connection_mode ||
+                          settings?.qbittorrent_connection_mode) !==
+                          "docker_host"
+                          ? "border-primary bg-primary/10 shadow-md"
+                          : "border-border hover:border-primary/50 hover:bg-accent/30"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">🔌</span>
+                        <span className="font-semibold text-foreground">
+                          Direct / Custom
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Enter IP address or hostname manually
+                      </p>
+                    </button>
+                  </div>
+                  {(formData.qbittorrent_connection_mode ||
+                    settings?.qbittorrent_connection_mode) ===
+                    "docker_host" && (
+                    <p className="text-xs text-muted-foreground bg-blue-500/10 border border-blue-500/20 rounded-lg p-2">
+                      💡 This uses{" "}
+                      <code className="bg-muted px-1 rounded">
+                        host.docker.internal
+                      </code>{" "}
+                      to reach your server from inside the Docker container.
+                    </p>
+                  )}
                 </div>
 
                 <div className="pl-10 space-y-6 max-w-xl">
