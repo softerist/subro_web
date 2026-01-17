@@ -1,11 +1,15 @@
 import logging
 import os
+import re
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 # Note: opensubtitles_service is NOT directly used here anymore for core processing
 # --- Import Config & Constants ---
-from app.core.config import settings
 from app.modules.subtitle.core.constants import SKIP_PATTERNS, VIDEO_EXTENSIONS
 
 # --- Import New Pipeline Components ---
@@ -29,12 +33,124 @@ from app.modules.subtitle.services import imdb as imdb_service
 # --- Get Logger ---
 logger = logging.getLogger(__name__)
 
+# --- Configuration & Constants (New v2.0) ---
+
+
+class ContentType(str, Enum):
+    """Content type classification"""
+
+    MOVIE = "movie"
+    TV = "tv"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class DetectionSignals:
+    """Normalized detection signals from path analysis"""
+
+    # Filename signals
+    has_tv_episode_pattern: bool = False  # S01E01, 1x01
+    has_date_pattern: bool = False  # 2024.01.17 (daily shows)
+    has_absolute_numbering: bool = False  # Show - 001
+    has_multi_episode: bool = False  # S01E01-E02
+
+    # Path structure signals
+    has_season_folder: bool = False
+    in_tv_named_folder: bool = False
+    in_movie_named_folder: bool = False
+    in_ignored_folder: bool = False  # sample, extras, etc.
+
+    # Directory content signals (if scanning)
+    tv_episode_count: int = 0
+    movie_file_count: int = 0
+
+    # Metadata
+    path_depth: int = 0
+    is_file: bool = True
+
+
+@dataclass
+class DetectionConfig:
+    """Configuration for content detection"""
+
+    # Folder indicators (normalized, lowercase)
+    TV_INDICATORS: set[str] = field(
+        default_factory=lambda: {"tv shows", "tv", "series", "episodes", "television"}
+    )
+    MOVIE_INDICATORS: set[str] = field(
+        default_factory=lambda: {"movies", "films", "cinema", "flicks"}
+    )
+
+    # Folders to skip (prevent false positives)
+    IGNORED_DIRS: set[str] = field(
+        default_factory=lambda: {
+            "sample",
+            "samples",
+            "subs",
+            "subtitles",
+            "extras",
+            "featurettes",
+            "behind the scenes",
+            "deleted scenes",
+            "bonus",
+            "trailer",
+            "trailers",
+        }
+    )
+
+    # Performance limits
+    MAX_SCAN_DEPTH: int = 3
+    MAX_FILES_TO_SCAN: int = 15  # Stop after sampling this many files
+    MAX_SCAN_TIME_SECONDS: float = 2.0  # Timeout for directory scans
+
+    # Confidence thresholds
+    MIN_TV_CONFIDENCE: int = 2  # Minimum score to classify as TV
+    MIN_MOVIE_CONFIDENCE: int = 2  # Minimum score to classify as movie
+
+    # Video extensions
+    VIDEO_EXTENSIONS: set[str] = field(
+        default_factory=lambda: {
+            ".mkv",
+            ".mp4",
+            ".avi",
+            ".mov",
+            ".wmv",
+            ".flv",
+            ".m4v",
+            ".mpg",
+            ".mpeg",
+            ".m2ts",
+            ".ts",
+            ".webm",
+        }
+    )
+
+
+# Compiled regex patterns (performance optimization)
+TV_PATTERNS = {
+    "season_episode": re.compile(r"(?<!\w)[Ss]\d{1,2}[Ee]\d{1,2}(?!\w)"),
+    "numeric_episode": re.compile(r"(?<!\w)\d{1,2}x\d{1,2}(?!\w)"),
+    "multi_episode": re.compile(r"(?<!\w)[Ss]\d{1,2}[Ee]\d{1,2}[_\-]?[Ee]?\d{2}(?!\w)"),
+    "date_pattern": re.compile(r"(?<!\w)\d{4}[.\-_]\d{2}[.\-_]\d{2}(?!\w)"),
+    "absolute_numbering": re.compile(r"(?<!\w)\-\s*\d{2,4}(?!\w)"),  # Show - 001
+    "season_folder": re.compile(r"(?i)^season[\s._\-]*0*(\d+)$"),
+    "season_generic": re.compile(r"(?:season|s)\s*([0-9]{1,3})", re.IGNORECASE),  # Merged from user
+}
+
+_SEASON_PATTERN = TV_PATTERNS[
+    "season_generic"
+]  # Alias for backward compatibility with user helpers
+
 # === Core Pipeline Runner (Internal Function) ===
 
 
 # Keep the underscore prefix as it's primarily called by the functions within this module
 # or the main orchestrator (main.py).
-def _run_pipeline_for_file(video_file_path: str, options: dict[str, Any] | None = None) -> bool:
+def _run_pipeline_for_file(
+    video_file_path: str,
+    options: dict[str, Any] | None = None,
+    tv_show_details: dict[str, str | None] | None = None,
+) -> bool:
     """
     Sets up and runs the subtitle processing pipeline for a single video file.
 
@@ -62,36 +178,55 @@ def _run_pipeline_for_file(video_file_path: str, options: dict[str, Any] | None 
     title_or_show_name: str | None = None  # For logging
 
     try:
-        # Try TV show extraction first (more specific pattern)
-        show_name, s, e, year = imdb_service.extract_tv_show_details(video_basename)
-        if show_name and s and e:
+        if tv_show_details:
+            show_name = tv_show_details.get("show_name")
+            s = tv_show_details.get("season")
+            e = tv_show_details.get("episode")
+            year = tv_show_details.get("year")
+            if not (show_name and s and e):
+                logger.error(
+                    f"Invalid TV show details provided for '{video_basename}'. Cannot process."
+                )
+                di_container.shutdown()
+                return False
             media_type = "episode"
             title_or_show_name = show_name
             video_info.update({"s": s, "e": e, "year": year, "show_name": show_name})
-            # Get IMDb ID for the show (using DI container's instance if needed)
             imdb_id_result, _, _ = di_container.imdb.get_imdb_id(
                 show_name, year, content_type="series"
             )
             imdb_id = imdb_id_result
         else:
-            # Fallback to movie extraction
-            title, year = imdb_service.extract_movie_details(video_basename)
-            if title:
-                media_type = "movie"
-                title_or_show_name = title
-                video_info.update({"year": year, "title": title})
-                # Get IMDb ID for the movie
+            # Try TV show extraction first (more specific pattern)
+            show_name, s, e, year = imdb_service.extract_tv_show_details(video_basename)
+            if show_name and s and e:
+                media_type = "episode"
+                title_or_show_name = show_name
+                video_info.update({"s": s, "e": e, "year": year, "show_name": show_name})
+                # Get IMDb ID for the show (using DI container's instance if needed)
                 imdb_id_result, _, _ = di_container.imdb.get_imdb_id(
-                    title, year, content_type="movie"
+                    show_name, year, content_type="series"
                 )
                 imdb_id = imdb_id_result
             else:
-                logger.error(
-                    f"Could not extract meaningful title/details from filename: {video_basename}. Cannot process."
-                )
-                # Ensure services requiring shutdown (like logout) are handled even on early exit
-                di_container.shutdown()
-                return False  # Cannot proceed without basic info
+                # Fallback to movie extraction
+                title, year = imdb_service.extract_movie_details(video_basename)
+                if title:
+                    media_type = "movie"
+                    title_or_show_name = title
+                    video_info.update({"year": year, "title": title})
+                    # Get IMDb ID for the movie
+                    imdb_id_result, _, _ = di_container.imdb.get_imdb_id(
+                        title, year, content_type="movie"
+                    )
+                    imdb_id = imdb_id_result
+                else:
+                    logger.error(
+                        f"Could not extract meaningful title/details from filename: {video_basename}. Cannot process."
+                    )
+                    # Ensure services requiring shutdown (like logout) are handled even on early exit
+                    di_container.shutdown()
+                    return False  # Cannot proceed without basic info
 
         if not imdb_id:
             # Log warning but proceed - local/embed strategies might still work
@@ -251,6 +386,58 @@ def process_movie_folder(movie_path: str, options: dict[str, Any] | None = None)
     return successful_pipelines_count
 
 
+def process_tv_show_file(episode_path: str, options: dict[str, Any] | None = None) -> int:
+    """
+    Processes a single TV show episode file using the SubtitlePipeline.
+
+    Args:
+        episode_path (str): Path to a single episode file.
+        options (dict, optional): Processing options. Defaults to {}.
+
+    Returns:
+        int: 1 if the pipeline reported success, 0 otherwise.
+    """
+    logger.info(f"Starting TV Show File Processing (Pipeline): {episode_path}")
+    options = options or {}
+    target_path = Path(episode_path).resolve()
+
+    if not target_path.is_file():
+        logger.error(f"Invalid file path provided to process_tv_show_file: {episode_path}")
+        return 0
+
+    if target_path.suffix.lower() not in VIDEO_EXTENSIONS:
+        logger.warning(f"Input path is a file but not a processable video file: {episode_path}")
+        return 0
+
+    if any(p in target_path.name.upper() for p in SKIP_PATTERNS):
+        logger.warning(f"Input file matches skip pattern: {episode_path}")
+        return 0
+
+    show_name, season, episode, year = _infer_tv_show_details_for_file(target_path)
+    if not (show_name and season and episode):
+        logger.warning(
+            f"File does not match TV episode patterns or lacks show details: {episode_path}"
+        )
+        return 0
+
+    try:
+        tv_show_details = {
+            "show_name": show_name,
+            "season": season,
+            "episode": episode,
+            "year": year,
+        }
+        if _run_pipeline_for_file(str(target_path), options, tv_show_details=tv_show_details):
+            return 1
+        return 0
+    except Exception as e:
+        logger.error(
+            f"!! Unhandled error during pipeline invocation for episode file {episode_path}: {e}",
+            exc_info=True,
+        )
+        return 0
+
+
 def process_tv_show_folder(tv_show_path: str, options: dict[str, Any] | None = None) -> int:  # noqa: C901
     """
     Processes TV show episodes in a given folder using the SubtitlePipeline.
@@ -336,110 +523,403 @@ def process_tv_show_folder(tv_show_path: str, options: dict[str, Any] | None = N
 # === Utility Function (Used before main processing) ===
 
 
-def determine_content_type_for_path(directory: str) -> str | None:  # noqa: C901
-    """
-    Determines if the directory content is primarily movies or TV shows
-    based on counting filename patterns up to a configurable limit and threshold.
+def _extract_season_from_path(path: Path) -> str | None:
+    season = None
+    for part in path.parts:
+        normalized = part.lower().replace("_", " ").replace("-", " ").strip()
+        match = _SEASON_PATTERN.search(normalized)
+        if match:
+            season = str(int(match.group(1))).zfill(2)
+    return season
 
-    Args:
-        directory (str): The directory path to scan.
 
-    Returns:
-        Optional[str]: "tvshow", "movie", or None if no video files are found,
-                       scan fails early, or the path is invalid.
-    """
-    logger.debug(f"Attempting content type detection for directory: {directory}")
-    target_path = Path(directory).resolve()
-    if not target_path.is_dir():
-        logger.warning(
-            f"Content type detection skipped: Path is not a valid directory: {directory}"
-        )
+def _normalize_path_parts(path: Path) -> tuple[list[str], list[str]]:
+    parts = list(path.parts[:-1])
+    normalized_parts = [part.lower().replace("_", " ").replace("-", " ").strip() for part in parts]
+    return parts, normalized_parts
+
+
+def _find_last_index(normalized_parts: list[str], predicate: Callable[[str], object]) -> int | None:
+    last_index = None
+    for idx, normalized in enumerate(normalized_parts):
+        if predicate(normalized):
+            last_index = idx
+    return last_index
+
+
+def _show_name_from_season_folder(
+    parts: list[str], normalized_parts: list[str], tv_keywords: set[str]
+) -> str | None:
+    season_index = _find_last_index(normalized_parts, _SEASON_PATTERN.search)
+    if season_index is None or season_index == 0:
         return None
 
-    tv_count = 0
-    movie_count = 0
-    checked_files = 0
-    file_limit = getattr(settings, "CONTENT_DETECTION_FILE_LIMIT", 50)
-    tv_threshold_percent = getattr(settings, "CONTENT_DETECTION_TV_THRESHOLD_PERCENT", 50.0)
-    # visited_paths = set() # Avoids issues with potential symlink loops, good practice
+    candidate = parts[season_index - 1]
+    candidate_normalized = normalized_parts[season_index - 1]
+    if candidate_normalized in tv_keywords:
+        return None
+    return candidate
+
+
+def _show_name_after_tv_keyword(
+    parts: list[str], normalized_parts: list[str], tv_keywords: set[str]
+) -> str | None:
+    tv_index = _find_last_index(normalized_parts, lambda value: value in tv_keywords)
+    if tv_index is None:
+        return None
+
+    for idx in range(tv_index + 1, len(parts)):
+        candidate_normalized = normalized_parts[idx]
+        if candidate_normalized in tv_keywords:
+            continue
+        if _SEASON_PATTERN.search(candidate_normalized):
+            continue
+        return parts[idx]
+    return None
+
+
+def _extract_show_name_from_path(path: Path) -> str | None:
+    tv_keywords = {"tv show", "tv shows", "tvshows", "series", "episode", "episodes"}
+    parts, normalized_parts = _normalize_path_parts(path)
+
+    show_name = _show_name_from_season_folder(parts, normalized_parts, tv_keywords)
+    if show_name:
+        return show_name
+    return _show_name_after_tv_keyword(parts, normalized_parts, tv_keywords)
+
+
+def _infer_tv_show_details_for_file(
+    file_path: Path,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    show, season, episode, year = imdb_service.extract_tv_show_details(file_path.name)
+    if show and season and episode:
+        return show, season, episode, year
+
+    show_name = _extract_show_name_from_path(file_path)
+    if not show_name:
+        return None, None, None, None
+
+    season_from_path = _extract_season_from_path(file_path.parent)
+    synthetic_parts = [show_name]
+    if season_from_path:
+        synthetic_parts.append(f"Season {season_from_path}")
+    synthetic_parts.append(file_path.stem)
+    synthetic_name = " ".join(part for part in synthetic_parts if part)
+
+    return imdb_service.extract_tv_show_details(synthetic_name)
+
+
+def _path_has_tv_keywords(path: Path) -> bool:
+    tv_keywords = {"tv show", "tv shows", "tvshows", "series", "episode", "episodes"}
+    for part in path.parts:
+        normalized = part.lower().replace("_", " ").replace("-", " ").strip()
+        if normalized in tv_keywords:
+            return True
+        if normalized.startswith("season") and any(ch.isdigit() for ch in normalized):
+            return True
+    return False
+
+
+def _score_tv(signals: DetectionSignals) -> int:
+    tv_score = 0
+    for condition, points in (
+        (signals.has_tv_episode_pattern, 5),
+        (signals.has_multi_episode, 5),
+        (signals.has_season_folder, 3),
+        (signals.in_tv_named_folder, 3),
+        (signals.has_date_pattern, 2),
+        (signals.has_absolute_numbering, 2),
+    ):
+        if condition:
+            tv_score += points
+
+    if signals.tv_episode_count >= 3:
+        tv_score += 4
+    elif signals.tv_episode_count >= 1:
+        tv_score += 2
+
+    return tv_score
+
+
+def _score_movie(signals: DetectionSignals) -> int:
+    movie_score = 0
+    for condition, points in (
+        (signals.in_movie_named_folder, 3),
+        (signals.movie_file_count >= 1 and signals.tv_episode_count == 0, 2),
+    ):
+        if condition:
+            movie_score += points
+
+    if signals.is_file and not (
+        signals.has_tv_episode_pattern
+        or signals.has_multi_episode
+        or signals.has_absolute_numbering
+        or signals.has_date_pattern
+    ):
+        movie_score += 2
+
+    return movie_score
+
+
+def _apply_negative_signals(
+    tv_score: int, movie_score: int, signals: DetectionSignals
+) -> tuple[int, int]:
+    if signals.in_tv_named_folder:
+        movie_score -= 5
+    if signals.in_movie_named_folder:
+        tv_score -= 5
+    return tv_score, movie_score
+
+
+def decide_content_type(signals: DetectionSignals, config: DetectionConfig) -> ContentType:
+    """
+    Pure function to decide content type from signals.
+
+    Uses a scoring system with confidence thresholds to avoid
+    misclassification in ambiguous cases.
+    """
+    if signals.in_ignored_folder:
+        return ContentType.UNKNOWN
+
+    tv_score = _score_tv(signals)
+    movie_score = _score_movie(signals)
+    tv_score, movie_score = _apply_negative_signals(tv_score, movie_score, signals)
+
+    # Decision with confidence thresholds
+    if tv_score >= config.MIN_TV_CONFIDENCE and tv_score > movie_score:
+        return ContentType.TV
+    if movie_score >= config.MIN_MOVIE_CONFIDENCE and movie_score > tv_score:
+        return ContentType.MOVIE
+
+    # Low confidence - don't guess
+    return ContentType.UNKNOWN
+
+
+def _extract_signals(p: Path, config: DetectionConfig) -> DetectionSignals:
+    """Extract all detection signals from a path"""
+    signals = DetectionSignals()
+    signals.is_file = p.is_file() if p.exists() else True  # Assume file if unsure
+
+    # For files: analyze filename and parent structure
+    if signals.is_file:
+        if not _is_video_file(p, config):
+            return signals  # Not a video, return empty signals
+
+        signals = _analyze_filename(p.name, signals)
+        signals = _analyze_path_structure(p, config, signals)
+    else:
+        # For directories: scan contents (with limits)
+        signals = _scan_directory(p, config, signals)
+
+    return signals
+
+
+def _is_video_file(p: Path, config: DetectionConfig) -> bool:
+    """Check if file has video extension (case-insensitive)"""
+    return p.suffix.lower() in config.VIDEO_EXTENSIONS
+
+
+def _analyze_filename(filename: str, signals: DetectionSignals) -> DetectionSignals:
+    """Extract signals from filename patterns"""
+    # TV episode patterns
+    if TV_PATTERNS["season_episode"].search(filename):
+        signals.has_tv_episode_pattern = True
+    if TV_PATTERNS["numeric_episode"].search(filename):
+        signals.has_tv_episode_pattern = True
+    if TV_PATTERNS["multi_episode"].search(filename):
+        signals.has_multi_episode = True
+        signals.has_tv_episode_pattern = True
+    if TV_PATTERNS["date_pattern"].search(filename):
+        signals.has_date_pattern = True
+    if TV_PATTERNS["absolute_numbering"].search(filename):
+        signals.has_absolute_numbering = True
+
+    return signals
+
+
+def _analyze_path_structure(
+    p: Path, config: DetectionConfig, signals: DetectionSignals
+) -> DetectionSignals:
+    """Analyze parent directory structure for signals"""
+    # Traverse parents (limit depth for performance)
+    for i, part in enumerate(p.parts):
+        if i > 10:  # Safety limit
+            break
+
+        # Normalize folder name for comparison
+        normalized = _normalize_folder_name(part)
+
+        # Check for ignored directories
+        if normalized in config.IGNORED_DIRS:
+            signals.in_ignored_folder = True
+            return signals  # Early exit
+
+        # Check for TV indicators
+        if normalized in config.TV_INDICATORS:
+            signals.in_tv_named_folder = True
+
+        # Check for movie indicators
+        if normalized in config.MOVIE_INDICATORS:
+            signals.in_movie_named_folder = True
+
+        # Check for season folder pattern
+        if TV_PATTERNS["season_folder"].match(part):
+            signals.has_season_folder = True
+
+    signals.path_depth = len(p.parts)
+    return signals
+
+
+def _normalize_folder_name(name: str) -> str:
+    """Normalize folder name for matching"""
+    # Convert to lowercase, replace separators with spaces, strip
+    return name.lower().replace("_", " ").replace(".", " ").strip()
+
+
+def _scan_timed_out(start_time: float, config: DetectionConfig, path: Path) -> bool:
+    if time.time() - start_time > config.MAX_SCAN_TIME_SECONDS:
+        logger.warning(f"Directory scan timeout for {path}")
+        return True
+    return False
+
+
+def _calculate_depth(root: str, base: Path) -> int:
+    try:
+        return len(Path(root).relative_to(base).parts)
+    except ValueError:
+        return 0
+
+
+def _prune_by_depth(root: str, base: Path, config: DetectionConfig, dirs: list[str]) -> bool:
+    depth = _calculate_depth(root, base)
+    if depth > config.MAX_SCAN_DEPTH:
+        dirs[:] = []
+        return True
+    return False
+
+
+def _filter_ignored_dirs(dirs: list[str], config: DetectionConfig) -> None:
+    dirs[:] = [d for d in dirs if _normalize_folder_name(d) not in config.IGNORED_DIRS]
+
+
+def _update_counts_from_filename(filename: str, signals: DetectionSignals) -> None:
+    file_signals = _analyze_filename(filename, DetectionSignals())
+    if file_signals.has_tv_episode_pattern or file_signals.has_multi_episode:
+        signals.tv_episode_count += 1
+    else:
+        signals.movie_file_count += 1
+
+
+def _scan_files_in_dir(
+    root: str,
+    files: list[str],
+    config: DetectionConfig,
+    signals: DetectionSignals,
+    files_checked: int,
+) -> int:
+    for file in files:
+        if files_checked >= config.MAX_FILES_TO_SCAN:
+            break
+
+        file_path = Path(root) / file
+        if not _is_video_file(file_path, config):
+            continue
+
+        files_checked += 1
+        _update_counts_from_filename(file, signals)
+
+    return files_checked
+
+
+def _scan_directory(
+    p: Path, config: DetectionConfig, signals: DetectionSignals
+) -> DetectionSignals:
+    """
+    Scan directory contents to detect patterns.
+
+    CRITICAL PERFORMANCE SAFEGUARDS:
+    - Maximum file limit
+    - Maximum depth limit
+    - Maximum time limit
+    - No symlink following (prevents loops)
+    """
+    start_time = time.time()
+    files_checked = 0
 
     try:
-        # Use scandir for potentially better performance, but walk is fine
-        for _, _, files in os.walk(
-            str(target_path), topdown=True, followlinks=False
-        ):  # Avoid infinite loops with followlinks=False
-            if checked_files >= file_limit:
-                logger.debug(f"Content detection limit ({file_limit}) reached.")
+        # Use os.walk with safeguards
+        for root, dirs, files in os.walk(
+            str(p),
+            topdown=True,
+            followlinks=False,  # CRITICAL: Prevent symlink loops
+        ):
+            if _scan_timed_out(start_time, config, p):
                 break
-            for file in files:
-                if checked_files >= file_limit:
-                    break
-                # Construct full path for checks
-                # file_path = os.path.join(root, file) # Not strictly needed if not using visited_paths
 
-                # Check extension first (cheaper)
-                if any(file.lower().endswith(ext) for ext in VIDEO_EXTENSIONS):
-                    # Skip based on patterns
-                    if any(p in file.upper() for p in SKIP_PATTERNS):
-                        logger.debug(f"Skipping pattern match file during detection: {file}")
-                        continue
+            if _prune_by_depth(root, p, config, dirs):
+                continue
 
-                    # Now perform the more expensive name parsing
-                    try:
-                        show_name, season, episode, _ = imdb_service.extract_tv_show_details(file)
-                        checked_files += 1
-                        if show_name and season and episode:
-                            tv_count += 1
-                        else:
-                            # Assume movie if not clearly an episode
-                            movie_count += 1
-                    except Exception as parse_err:
-                        # Log error during parsing but still count it as checked (likely movie)
-                        logger.debug(
-                            f"Error parsing filename during detection for '{file}': {parse_err}. Counting as movie/other."
-                        )
-                        checked_files += 1
-                        movie_count += 1
+            _filter_ignored_dirs(dirs, config)
 
-    except OSError as e_walk:  # Catch filesystem errors
-        logger.error(f"Error during content type detection walk for '{directory}': {e_walk}.")
-        # If walk failed early and we checked nothing, we can't determine type
-        if checked_files == 0:
-            logger.warning(
-                f"Scan failed early for '{directory}' and no video files were checked. Cannot determine type."
-            )
-            return None
-    except Exception as e_generic:  # Catch other unexpected errors
-        logger.error(
-            f"Unexpected error during content type detection walk for '{directory}': {e_generic}",
-            exc_info=True,
-        )
-        if checked_files == 0:
-            logger.warning(
-                f"Scan failed unexpectedly for '{directory}' before checking files. Cannot determine type."
-            )
-            return None
+            files_checked = _scan_files_in_dir(root, files, config, signals, files_checked)
+            if files_checked >= config.MAX_FILES_TO_SCAN:
+                return signals
 
-    logger.debug(
-        f"Detection scan results for '{directory}': Checked={checked_files}, TV={tv_count}, Movie/Other={movie_count}"
-    )
+    except PermissionError:
+        logger.warning(f"Permission denied scanning directory {p}")
+    except OSError as e:
+        logger.warning(f"Error scanning directory {p}: {e}")
 
-    if checked_files == 0:
-        logger.warning(
-            f"No processable video files found matching patterns in '{directory}' during scan. Cannot determine type."
-        )
+    return signals
+
+
+def determine_content_type_for_path(
+    directory: str | Path | None, config: DetectionConfig | None = None, strict_exists: bool = False
+) -> str | None:
+    """
+    Determine if the path (file or folder) is better classified as 'movie' or 'tvshow'.
+    Uses a signal-based scoring system.
+
+    Args:
+        directory (str|Path): The directory or file path to scan.
+        config (DetectionConfig, optional): Custom config.
+        strict_exists (bool): If True, raises FileNotFoundError if path missing.
+
+    Returns:
+        Optional[str]: "tvshow", "movie", or None.
+    """
+    logger.debug(f"Attempting content type detection for: {directory}")
+
+    if config is None:
+        config = DetectionConfig()
+
+    if not directory:
         return None
 
-    # Calculate percentage and determine type based on threshold
-    tv_percentage = (tv_count / checked_files) * 100.0
-    logger.info(
-        f"Directory '{Path(directory).name}' TV Show Percentage = {tv_percentage:.1f}% (Threshold: {tv_threshold_percent}%)"
-    )
+    try:
+        # Resolve path
+        target_path = Path(directory).resolve()
 
-    if tv_percentage >= tv_threshold_percent:
-        return "tvshow"
-    else:
-        return "movie"
+        if strict_exists and not target_path.exists():
+            raise FileNotFoundError(f"Path does not exist: {directory}")
+
+        # Extract signals
+        signals = _extract_signals(target_path, config)
+
+        # Decide
+        result = decide_content_type(signals, config)
+        logger.info(f"Classified '{target_path.name}' as {result.value} (Signals: {signals})")
+
+        if result == ContentType.TV:
+            return "tvshow"
+        elif result == ContentType.MOVIE:
+            return "movie"
+        else:
+            return None  # UNKNOWN -> None for compatibility
+
+    except Exception as e:
+        logger.error(f"Error determining content type for {directory}: {e}", exc_info=True)
+        return None
 
 
 # === Define Public Interface ===
@@ -447,6 +927,7 @@ def determine_content_type_for_path(directory: str) -> str | None:  # noqa: C901
 __all__ = [
     "determine_content_type_for_path",
     "process_movie_folder",
+    "process_tv_show_file",
     "process_tv_show_folder",
     # Note: _run_pipeline_for_file is not listed here as it's "internal",
     # but main.py imports it directly. This is acceptable.
