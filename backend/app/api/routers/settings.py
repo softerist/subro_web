@@ -22,6 +22,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
 
+def _sanitize_for_log(value: str) -> str:
+    """Sanitize user-controlled strings for safe logging.
+
+    Removes newlines and carriage returns to prevent log injection/forging.
+    """
+    return value.replace("\n", "").replace("\r", "")
+
+
 @router.get(
     "",
     response_model=SettingsRead,
@@ -40,7 +48,7 @@ async def get_settings(
 
     **Requires admin privileges.**
     """
-    logger.debug(f"Settings retrieved by admin user: {current_user.email}")
+    logger.debug("Settings retrieved by admin user: %s", _sanitize_for_log(current_user.email))
     try:
         return await crud_app_settings.to_read_schema(db)
     except Exception as e:
@@ -95,7 +103,7 @@ async def update_settings(
                 settings_update.deepl_api_keys = resolved_keys
 
         await crud_app_settings.update(db, obj_in=settings_update)
-        logger.info(f"Settings updated by admin user: {current_user.email}")
+        logger.info("Settings updated by admin user: %s", _sanitize_for_log(current_user.email))
     except Exception as e:
         logger.error(f"Failed to update settings: {e}")
         raise HTTPException(
@@ -143,7 +151,9 @@ async def get_raw_setting(
     **Requires admin privileges.**
     """
     value = await crud_app_settings.get_decrypted_value(db, field_name)
-    logger.debug(f"Raw setting '{field_name}' accessed by: {current_user.email}")
+    logger.debug(
+        "Raw setting '%s' accessed by: %s", field_name, _sanitize_for_log(current_user.email)
+    )
     return {"field": field_name, "value": value}
 
 

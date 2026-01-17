@@ -23,6 +23,14 @@ router = APIRouter(
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_for_log(value: str) -> str:
+    """Sanitize user-controlled strings for safe logging.
+
+    Removes newlines and carriage returns to prevent log injection/forging.
+    """
+    return value.replace("\n", "").replace("\r", "")
+
+
 @router.get("/", response_model=list[StoragePathRead])
 async def list_storage_paths(
     db: AsyncSession = Depends(get_async_session),
@@ -52,7 +60,11 @@ async def create_storage_path(
             if not resolved.exists():
                 pass
         except PermissionError as e:
-            logger.error(f"PermissionError in create_storage_path: {e} | Path: {path_in.path}")
+            logger.error(
+                "PermissionError in create_storage_path: %s | Path: %s",
+                e,
+                _sanitize_for_log(path_in.path),
+            )
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from e
 
     # 3. Enforce "Subdirectory Only" policy for Non-Superusers

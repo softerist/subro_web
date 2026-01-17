@@ -39,6 +39,12 @@ audit_router = APIRouter(
 )
 
 
+def _escape_like_pattern(value: str) -> str:
+    """Escape SQL LIKE pattern special characters to prevent injection."""
+    # Escape backslash first, then the wildcards
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _audit_uuid_filter(value: str, field_name: str) -> uuid.UUID:
     try:
         return uuid.UUID(value)
@@ -90,11 +96,13 @@ def _build_audit_conditions(
 
     # Action filter uses LIKE for partial matching
     if action:
-        conditions.append(AuditLog.action.ilike(f"%{action}%"))
+        escaped_action = _escape_like_pattern(action)
+        conditions.append(AuditLog.action.ilike(f"%{escaped_action}%"))
 
     # Actor email filter uses LIKE for partial matching
     if actor_email:
-        conditions.append(AuditLog.actor_email.ilike(f"%{actor_email}%"))
+        escaped_email = _escape_like_pattern(actor_email)
+        conditions.append(AuditLog.actor_email.ilike(f"%{escaped_email}%"))
 
     if actor_user_id:
         conditions.append(

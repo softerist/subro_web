@@ -1,9 +1,7 @@
 import logging
-from datetime import UTC, datetime  # Python 3.11+ for UTC, for older use datetime.timezone.utc
-
-# from datetime import timezone # For Python < 3.11 if UTC is not available directly
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated  # List for Python < 3.9 compatibility with list[]
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import (
@@ -12,20 +10,20 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
-    Request,  # Ensure Request is imported
+    Request,
     status,
 )
-from fastapi import Path as FastApiPath  # Renamed to avoid conflict with pathlib.Path
+from fastapi import Path as FastApiPath
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import crud  # Assuming crud.job is available
+from app import crud
 from app.core.api_key_auth import get_current_user_with_api_key_or_jwt
 from app.core.config import settings
-from app.core.rate_limit import get_api_key_or_ip, limiter  # Import limiter
-from app.core.security import current_active_user  # Your user dependency
+from app.core.rate_limit import get_api_key_or_ip, limiter
+from app.core.security import current_active_user
 from app.db.models.job import Job, JobStatus
-from app.db.models.user import User  # Assuming User model for type hinting
+from app.db.models.user import User
 from app.db.session import get_async_session
 from app.schemas.job import (
     JobCreate,

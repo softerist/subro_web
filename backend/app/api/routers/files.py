@@ -18,6 +18,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/files", tags=["Files"])
 
 
+def _sanitize_for_log(value: str) -> str:
+    """Sanitize user-controlled strings for safe logging.
+
+    Removes newlines and carriage returns to prevent log injection/forging.
+    """
+    return value.replace("\n", "").replace("\r", "")
+
+
 @router.get(
     "/download",
     summary="Download a file",
@@ -85,14 +93,18 @@ async def download_file(
     )
     if not is_allowed and allowed_folders:
         logger.warning(
-            f"Attempted download outside allowed folders: {path} by {current_user.email}"
+            "Attempted download outside allowed folders: %s by %s",
+            _sanitize_for_log(path),
+            _sanitize_for_log(current_user.email),
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied: File is not in an allowed media folder",
         )
 
-    logger.info(f"File download: {path} by {current_user.email}")
+    logger.info(
+        "File download: %s by %s", _sanitize_for_log(path), _sanitize_for_log(current_user.email)
+    )
 
     return FileResponse(
         path=str(resolved_file_path),

@@ -528,7 +528,7 @@ sast_scan:
   stage: scan
   needs: []
   image:
-    name: semgrep/semgrep:1.147.0
+    name: semgrep/semgrep:latest
     entrypoint: [""]
   timeout: 30m
   rules:

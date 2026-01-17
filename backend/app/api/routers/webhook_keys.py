@@ -29,6 +29,14 @@ LOCALHOST_IPS = {"127.0.0.1", "::1", "localhost"}
 DOCKER_GATEWAY_PREFIXES = ("172.17.", "172.18.", "172.19.", "172.20.", "172.21.")
 
 
+def _sanitize_for_log(value: str) -> str:
+    """Sanitize user-controlled strings for safe logging.
+
+    Removes newlines and carriage returns to prevent log injection/forging.
+    """
+    return value.replace("\n", "").replace("\r", "")
+
+
 class WebhookKeyResponse(BaseModel):
     """Response when a webhook key is generated."""
 
@@ -128,7 +136,9 @@ async def get_current_webhook_key(
     client_ip = _get_client_ip(request)
 
     if not _is_localhost_request(client_ip):
-        logger.warning(f"Rejected webhook key retrieval from non-localhost IP: {client_ip}")
+        logger.warning(
+            "Rejected webhook key retrieval from non-localhost IP: %s", _sanitize_for_log(client_ip)
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This endpoint is only accessible from localhost",
@@ -138,7 +148,10 @@ async def get_current_webhook_key(
     app_settings = await crud_app_settings.get(db)
 
     if not app_settings.qbittorrent_webhook_key_encrypted:
-        logger.info(f"Webhook key retrieval attempted but no key configured (from {client_ip})")
+        logger.info(
+            "Webhook key retrieval attempted but no key configured (from %s)",
+            _sanitize_for_log(client_ip),
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No webhook key is configured. Use the Settings page to configure qBittorrent.",
@@ -155,7 +168,7 @@ async def get_current_webhook_key(
         ) from None
 
     # 4. Audit log successful retrieval
-    logger.info(f"Webhook key retrieved successfully from {client_ip}")
+    logger.info("Webhook key retrieved successfully from %s", _sanitize_for_log(client_ip))
 
     return {"key": raw_key}
 
@@ -172,7 +185,7 @@ async def get_webhook_key_status(
 ) -> WebhookKeyStatus:
     """Get the current status of webhook key configuration."""
 
-    logger.debug(f"Webhook key status checked by: {current_user.email}")
+    logger.debug("Webhook key status checked by: %s", _sanitize_for_log(current_user.email))
 
     result = await db.execute(
         select(WebhookKey).where(WebhookKey.is_active == True).limit(1)  # noqa: E712
@@ -202,7 +215,7 @@ async def generate_webhook_key(
 ) -> WebhookKeyResponse:
     """Generate a new webhook key."""
 
-    logger.info(f"Generating webhook key requested by: {current_user.email}")
+    logger.info("Generating webhook key requested by: %s", _sanitize_for_log(current_user.email))
 
     # Revoke any existing active keys
 
@@ -275,7 +288,7 @@ async def revoke_webhook_key(
 ) -> dict:
     """Revoke any active webhook keys."""
 
-    logger.info(f"Revoking webhook key requested by: {current_user.email}")
+    logger.info("Revoking webhook key requested by: %s", _sanitize_for_log(current_user.email))
 
     result = await db.execute(
         select(WebhookKey).where(WebhookKey.is_active == True)  # noqa: E712
@@ -403,7 +416,9 @@ async def configure_qbittorrent_webhook(
         login_to_qbittorrent_with_settings,
     )
 
-    logger.info(f"Auto-configure qBittorrent requested by: {current_user.email}")
+    logger.info(
+        "Auto-configure qBittorrent requested by: %s", _sanitize_for_log(current_user.email)
+    )
 
     # Step 1: Check qBittorrent credentials
 
@@ -546,7 +561,9 @@ async def remove_qbittorrent_configuration(
         login_to_qbittorrent,
     )
 
-    logger.info(f"Removing qBittorrent integration requested by: {current_user.email}")
+    logger.info(
+        "Removing qBittorrent integration requested by: %s", _sanitize_for_log(current_user.email)
+    )
 
     # 1. Revoke keys
     result = await db.execute(
