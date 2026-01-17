@@ -29,5 +29,12 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     exclude: ["e2e/**", "node_modules/**"],
+    coverage: {
+      provider: "v8",
+      reportsDirectory: "./coverage",
+      clean: false,
+    },
+    // Disable parallel file execution to avoid race conditions in coverage file writing
+    fileParallelism: false,
   },
 });
