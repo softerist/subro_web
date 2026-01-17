@@ -158,7 +158,7 @@ async def get_translation_history(
         .offset(offset)
         .limit(page_size)
     )
-    # nosemgrep: fastapi-aiosqlite-sqli - SQLAlchemy ORM uses parameterized queries
+    # nosemgrep: python.fastapi.db.generic-sql-fastapi.generic-sql-fastapi, python.tars.fastapi.sql.aiosqlite.fastapi-without-url-path-aiosqlite-sqli - SQLAlchemy ORM uses bound parameters; pagination ints validated by Query
     items_result = await db.execute(items_query)
     items = items_result.scalars().all()
 

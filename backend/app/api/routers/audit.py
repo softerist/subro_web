@@ -271,11 +271,11 @@ async def list_audit_logs(
         count_query = select(func.count()).select_from(AuditLog)
         if conditions:
             count_query = count_query.where(and_(*conditions))
-        # nosemgrep: fastapi-aiosqlite-sqli - SQLAlchemy ORM uses parameterized queries
+        # nosemgrep: python.fastapi.db.generic-sql-fastapi.generic-sql-fastapi, python.tars.fastapi.sql.aiosqlite.fastapi-without-url-path-aiosqlite-sqli - SQLAlchemy ORM uses bound parameters; filters are typed/escaped
         total_count = (await db.execute(count_query)).scalar()
 
     # Execute
-    # nosemgrep: fastapi-aiosqlite-sqli - SQLAlchemy ORM uses parameterized queries
+    # nosemgrep: python.fastapi.db.generic-sql-fastapi.generic-sql-fastapi, python.tars.fastapi.sql.aiosqlite.fastapi-without-url-path-aiosqlite-sqli - SQLAlchemy ORM uses bound parameters; filters are typed/escaped
     result = await db.execute(query.limit(limit + 1))
     items = list(result.scalars().all())
 
