@@ -84,8 +84,13 @@ async def _apply_login_delay(db: AsyncSession, email: str) -> None:
         logger.warning("Login attempt for suspended user: %s", _sanitize_for_log(email))
         # Fetch user manually for audit log (DelayStatus doesn't have user object)
         from sqlalchemy import select
+        from sqlalchemy.orm import noload
 
-        res = await db.execute(select(UserModel).where(UserModel.email == email))
+        res = await db.execute(
+            select(UserModel)
+            .where(UserModel.email == email)
+            .options(noload(UserModel.jobs), noload(UserModel.api_keys))
+        )
         user_obj = res.scalar_one_or_none()
 
         await audit_service.log_event(

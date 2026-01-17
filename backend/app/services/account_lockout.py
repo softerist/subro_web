@@ -15,6 +15,7 @@ from typing import NamedTuple
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
 from app.core.security_logger import security_log
 from app.db.models.login_attempt import LoginAttempt
@@ -53,7 +54,7 @@ async def get_progressive_delay(
     3. Progressive delay (based on failed_login_count)
     """
     email = email.lower()
-    stmt = select(User).where(User.email == email)
+    stmt = select(User).options(noload(User.jobs), noload(User.api_keys)).where(User.email == email)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
@@ -119,7 +120,7 @@ async def record_login_attempt(
     db.add(attempt)
 
     # 2. Update User state if user exists
-    stmt = select(User).where(User.email == email)
+    stmt = select(User).options(noload(User.jobs), noload(User.api_keys)).where(User.email == email)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
