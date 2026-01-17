@@ -132,6 +132,7 @@ async def reorder_tiles(
         update(DashboardTile)
         .where(DashboardTile.id == bindparam("tile_id"))
         .values(order_index=bindparam("order_index"))
+        .execution_options(synchronize_session=None)
     )
     await db.execute(
         stmt,
