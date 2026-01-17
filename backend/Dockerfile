@@ -47,7 +47,9 @@ RUN ln -s /usr/bin/python3.12 /usr/local/bin/python
 RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/opt/poetry python3 -
 
 # Create a non-root user and group early for consistent permissions
-RUN groupadd -r appuser && useradd --no-log-init -r -g appuser -d ${APP_HOME} appuser
+# Also create media-group with GID 1002 to match host media directory permissions
+RUN groupadd -r appuser && useradd --no-log-init -r -g appuser -d ${APP_HOME} appuser && \
+    groupadd -g 1002 media-group && usermod -a -G media-group appuser
 
 # Create media directory and set permissions
 RUN mkdir -p /mnt/sata0/Media && chown appuser:appuser /mnt/sata0/Media
