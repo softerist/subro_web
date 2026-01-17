@@ -39,7 +39,7 @@ except ImportError:
         )
 
         # Define dummy function
-        def clean_temp_directory(temp_dir_path: str | None) -> None:  # type: ignore[misc] # noqa: ARG001
+        def clean_temp_directory(_temp_dir_path: str | None) -> None:  # type: ignore[misc]
             pass
 
 
