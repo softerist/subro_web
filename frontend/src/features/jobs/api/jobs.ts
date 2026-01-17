@@ -22,6 +22,16 @@ export const jobsApi = {
     return response.data;
   },
 
+  retry: async (id: string) => {
+    const response = await api.post<Job>(`/v1/jobs/${id}/retry`);
+    return response.data;
+  },
+
+  stop: async (id: string) => {
+    const response = await api.post<Job>(`/v1/jobs/${id}/cancel`);
+    return response.data;
+  },
+
   getAllowedFolders: async () => {
     const response = await api.get<string[]>("/v1/jobs/allowed-folders");
     return response.data;

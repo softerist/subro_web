@@ -5,6 +5,7 @@ from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
+from sqlalchemy import bindparam
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select  # For SQLAlchemy 1.4+ style select
 from sqlalchemy.orm import selectinload
@@ -83,14 +84,13 @@ async def list_users_admin(
     # If User.created_at does exist and is correctly typed, this is fine.
     stmt = (
         select(User)
-        .offset(skip)
-        .limit(limit)
+        .offset(bindparam("offset"))
+        .limit(bindparam("limit"))
         .order_by(
             User.created_at.desc() if hasattr(User, "created_at") else User.id.desc()
         )  # Defensive check
     )
-    # nosemgrep: python.fastapi.db.generic-sql-fastapi.generic-sql-fastapi, python.tars.fastapi.sql.aiosqlite.fastapi-without-url-path-aiosqlite-sqli - SQLAlchemy ORM uses bound parameters; skip/limit are validated ints
-    result = await session.execute(stmt)
+    result = await session.execute(stmt, {"offset": skip, "limit": limit})
     users = result.scalars().all()
     logger.info("Admin listed %d users (skip=%d, limit=%d).", len(users), skip, limit)
     return users

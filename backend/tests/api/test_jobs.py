@@ -116,3 +116,118 @@ async def test_get_job_details_forbidden(
     response = await test_client.get(f"{API_PREFIX}/jobs/{job.id}", headers=headers)
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+@patch("app.api.routers.jobs.celery_app")
+async def test_retry_job_success(
+    mock_celery, test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Test that a FAILED job can be retried, creating a new job."""
+    user = UserFactory.create_user(session=db_session, email="retry_user@example.com")
+    await db_session.flush()
+
+    # Create a FAILED job
+    original_job = Job(
+        folder_path="/media/movies/test",
+        language="en",
+        log_level="INFO",
+        user_id=user.id,
+        status=JobStatus.FAILED,
+    )
+    db_session.add(original_job)
+    await db_session.commit()
+    await db_session.refresh(original_job)
+
+    headers = await login_user(test_client, user.email, "password123")
+    response = await test_client.post(f"{API_PREFIX}/jobs/{original_job.id}/retry", headers=headers)
+
+    assert response.status_code == status.HTTP_201_CREATED
+    data = response.json()
+    assert data["folder_path"] == original_job.folder_path
+    assert data["language"] == original_job.language
+    assert data["status"].upper() == "PENDING"
+    assert data["id"] != str(original_job.id)  # New job created
+
+    mock_celery.send_task.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_retry_job_forbidden_for_running(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Test that a RUNNING job cannot be retried."""
+    user = UserFactory.create_user(session=db_session, email="retry_running@example.com")
+    await db_session.flush()
+
+    job = Job(
+        folder_path="/media/movies",
+        language="en",
+        user_id=user.id,
+        status=JobStatus.RUNNING,
+        celery_task_id="test-celery-id-running",
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    headers = await login_user(test_client, user.email, "password123")
+    response = await test_client.post(f"{API_PREFIX}/jobs/{job.id}/retry", headers=headers)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "JOB_NOT_RETRIABLE" in str(response.json())
+
+
+@pytest.mark.asyncio
+@patch("app.api.routers.jobs.celery_app")
+async def test_cancel_job_success(
+    mock_celery, test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Test that a RUNNING job can be cancelled."""
+    user = UserFactory.create_user(session=db_session, email="cancel_user@example.com")
+    await db_session.flush()
+
+    job = Job(
+        folder_path="/media/movies",
+        language="en",
+        user_id=user.id,
+        status=JobStatus.RUNNING,
+        celery_task_id="test-celery-id",
+    )
+    db_session.add(job)
+    await db_session.commit()
+    await db_session.refresh(job)
+
+    headers = await login_user(test_client, user.email, "password123")
+    response = await test_client.post(f"{API_PREFIX}/jobs/{job.id}/cancel", headers=headers)
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["status"].upper() == "CANCELLING"
+
+    mock_celery.control.revoke.assert_called_once_with(
+        "test-celery-id", terminate=True, signal="SIGTERM"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cancel_job_forbidden_for_completed(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Test that a SUCCEEDED job cannot be cancelled."""
+    user = UserFactory.create_user(session=db_session, email="cancel_done@example.com")
+    await db_session.flush()
+
+    job = Job(
+        folder_path="/media/movies",
+        language="en",
+        user_id=user.id,
+        status=JobStatus.SUCCEEDED,
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    headers = await login_user(test_client, user.email, "password123")
+    response = await test_client.post(f"{API_PREFIX}/jobs/{job.id}/cancel", headers=headers)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "JOB_NOT_CANCELLABLE" in str(response.json())

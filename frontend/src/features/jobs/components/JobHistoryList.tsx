@@ -1,7 +1,15 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Eye, Loader2, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Eye,
+  Loader2,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
+  StopCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -52,7 +60,29 @@ export function JobHistoryList({
   const cancelMutation = useMutation({
     mutationFn: jobsApi.cancel,
     onError: (error: Error) => {
-      toast.error(`Failed to cancel job: ${error.message}`);
+      toast.error(`Failed to delete job: ${error.message}`);
+    },
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: jobsApi.retry,
+    onSuccess: () => {
+      toast.success("Job retry started");
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to retry job: ${error.message}`);
+    },
+  });
+
+  const stopMutation = useMutation({
+    mutationFn: jobsApi.stop,
+    onSuccess: () => {
+      toast.success("Job cancellation requested");
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to stop job: ${error.message}`);
     },
   });
 
@@ -61,11 +91,21 @@ export function JobHistoryList({
     setJobToDelete(job);
   };
 
+  const handleRetryClick = (e: React.MouseEvent, job: Job) => {
+    e.stopPropagation();
+    retryMutation.mutate(job.id);
+  };
+
+  const handleStopClick = (e: React.MouseEvent, job: Job) => {
+    e.stopPropagation();
+    stopMutation.mutate(job.id);
+  };
+
   const confirmDelete = () => {
     if (jobToDelete) {
       cancelMutation.mutate(jobToDelete.id, {
         onSuccess: (_, deletedJobId) => {
-          toast.success("Job cancelled/deleted successfully");
+          toast.success("Job deleted successfully");
           queryClient.invalidateQueries({ queryKey: ["jobs"] });
           if (selectedJobId === deletedJobId) {
             onSelectJob(null);
@@ -153,6 +193,52 @@ export function JobHistoryList({
                         <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         <span className="sr-only">View Logs</span>
                       </Button>
+                      {/* Retry button - only for FAILED or CANCELLED jobs */}
+                      {(job.status === "FAILED" ||
+                        job.status === "CANCELLED") && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 sm:h-8 sm:w-8"
+                          onClick={(e) => handleRetryClick(e, job)}
+                          disabled={
+                            retryMutation.isPending &&
+                            retryMutation.variables === job.id
+                          }
+                          title="Retry Job"
+                        >
+                          {retryMutation.isPending &&
+                          retryMutation.variables === job.id ? (
+                            <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-500" />
+                          )}
+                          <span className="sr-only">Retry Job</span>
+                        </Button>
+                      )}
+                      {/* Stop button - only for PENDING or RUNNING jobs */}
+                      {(job.status === "PENDING" ||
+                        job.status === "RUNNING") && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 sm:h-8 sm:w-8"
+                          onClick={(e) => handleStopClick(e, job)}
+                          disabled={
+                            stopMutation.isPending &&
+                            stopMutation.variables === job.id
+                          }
+                          title="Stop Job"
+                        >
+                          {stopMutation.isPending &&
+                          stopMutation.variables === job.id ? (
+                            <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
+                          ) : (
+                            <StopCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-orange-500" />
+                          )}
+                          <span className="sr-only">Stop Job</span>
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
