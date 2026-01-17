@@ -48,6 +48,7 @@ sys.path.insert(0, str(backend_path))
 from app.modules.subtitle.core.processor import (  # noqa: E402
     determine_content_type_for_path,
     process_movie_folder,
+    process_tv_show_file,
     process_tv_show_folder,
 )
 from app.modules.subtitle.utils.logging_config import setup_logging  # noqa: E402
@@ -88,6 +89,7 @@ def main() -> None:
     logging.getLogger().addHandler(error_tracker)
 
     folder_path = args.folder_path
+    target_path = Path(folder_path)
 
     logger.info("=== Subtitle Downloader Started ===")
     logger.info(f"Folder path: {folder_path}")
@@ -96,7 +98,7 @@ def main() -> None:
     logger.info(f"Skip translation: {args.skip_translation}")
     logger.info(f"Skip sync: {args.skip_sync}")
 
-    if not Path(folder_path).exists():
+    if not target_path.exists():
         logger.error(f"Folder path does not exist: {folder_path}")
         print("=== SUBTITLE DOWNLOADER SCRIPT ENDED (error) ===", flush=True)
         sys.exit(1)
@@ -112,14 +114,16 @@ def main() -> None:
     content_type = determine_content_type_for_path(folder_path)
     logger.info(f"Detected content type: {content_type}")
 
-    # If path is a file, default to movie processing
-    if Path(folder_path).is_file():
-        content_type = "movie"
-        logger.info("Input is a file, treating as movie.")
-
     success_count = 0
     try:
-        if content_type == "movie":
+        if target_path.is_file():
+            if content_type == "tvshow":
+                logger.info("Input is a file. Processing as a single TV episode.")
+                success_count = process_tv_show_file(folder_path, options=processing_options)
+            else:
+                logger.info("Input is a file. Processing as a single movie file.")
+                success_count = process_movie_folder(folder_path, options=processing_options)
+        elif content_type == "movie":
             logger.info(f"Processing as MOVIE: {folder_path}")
             success_count = process_movie_folder(folder_path, options=processing_options)
         elif content_type == "tvshow":
