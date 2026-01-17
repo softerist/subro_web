@@ -210,6 +210,64 @@ class TestProcessTvShowFile(unittest.TestCase):
 
         self.assertEqual(result, 1)
 
+    def test_process_file_fallback_to_movie_when_no_episode_patterns(self) -> None:
+        """Test that files without TV episode patterns fallback to movie processing."""
+        mock_path = MagicMock()
+        mock_path.resolve.return_value = mock_path
+        mock_path.is_file.return_value = True
+        mock_path.suffix = ".mkv"
+        mock_path.name = "Some.Movie.2024.mkv"
+        mock_path.__str__ = MagicMock(return_value="/test/Some.Movie.2024.mkv")
+
+        with patch("app.modules.subtitle.core.processor.Path", return_value=mock_path):
+            with patch.object(
+                processor,
+                "_infer_tv_show_details_for_file",
+                return_value=(None, None, None, None),  # No TV details found
+            ):
+                with patch.object(
+                    processor, "_run_pipeline_for_file", return_value=True
+                ) as mock_pipeline:
+                    result = processor.process_tv_show_file("/test/Some.Movie.2024.mkv")
+
+        # Should fallback to movie processing and return 1 (success)
+        self.assertEqual(result, 1)
+        mock_pipeline.assert_called_once()
+
+
+class TestMovieInTvFolderDetection(unittest.TestCase):
+    """Test detection of movies incorrectly placed in TV folders."""
+
+    def test_movie_in_tv_folder_without_episode_pattern_detected_as_tv_with_fallback(
+        self,
+    ) -> None:
+        """Movie file in TV folder is detected as TV, but fallback handles it.
+
+        The detection logic intentionally classifies files in TV folders as TV
+        to be safe. When the file lacks episode patterns, `process_tv_show_file`
+        falls back to movie processing. This test verifies the classification.
+        """
+        # Signals: in_tv_named_folder=True, but has_tv_episode_pattern=False
+        signals = DetectionSignals(
+            in_tv_named_folder=True,
+            has_tv_episode_pattern=False,
+            has_season_folder=False,
+            is_file=True,
+        )
+        result = decide_content_type(signals, DetectionConfig())
+        # Still detected as TV (folder wins), but process_tv_show_file will fallback
+        self.assertEqual(result, ContentType.TV)
+
+    def test_tv_episode_in_tv_folder_detected_as_tv(self) -> None:
+        """TV episode in TV folder should still be detected as TV."""
+        signals = DetectionSignals(
+            in_tv_named_folder=True,
+            has_tv_episode_pattern=True,
+            is_file=True,
+        )
+        result = decide_content_type(signals, DetectionConfig())
+        self.assertEqual(result, ContentType.TV)
+
 
 if __name__ == "__main__":
     unittest.main()
