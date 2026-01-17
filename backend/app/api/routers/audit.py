@@ -11,6 +11,7 @@ Provides:
 """
 
 import logging
+import re
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any
@@ -18,7 +19,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, bindparam, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -45,14 +46,22 @@ def _escape_like_pattern(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _audit_uuid_filter(value: str, field_name: str) -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except ValueError as err:
-        raise HTTPException(status_code=400, detail=f"Invalid {field_name} format") from err
+_SAFE_FILTER_RE = re.compile(r"^[A-Za-z0-9@._:+/-]+$")
 
 
-def _audit_cursor_condition(cursor: str) -> ColumnElement[bool]:
+def _normalize_filter_value(value: str, field_name: str, max_len: int) -> str:
+    """Validate and normalize filter values for equality/LIKE conditions."""
+    cleaned = value.strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name} value")
+    if len(cleaned) > max_len:
+        raise HTTPException(status_code=400, detail=f"{field_name} is too long")
+    if not _SAFE_FILTER_RE.match(cleaned):
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name} format")
+    return cleaned
+
+
+def _audit_cursor_condition(cursor: str) -> tuple[ColumnElement[bool], dict[str, Any]]:
     try:
         ts_part, id_part = cursor.split("_")
         cursor_ts = datetime.fromisoformat(ts_part)
@@ -60,10 +69,14 @@ def _audit_cursor_condition(cursor: str) -> ColumnElement[bool]:
     except (ValueError, IndexError) as err:
         raise HTTPException(status_code=400, detail="Invalid cursor format") from err
 
-    return and_(
-        AuditLog.timestamp <= cursor_ts,
-        and_((AuditLog.timestamp < cursor_ts) | (AuditLog.id < cursor_id)),
+    params = {"cursor_ts": cursor_ts, "cursor_id": cursor_id}
+    condition = and_(
+        AuditLog.timestamp <= bindparam("cursor_ts"),
+        and_(
+            (AuditLog.timestamp < bindparam("cursor_ts")) | (AuditLog.id < bindparam("cursor_id"))
+        ),
     )
+    return condition, params
 
 
 def _build_audit_conditions(
@@ -71,57 +84,61 @@ def _build_audit_conditions(
     category: str | None,
     action: str | None,
     severity: str | None,
-    actor_user_id: str | None,
+    actor_user_id: uuid.UUID | None,
     actor_email: str | None,
-    target_user_id: str | None,
+    target_user_id: uuid.UUID | None,
     resource_type: str | None,
     resource_id: str | None,
     ip_address: str | None,
     success: bool | None,
     start_date: date | None,
     end_date: date | None,
-) -> list[ColumnElement[bool]]:
+) -> tuple[list[ColumnElement[bool]], dict[str, Any]]:
     conditions: list[ColumnElement[bool]] = []
+    params: dict[str, Any] = {}
 
     eq_filters = [
-        (category, AuditLog.category),
-        (severity, AuditLog.severity),
-        (resource_type, AuditLog.resource_type),
-        (resource_id, AuditLog.resource_id),
-        (ip_address, AuditLog.ip_address),
+        ("category", category, AuditLog.category, 50),
+        ("severity", severity, AuditLog.severity, 20),
+        ("resource_type", resource_type, AuditLog.resource_type, 50),
+        ("resource_id", resource_id, AuditLog.resource_id, 255),
+        ("ip_address", ip_address, AuditLog.ip_address, 45),
     ]
-    for value, column in eq_filters:
+    for param_name, value, column, max_len in eq_filters:
         if value:
-            conditions.append(column == value)
+            value = _normalize_filter_value(value, param_name, max_len)
+            conditions.append(column == bindparam(param_name))
+            params[param_name] = value
 
     # Action filter uses LIKE for partial matching
     if action:
-        escaped_action = _escape_like_pattern(action)
-        conditions.append(AuditLog.action.ilike(f"%{escaped_action}%"))
+        action = _normalize_filter_value(action, "action", 100)
+        conditions.append(AuditLog.action.ilike(bindparam("action_like"), escape="\\"))
+        params["action_like"] = f"%{_escape_like_pattern(action)}%"
 
     # Actor email filter uses LIKE for partial matching
     if actor_email:
-        escaped_email = _escape_like_pattern(actor_email)
-        conditions.append(AuditLog.actor_email.ilike(f"%{escaped_email}%"))
+        actor_email = _normalize_filter_value(actor_email, "actor_email", 255)
+        conditions.append(AuditLog.actor_email.ilike(bindparam("actor_email_like"), escape="\\"))
+        params["actor_email_like"] = f"%{_escape_like_pattern(actor_email)}%"
 
     if actor_user_id:
-        conditions.append(
-            AuditLog.actor_user_id == _audit_uuid_filter(actor_user_id, "actor_user_id")
-        )
+        params["actor_user_id"] = actor_user_id
+        conditions.append(AuditLog.actor_user_id == bindparam("actor_user_id"))
     if target_user_id:
-        conditions.append(
-            AuditLog.target_user_id == _audit_uuid_filter(target_user_id, "target_user_id")
-        )
+        params["target_user_id"] = target_user_id
+        conditions.append(AuditLog.target_user_id == bindparam("target_user_id"))
     if success is not None:
-        conditions.append(AuditLog.success == success)
+        conditions.append(AuditLog.success == bindparam("success"))
+        params["success"] = success
     if start_date:
-        conditions.append(AuditLog.timestamp >= datetime.combine(start_date, datetime.min.time()))
+        conditions.append(AuditLog.timestamp >= bindparam("start_ts"))
+        params["start_ts"] = datetime.combine(start_date, datetime.min.time())
     if end_date:
-        conditions.append(
-            AuditLog.timestamp < datetime.combine(end_date + timedelta(days=1), datetime.min.time())
-        )
+        conditions.append(AuditLog.timestamp < bindparam("end_ts"))
+        params["end_ts"] = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
 
-    return conditions
+    return conditions, params
 
 
 # --- Schemas ---
@@ -221,9 +238,9 @@ async def list_audit_logs(
     category: str | None = Query(None, description="Filter by category"),
     action: str | None = Query(None, description="Filter by action"),
     severity: str | None = Query(None, description="Filter by severity"),
-    actor_user_id: str | None = Query(None, description="Filter by actor user ID"),
+    actor_user_id: uuid.UUID | None = Query(None, description="Filter by actor user ID"),
     actor_email: str | None = Query(None, description="Filter by actor email"),
-    target_user_id: str | None = Query(None, description="Filter by target user ID"),
+    target_user_id: uuid.UUID | None = Query(None, description="Filter by target user ID"),
     resource_type: str | None = Query(None, description="Filter by resource type"),
     resource_id: str | None = Query(None, description="Filter by resource ID"),
     ip_address: str | None = Query(None, description="Filter by IP address"),
@@ -243,7 +260,7 @@ async def list_audit_logs(
 
     query = select(AuditLog).order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
 
-    conditions = _build_audit_conditions(
+    conditions, params = _build_audit_conditions(
         category=category,
         action=action,
         severity=severity,
@@ -260,7 +277,9 @@ async def list_audit_logs(
 
     # Cursor pagination logic
     if cursor:
-        conditions.append(_audit_cursor_condition(cursor))
+        cursor_condition, cursor_params = _audit_cursor_condition(cursor)
+        conditions.append(cursor_condition)
+        params.update(cursor_params)
 
     if conditions:
         query = query.where(and_(*conditions))
@@ -271,12 +290,11 @@ async def list_audit_logs(
         count_query = select(func.count()).select_from(AuditLog)
         if conditions:
             count_query = count_query.where(and_(*conditions))
-        # nosemgrep: fastapi-aiosqlite-sqli - SQLAlchemy ORM uses parameterized queries
-        total_count = (await db.execute(count_query)).scalar()
+        total_count = (await db.execute(count_query, params)).scalar()  # nosemgrep
 
     # Execute
-    # nosemgrep: fastapi-aiosqlite-sqli - SQLAlchemy ORM uses parameterized queries
-    result = await db.execute(query.limit(limit + 1))
+    query = query.limit(bindparam("limit"))
+    result = await db.execute(query, {**params, "limit": limit + 1})  # nosemgrep
     items = list(result.scalars().all())
 
     # Get next cursor

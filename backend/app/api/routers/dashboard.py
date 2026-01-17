@@ -3,7 +3,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import bindparam, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.users import current_active_superuser
@@ -33,8 +33,6 @@ async def get_active_tiles(
 
 
 # --- Admin Endpoints ---
-
-
 @router.get(
     "/admin/tiles", response_model=list[TileRead], summary="Get all dashboard tiles (Admin)"
 )
@@ -128,14 +126,16 @@ async def reorder_tiles(
     Update the order_index of multiple tiles.
     """
     # Simple loop update - acceptable for small number of tiles (dashboard usually < 50 items)
-    for item in reorder_list:
-        stmt = (
-            update(DashboardTile)
-            .where(DashboardTile.id == item.id)
-            .values(order_index=item.order_index)
-        )
-        # nosemgrep: fastapi-aiosqlite-sqli - SQLAlchemy ORM uses parameterized queries
-        await db.execute(stmt)
+    stmt = (
+        update(DashboardTile.__table__)
+        .where(DashboardTile.__table__.c.id == bindparam("tile_id"))
+        .values(order_index=bindparam("order_index"))
+    )
+    await db.execute(
+        stmt,
+        [{"tile_id": item.id, "order_index": item.order_index} for item in reorder_list],
+        execution_options={"synchronize_session": False},
+    )
 
     await db.commit()
     return {"message": "Tiles reordered successfully"}

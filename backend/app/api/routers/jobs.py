@@ -690,3 +690,144 @@ async def delete_or_cancel_job(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="JOB_DELETION_DB_ERROR",
         ) from e
+
+
+@router.post(
+    "/{job_id}/retry",
+    response_model=JobRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Retry a failed or cancelled job",
+    description=(
+        "Creates a new job with the same parameters (folder_path, language, log_level) "
+        "as the specified job. Only jobs in terminal states (FAILED, CANCELLED) can be retried. "
+        "The original job is preserved in history."
+    ),
+)
+async def retry_job(
+    job_id: Annotated[UUID, FastApiPath(description="The ID of the job to retry")],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
+) -> Job:
+    logger.info(
+        "User '%s' attempting to retry job '%s'.",
+        _sanitize_for_log(current_user.email),
+        job_id,
+    )
+
+    original_job = await crud.job.get(db, id=job_id)
+    if not original_job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="JOB_NOT_FOUND")
+
+    # Authorization check
+    if not current_user.is_superuser and original_job.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="NOT_AUTHORIZED_TO_RETRY_JOB"
+        )
+
+    # Only allow retry for terminal states
+    retriable_statuses = {JobStatus.FAILED, JobStatus.CANCELLED}
+    if original_job.status not in retriable_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "JOB_NOT_RETRIABLE",
+                "message": f"Cannot retry job with status '{original_job.status.value}'. "
+                f"Only FAILED or CANCELLED jobs can be retried.",
+            },
+        )
+
+    # Create new job with same parameters
+    job_create_internal = JobCreateInternal(
+        folder_path=original_job.folder_path,
+        language=original_job.language,
+        log_level=original_job.log_level or "INFO",
+        user_id=current_user.id,
+    )
+
+    db_job_with_celery_id = await _create_db_job_and_set_celery_id(
+        db, job_create_internal, current_user.email
+    )
+    await _enqueue_celery_task_and_handle_errors(db, db_job_with_celery_id, current_user.email)
+
+    logger.info(
+        "Successfully created retry job '%s' from original job '%s' for user '%s'.",
+        db_job_with_celery_id.id,
+        job_id,
+        _sanitize_for_log(current_user.email),
+    )
+    return db_job_with_celery_id
+
+
+@router.post(
+    "/{job_id}/cancel",
+    response_model=JobRead,
+    status_code=status.HTTP_200_OK,
+    summary="Cancel a running job",
+    description=(
+        "Stops a job that is currently PENDING or RUNNING. "
+        "Sets the job status to CANCELLING and sends a termination signal to the worker. "
+        "Jobs in terminal states cannot be cancelled."
+    ),
+)
+async def cancel_job(
+    job_id: Annotated[UUID, FastApiPath(description="The ID of the job to cancel")],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
+) -> Job:
+    logger.info(
+        "User '%s' attempting to cancel job '%s'.",
+        _sanitize_for_log(current_user.email),
+        job_id,
+    )
+
+    job = await crud.job.get(db, id=job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="JOB_NOT_FOUND")
+
+    # Authorization check
+    if not current_user.is_superuser and job.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="NOT_AUTHORIZED_TO_CANCEL_JOB"
+        )
+
+    # Only allow cancellation of non-terminal jobs
+    cancellable_statuses = {JobStatus.PENDING, JobStatus.RUNNING}
+    if job.status not in cancellable_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "JOB_NOT_CANCELLABLE",
+                "message": f"Cannot cancel job with status '{job.status.value}'. "
+                f"Only PENDING or RUNNING jobs can be cancelled.",
+            },
+        )
+
+    # Update status to CANCELLING
+    job.status = JobStatus.CANCELLING
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    # Send revoke signal to Celery
+    if job.celery_task_id:
+        try:
+            celery_app.control.revoke(job.celery_task_id, terminate=True, signal="SIGTERM")
+            logger.info(
+                "Sent revoke signal for Celery task '%s' (job '%s').",
+                job.celery_task_id,
+                job_id,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to send revoke command for Celery task_id '%s': %s",
+                job.celery_task_id,
+                e,
+            )
+            # Continue anyway - status is already CANCELLING
+
+    logger.info(
+        "Job '%s' set to CANCELLING by user '%s'.",
+        job_id,
+        _sanitize_for_log(current_user.email),
+    )
+    return job

@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func, select
+from sqlalchemy import bindparam, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import current_active_user
@@ -155,11 +155,10 @@ async def get_translation_history(
     items_query = (
         select(TranslationLog)
         .order_by(TranslationLog.timestamp.desc())
-        .offset(offset)
-        .limit(page_size)
+        .offset(bindparam("offset"))
+        .limit(bindparam("limit"))
     )
-    # nosemgrep: fastapi-aiosqlite-sqli - SQLAlchemy ORM uses parameterized queries
-    items_result = await db.execute(items_query)
+    items_result = await db.execute(items_query, {"offset": offset, "limit": page_size})
     items = items_result.scalars().all()
 
     return TranslationHistoryResponse(

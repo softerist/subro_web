@@ -27,14 +27,12 @@ ENV APP_HOME=/app \
 # Set working directory
 WORKDIR ${APP_HOME}
 
-# Install Python 3.12, pip, venv, and gosu.
+# Install Python 3.12, venv, and gosu.
 # Run apt-get upgrade to patch all OS-level CVEs.
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
     python3.12 \
     python3.12-venv \
-    python3-pip \
-    python3-setuptools \
     gosu \
     ca-certificates \
     curl \
@@ -42,14 +40,17 @@ RUN apt-get update && apt-get upgrade -y && \
     netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
-# Symlink python3 to python for convenience
-RUN ln -s /usr/bin/python3.12 /usr/local/bin/python
+# Symlink python3 and python for convenience (python3 required by poetry installer)
+RUN ln -s /usr/bin/python3.12 /usr/local/bin/python && \
+    ln -s /usr/bin/python3.12 /usr/local/bin/python3
 
 # Install Poetry using the official installer script to avoid dependency conflicts
 RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/opt/poetry python3 -
 
 # Create a non-root user and group early for consistent permissions
-RUN groupadd -r appuser && useradd --no-log-init -r -g appuser -d ${APP_HOME} appuser
+# Also create media-group with GID 1002 to match host media directory permissions
+RUN groupadd -r appuser && useradd --no-log-init -r -g appuser -d ${APP_HOME} appuser && \
+    groupadd -g 1002 media-group && usermod -a -G media-group appuser
 
 # Create media directory and set permissions
 RUN mkdir -p /mnt/sata0/Media && chown appuser:appuser /mnt/sata0/Media
@@ -70,6 +71,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gcc \
     python3.12-dev \
+    python3-pip \
+    python3-setuptools \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency definition files FIRST, ensuring correct ownership
@@ -95,6 +98,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     build-essential \
     python3.12-dev \
+    python3-pip \
+    python3-setuptools \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Poetry files
