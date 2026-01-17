@@ -415,10 +415,12 @@ def process_tv_show_file(episode_path: str, options: dict[str, Any] | None = Non
 
     show_name, season, episode, year = _infer_tv_show_details_for_file(target_path)
     if not (show_name and season and episode):
-        logger.warning(
-            f"File does not match TV episode patterns or lacks show details: {episode_path}"
+        logger.info(
+            f"File does not match TV episode patterns, falling back to movie processing: {episode_path}"
         )
-        return 0
+        # Fallback to movie processing for files without episode patterns
+        # This handles cases like movies placed in TV show folders
+        return (_run_pipeline_for_file(str(target_path), options) and 1) or 0
 
     try:
         tv_show_details = {
