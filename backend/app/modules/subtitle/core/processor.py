@@ -658,7 +658,7 @@ def _score_movie(signals: DetectionSignals) -> int:
         or signals.has_absolute_numbering
         or signals.has_date_pattern
     ):
-        movie_score += 2
+        movie_score += 3  # Boost for clean filenames that look like movies
 
     return movie_score
 
@@ -667,8 +667,17 @@ def _apply_negative_signals(
     tv_score: int, movie_score: int, signals: DetectionSignals
 ) -> tuple[int, int]:
     if signals.in_tv_named_folder:
-        movie_score -= 5
+        # If in TV folder but NO episode pattern, be less harsh on movie score
+        # This allows movies misfiled in TV folders to be detected as movies
+        if signals.has_tv_episode_pattern or signals.has_season_folder:
+            movie_score -= 5
+        else:
+            movie_score -= 1  # Light penalty only
+
     if signals.in_movie_named_folder:
+        # If in movie folder but looks like TV (e.g. multi-episode file),
+        # still penalize TV score, but maybe check patterns too?
+        # For now, keep it strict as movies rarely look like TV episodes
         tv_score -= 5
     return tv_score, movie_score
 
