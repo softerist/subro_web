@@ -7,6 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
+from app.api.routers.webhook_keys import _update_webhook_env_config
 from app.core.config import settings
 from app.core.security import encrypt_value
 from app.crud.crud_app_settings import crud_app_settings
@@ -157,3 +158,41 @@ async def test_configure_command_has_no_api_key(
     # Verify no api_key was passed (function signature changed)
     assert captured_command is not None
     assert "--api-key" not in str(captured_command)
+
+
+def test_update_webhook_env_config_success():
+    with patch("pathlib.Path") as mock_path_cls:
+        mock_path_instance = MagicMock()
+        mock_path_cls.return_value = mock_path_instance
+
+        # Setup existing env
+        mock_path_instance.exists.return_value = True
+        mock_path_instance.read_text.return_value = "EXISTING_VAR=123\nPATH_MAP_SRC=old_val"
+
+        # Run
+        result = _update_webhook_env_config()
+
+        assert result is True
+
+        # Verify write
+        mock_path_instance.write_text.assert_called_once()
+        written_content = mock_path_instance.write_text.call_args[0][0]
+
+        assert 'PATH_MAP_SRC="/root/Downloads"' in written_content
+        assert 'PATH_MAP_DST="/data/downloads"' in written_content
+        assert "SUBRO_API_BASE_URL=" in written_content
+        assert "EXISTING_VAR=123" in written_content
+
+
+def test_update_webhook_env_config_failure():
+    with patch("pathlib.Path") as mock_path_cls:
+        mock_path_instance = MagicMock()
+        mock_path_cls.return_value = mock_path_instance
+
+        # Simulate exception during read
+        mock_path_instance.exists.side_effect = Exception("Disk error")
+
+        # Run
+        result = _update_webhook_env_config()
+
+        assert result is False
