@@ -51,7 +51,7 @@ async def get_target_user_or_404(
     )
     user = result.scalars().first()
     if not user:
-        logger.warning(f"Admin action attempted on non-existent user_id: {user_id}")
+        logger.warning("Admin action attempted on non-existent user_id: %s", user_id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="USER_NOT_FOUND")
     return user
 
@@ -89,6 +89,7 @@ async def list_users_admin(
             User.created_at.desc() if hasattr(User, "created_at") else User.id.desc()
         )  # Defensive check
     )
+    # nosemgrep: generic-sql-fastapi, fastapi-aiosqlite-sqli - SQLAlchemy ORM uses parameterized .offset()/.limit()
     result = await session.execute(stmt)
     users = result.scalars().all()
     logger.info("Admin listed %d users (skip=%d, limit=%d).", len(users), skip, limit)
@@ -156,7 +157,7 @@ async def create_user_admin(
         await session.commit()
         return created_user
     except Exception as e:
-        logger.error(f"Error creating user by admin: {e}", exc_info=True)
+        logger.error("Error creating user by admin: %s", e, exc_info=True)
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -193,7 +194,7 @@ async def update_user_by_id_admin(  # noqa: C901
     made_changes = False
 
     if not update_data_dict:
-        logger.debug(f"Admin update attempt for user {target_user.id} with no data.")
+        logger.debug("Admin update attempt for user %s with no data.", target_user.id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="NO_UPDATE_DATA_PROVIDED"
         )
@@ -211,7 +212,8 @@ async def update_user_by_id_admin(  # noqa: C901
             if target_user.hashed_password != new_hashed_password:
                 target_user.hashed_password = new_hashed_password
                 made_changes = True
-                logger.info(f"Admin reset password for user {target_user.id}")
+                # nosemgrep: python-logger-credential-disclosure - logs action, not actual credentials
+                logger.info("Admin reset password for user %s", target_user.id)
 
     for key, value in update_data_dict.items():
         if hasattr(target_user, key):
@@ -223,7 +225,7 @@ async def update_user_by_id_admin(  # noqa: C901
                     target_user.mfa_secret = None
                     target_user.mfa_backup_codes = None
                     made_changes = True
-                    logger.info(f"Admin disabled MFA for user {target_user.id}")
+                    logger.info("Admin disabled MFA for user %s", target_user.id)
 
                     # Audit Log: MFA Reset
                     from app.services import audit_service
@@ -276,11 +278,17 @@ async def update_user_by_id_admin(  # noqa: C901
                 setattr(target_user, key, value)
                 made_changes = True
                 logger.debug(
-                    f"Admin changing '{key}' for user {target_user.id} from '{current_value}' to '{value}'"
+                    "Admin changing '%s' for user %s from '%s' to '%s'",
+                    key,
+                    target_user.id,
+                    current_value,
+                    value,
                 )
         else:
             logger.warning(
-                f"Admin attempt to update non-existent attribute '{key}' on user {target_user.id}"
+                "Admin attempt to update non-existent attribute '%s' on user %s",
+                key,
+                target_user.id,
             )
 
     if made_changes:
@@ -289,12 +297,17 @@ async def update_user_by_id_admin(  # noqa: C901
             await session.commit()
             await session.refresh(target_user)
             logger.info(
-                f"Admin successfully updated user_id: {target_user.id}. Changes: {list(update_data_dict.keys())}"
+                "Admin successfully updated user_id: %s. Changes: %s",
+                target_user.id,
+                list(update_data_dict.keys()),
             )
         except Exception as e:  # Catching a general Exception here
             await session.rollback()
             logger.error(
-                f"Database error updating user {target_user.id} by admin: {e}", exc_info=True
+                "Database error updating user %s by admin: %s",
+                target_user.id,
+                e,
+                exc_info=True,
             )
             # This is where B904 applies
             raise HTTPException(
@@ -303,7 +316,8 @@ async def update_user_by_id_admin(  # noqa: C901
             ) from e  # Preserve original exception context
     else:
         logger.info(
-            f"Admin initiated update for user_id: {target_user.id}, but no actual changes were made to tracked fields."
+            "Admin initiated update for user_id: %s, but no actual changes were made to tracked fields.",
+            target_user.id,
         )
 
     return target_user
@@ -362,7 +376,10 @@ async def delete_user_by_id_admin(
     except Exception as e:  # Catching a general Exception here
         await session.rollback()
         logger.error(
-            f"Error deleting user {user_email_to_delete} (ID: {user_id_to_delete}) by admin: {e}",
+            "Error deleting user %s (ID: %s) by admin: %s",
+            _sanitize_for_log(user_email_to_delete),
+            user_id_to_delete,
+            e,
             exc_info=True,
         )
         # This is where B904 applies

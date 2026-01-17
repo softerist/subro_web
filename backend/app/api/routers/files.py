@@ -104,6 +104,7 @@ async def download_file(
     )
 
     return FileResponse(
+        # nosemgrep: tainted-path-traversal-fastapi - path validated against allowed_folders above
         path=str(resolved_file_path),
         filename=resolved_file_path.name,
         media_type="application/octet-stream",

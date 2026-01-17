@@ -45,7 +45,7 @@ async def get_settings(
     try:
         return await crud_app_settings.to_read_schema(db)
     except Exception as e:
-        logger.error(f"Error retrieving settings: {e}", exc_info=True)
+        logger.error("Error retrieving settings: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve settings: {e!s}",
@@ -98,7 +98,7 @@ async def update_settings(
         await crud_app_settings.update(db, obj_in=settings_update)
         logger.info("Settings updated by admin user: %s", _sanitize_for_log(current_user.email))
     except Exception as e:
-        logger.error(f"Failed to update settings: {e}")
+        logger.error("Failed to update settings: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update settings: {e!s}",
@@ -109,14 +109,14 @@ async def update_settings(
         await validate_all_settings(db)
     except Exception as e:
         await db.rollback()
-        logger.error(f"Failed to validate settings after update: {e}")
+        logger.error("Failed to validate settings after update: %s", e)
 
     # Post-update: Process Google Cloud credentials if provided
     google_error = None
     try:
         google_error = await _process_google_cloud_credentials(db, settings_update)
     except Exception as e:
-        logger.error(f"Failed to process Google Cloud credentials: {e}")
+        logger.error("Failed to process GCP config: %s", e)
 
     response = await crud_app_settings.to_read_schema(db)
     if google_error:
@@ -192,7 +192,8 @@ async def _process_google_cloud_credentials(
         settings.google_cloud_project_id = project_id
         settings.google_cloud_valid = is_valid
         await db.commit()
-        logger.info(f"Google Cloud credentials saved for project: {project_id}")
+        # nosemgrep: python-logger-credential-disclosure - logs project ID, not credentials
+        logger.info("Google Cloud credentials saved for project: %s", project_id)
         return error_msg
 
     return None

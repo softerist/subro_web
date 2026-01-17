@@ -56,7 +56,7 @@ async def init_db(db: AsyncSession) -> None:
         await validate_all_settings(db)
         logger.info("Initial settings validation completed.")
     except Exception as e:
-        logger.warning(f"Initial settings validation encountered issues: {e}")
+        logger.warning("Initial settings validation encountered issues: %s", e)
 
     # 2. Handle Default Storage Paths
     await create_default_paths(db)
@@ -73,7 +73,7 @@ async def _create_default_downloads_path(db: AsyncSession) -> None:
             await crud_storage_path.create(
                 db, obj_in=StoragePathCreate(path=default_path, label="Default Downloads")
             )
-            logger.info(f"Created default storage path: {default_path}")
+            logger.info("Created default storage path: %s", default_path)
 
 
 async def _create_env_storage_paths(db: AsyncSession) -> None:
@@ -96,9 +96,9 @@ async def _create_env_storage_paths(db: AsyncSession) -> None:
                 await crud_storage_path.create(
                     db, obj_in=StoragePathCreate(path=folder_path, label=label)
                 )
-                logger.info(f"Created storage path from env: {folder_path}")
+                logger.info("Created storage path from env: %s", folder_path)
         else:
-            logger.warning(f"Env path {folder_path} not found in container. Skipping.")
+            logger.warning("Env path %s not found in container. Skipping.", folder_path)
 
 
 async def create_default_paths(db: AsyncSession) -> None:
@@ -132,23 +132,23 @@ async def create_default_paths(db: AsyncSession) -> None:
     try:
         # Check if user already exists
         user_obj = await script_user_manager.get_by_email(superuser_email)
-        logger.info(f"User {superuser_email} already exists. Ensuring admin role...")
+        logger.info("User %s already exists. Ensuring admin role...", superuser_email)
 
         # Only ensure role is admin, don't update password
         # Password updates should be controlled by the user, not env vars
         if user_obj.role != "admin":
             user_obj.role = "admin"
             db.add(user_obj)
-            logger.info(f"Updated {superuser_email} role to admin.")
+            logger.info("Updated %s role to admin.", superuser_email)
         else:
-            logger.info(f"User {superuser_email} is already admin.")
+            logger.info("User %s is already admin.", superuser_email)
 
         # Mark setup as completed since we have an admin
         await crud_app_settings.mark_setup_completed(db)
         logger.info("Marked setup as completed (existing user found).")
 
     except UserNotExists:
-        logger.info(f"Initial superuser {superuser_email} not found. Creating...")
+        logger.info("Initial superuser %s not found. Creating...", superuser_email)
 
         # Create the superuser
         superuser_in = UserCreate(
@@ -162,7 +162,9 @@ async def create_default_paths(db: AsyncSession) -> None:
 
         created_user = await script_user_manager.create(superuser_in, safe=False)
         logger.info(
-            f"Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {created_user.id}) created successfully."
+            "Initial superuser %s (ID: %s) created successfully.",
+            settings.FIRST_SUPERUSER_EMAIL,
+            created_user.id,
         )
 
         # Mark setup as completed (bootstrapped via env vars)
@@ -190,7 +192,7 @@ async def main() -> None:
             logger.info("Database operations committed successfully.")
         except Exception as e:
             await session.rollback()
-            logger.error(f"An error occurred during database initialization: {e}", exc_info=True)
+            logger.error("An error occurred during database initialization: %s", e, exc_info=True)
             sys.exit(1)
 
     logger.info("Service initialization for initial_data script finished.")

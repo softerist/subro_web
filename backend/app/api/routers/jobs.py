@@ -152,12 +152,12 @@ async def _validate_and_resolve_job_path(
             if not existing:
                 path_in = StoragePathCreate(path=new_path_str, label="Auto-added from Job")
                 await crud.storage_path.create(db, obj_in=path_in)
-                logger.info(f"Successfully auto-added allowed path: {new_path_str}")
+                logger.info("Successfully auto-added allowed path: %s", new_path_str)
             else:
-                logger.info(f"Path {new_path_str} already in DB (race condition handled).")
+                logger.info("Path %s already in DB (race condition handled).", new_path_str)
 
         except Exception as e:
-            logger.error(f"Failed to auto-add new path '{resolved_input_path}': {e}")
+            logger.error("Failed to auto-add new path '%s': %s", resolved_input_path, e)
             # Fallback: Deny if we failed to add it
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -178,12 +178,19 @@ async def _create_db_job_and_set_celery_id(
     try:
         db_job = await crud.job.create(db, obj_in=job_create_schema)
         logger.info(
-            f"Job {db_job.id} created in DB for user {user_email} (User ID: {job_create_schema.user_id}) with status {db_job.status}."
+            "Job %s created in DB for user %s (User ID: %s) with status %s.",
+            db_job.id,
+            _sanitize_for_log(user_email),
+            job_create_schema.user_id,
+            db_job.status,
         )
     except SQLAlchemyError as e:
         await db.rollback()
         logger.error(
-            f"Database error while creating job for user {user_email}, path '{job_create_schema.folder_path}': {e}",
+            "Database error while creating job for user %s, path '%s': %s",
+            _sanitize_for_log(user_email),
+            _sanitize_for_log(job_create_schema.folder_path),
+            e,
             exc_info=True,
         )
         raise HTTPException(
@@ -196,7 +203,7 @@ async def _create_db_job_and_set_celery_id(
         db.add(db_job)  # Ensure change is tracked
         await db.commit()
         await db.refresh(db_job)
-        logger.info(f"Job {db_job.id} celery_task_id set to {db_job.celery_task_id}.")
+        logger.info("Job %s celery_task_id set to %s.", db_job.id, db_job.celery_task_id)
         return db_job
     except SQLAlchemyError as e:
         await db.rollback()
@@ -277,11 +284,13 @@ async def _enqueue_celery_task_and_handle_errors(
             db.add(job_to_enqueue)
             await db.commit()
             await db.refresh(job_to_enqueue)  # To get updated_at if DB handles it
-            logger.info(f"Updated job {job_to_enqueue.id} status to FAILED due to enqueue error.")
+            logger.info("Updated job %s status to FAILED due to enqueue error.", job_to_enqueue.id)
         except SQLAlchemyError as db_exc:
             await db.rollback()
             logger.error(
-                f"Failed to update job {job_to_enqueue.id} status to FAILED after Celery enqueue error: {db_exc}",
+                "Failed to update job %s status to FAILED after Celery enqueue error: %s",
+                job_to_enqueue.id,
+                db_exc,
                 exc_info=True,
             )
             # Original exception 'e' (Celery error) is more relevant to client if one must be chosen.
@@ -676,7 +685,7 @@ async def delete_or_cancel_job(
         return job
     except SQLAlchemyError as e:
         await db.rollback()
-        logger.error(f"Database error while deleting job {job_id}: {e}", exc_info=True)
+        logger.error("Database error while deleting job %s: %s", job_id, e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="JOB_DELETION_DB_ERROR",

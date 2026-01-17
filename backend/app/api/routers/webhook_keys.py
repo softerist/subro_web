@@ -154,7 +154,7 @@ async def get_current_webhook_key(
     try:
         raw_key = decrypt_value(app_settings.qbittorrent_webhook_key_encrypted)
     except Exception as e:
-        logger.error(f"Failed to decrypt webhook key: {e}")
+        logger.error("Failed to decrypt webhook key: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to decrypt webhook key",
@@ -224,7 +224,7 @@ async def generate_webhook_key(
         db.add(key)
 
     if existing_keys:
-        logger.info(f"Revoked {len(existing_keys)} existing webhook key(s)")
+        logger.info("Revoked %d existing webhook key(s)", len(existing_keys))
 
     # Generate new key
 
@@ -254,7 +254,7 @@ async def generate_webhook_key(
 
     # OR using the auto-configure endpoint which handles it.
 
-    logger.info(f"Webhook key generated: {new_key.preview}")
+    logger.info("Webhook key generated: %s", new_key.preview)
 
     return WebhookKeyResponse(
         id=str(new_key.id),
@@ -343,7 +343,7 @@ async def validate_webhook_key(
             # Check scope
 
             if required_scope not in key.scopes:
-                logger.warning(f"Webhook key {key.preview} missing scope: {required_scope}")
+                logger.warning("Webhook key %s missing scope: %s", key.preview, required_scope)
 
                 return None
 
@@ -437,7 +437,8 @@ async def configure_qbittorrent_webhook(
         try:
             effective_password = decrypt_value(app_settings.qbittorrent_password)
         except Exception as e:
-            logger.warning(f"Failed to decrypt qBittorrent password: {e}")
+            # nosemgrep: python-logger-credential-disclosure - logs error, not actual password
+            logger.warning("Failed to decrypt qBittorrent password: %s", e)
             effective_password = ""
 
     # Step 2: Generate webhook key
@@ -643,7 +644,7 @@ async def ensure_default_webhook_key(db: AsyncSession) -> None:
 
         await db.commit()
 
-        logger.info(f"Default webhook key generated: {new_key.preview}")
+        logger.info("Default webhook key generated: %s", new_key.preview)
 
     # 2. Try to configure qBittorrent if we generated a new key
 
@@ -668,7 +669,7 @@ async def ensure_default_webhook_key(db: AsyncSession) -> None:
                 logger.info("Skipping qBittorrent configuration (client not connected/configured).")
 
         except Exception as e:
-            logger.warning(f"Error attempting to configure qBittorrent on startup: {e}")
+            logger.warning("Error attempting to configure qBittorrent on startup: %s", e)
 
 
 def _update_webhook_env_config() -> bool:
@@ -717,9 +718,9 @@ def _update_webhook_env_config() -> bool:
         # Write back
         env_path.parent.mkdir(parents=True, exist_ok=True)
         env_path.write_text("\n".join(lines) + "\n")
-        logger.info(f"Updated {env_file_path} with webhook settings")
+        logger.info("Updated %s with webhook settings", env_file_path)
         return True
 
     except Exception as e:
-        logger.warning(f"Failed to update {env_file_path}: {e}")
+        logger.warning("Failed to update %s: %s", env_file_path, e)
         return False

@@ -83,7 +83,7 @@ async def create_storage_path(
     try:
         storage_path = await crud.storage_path.create(db=db, obj_in=path_in)
     except Exception as e:
-        logger.error(f"Error creating storage path: {e}")
+        logger.error("Error creating storage path: %s", e)
         from sqlalchemy.exc import IntegrityError
 
         if isinstance(e, IntegrityError):

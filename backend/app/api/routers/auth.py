@@ -382,6 +382,7 @@ async def custom_refresh(
         samesite=cookie_transport.cookie_samesite,
     )
 
+    # nosemgrep: python-logger-credential-disclosure - logs action, not actual token
     logger.info("Token refreshed for user: %s (ID: %s)", _sanitize_for_log(user.email), user.id)
     return Token(access_token=new_access_token, token_type="bearer")
 
@@ -472,6 +473,7 @@ async def change_password(
         body.current_password, current_user.hashed_password
     )
     if not verified:
+        # nosemgrep: python-logger-credential-disclosure - logs action, not actual password
         logger.warning(
             "Password change failed for %s: incorrect current password",
             _sanitize_for_log(current_user.email),
@@ -504,6 +506,7 @@ async def change_password(
         },
     )
 
+    # nosemgrep: python-logger-credential-disclosure - logs action, not actual password
     logger.info(
         "Password changed successfully for %s. Sessions invalidated.",
         _sanitize_for_log(current_user.email),
@@ -625,7 +628,7 @@ async def register_user(
     except Exception as e:
         await db.rollback()
         error_detail = str(e) or "REGISTER_FAILED"
-        logger.error(f"Registration failed: {error_detail}")
+        logger.error("Registration failed: %s", error_detail)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_detail,

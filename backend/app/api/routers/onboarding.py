@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.log_utils import sanitize_for_log as _sanitize_for_log
 from app.core.security import get_user_manager
 from app.core.users import UserManager
 from app.crud.crud_app_settings import crud_app_settings
@@ -81,9 +82,10 @@ async def _save_setup_settings(db: AsyncSession, setup_data: SetupComplete) -> N
             try:
                 await _process_google_cloud_credentials(db, setup_data.settings)
             except Exception as e:
-                logger.warning(f"Failed to process Google Cloud credentials during setup: {e}")
+                # nosemgrep: python-logger-credential-disclosure - logs action, not credentials
+                logger.warning("Failed to process Google Cloud credentials during setup: %s", e)
     except Exception as e:
-        logger.error(f"Failed to save settings during setup: {e}")
+        logger.error("Failed to save settings during setup: %s", e)
         # Don't fail the whole setup if settings save fails
 
 
@@ -93,7 +95,7 @@ async def _finalize_setup(db: AsyncSession, log_message: str) -> None:
         logger.info("Triggering initial validation for all settings...")
         await validate_all_settings(db)
     except Exception as e:
-        logger.warning(f"Settings validation warnings during setup: {e}")
+        logger.warning("Settings validation warnings during setup: %s", e)
     await crud_app_settings.mark_setup_completed(db)
     logger.info(log_message)
 
@@ -112,7 +114,8 @@ def _resolve_skip_credentials(skip_data: SetupSkip | None) -> tuple[str | None, 
 
     if settings.FIRST_SUPERUSER_EMAIL and settings.FIRST_SUPERUSER_PASSWORD:
         logger.info(
-            f"Using FIRST_SUPERUSER_EMAIL from environment: {settings.FIRST_SUPERUSER_EMAIL}"
+            "Using FIRST_SUPERUSER_EMAIL from environment: %s",
+            _sanitize_for_log(settings.FIRST_SUPERUSER_EMAIL),
         )
         return settings.FIRST_SUPERUSER_EMAIL, settings.FIRST_SUPERUSER_PASSWORD
 
@@ -139,14 +142,16 @@ async def _create_admin_user(
     )
     try:
         created_user = await user_manager.create(admin_user, safe=False)
-        logger.info(f"Admin user created via setup wizard: {created_user.email}")
+        logger.info(
+            "Admin user created via setup wizard: %s", _sanitize_for_log(created_user.email)
+        )
     except UserAlreadyExists as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"A user with email '{admin_email}' already exists.",
         ) from e
     except Exception as e:
-        logger.error(f"Failed to create admin user during setup: {e}")
+        logger.error("Failed to create admin user during setup: %s", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to create admin user: {e!s}",
@@ -167,7 +172,10 @@ async def _upsert_admin_for_complete(
         return
 
     if setup_completed:
-        logger.info(f"Forced setup: keeping existing password for {existing_user.email}")
+        # nosemgrep: python-logger-credential-disclosure - logs action, not actual password
+        logger.info(
+            "Forced setup: keeping existing password for %s", _sanitize_for_log(existing_user.email)
+        )
         return
 
     user_update = UserUpdate(
@@ -179,7 +187,7 @@ async def _upsert_admin_for_complete(
     await user_manager.update(user_update, existing_user, safe=True)
     existing_user.role = "admin"
     db.add(existing_user)
-    logger.info(f"Updated existing admin during setup: {existing_user.email}")
+    logger.info("Updated existing admin during setup: %s", _sanitize_for_log(existing_user.email))
 
 
 async def _upsert_admin_for_skip(
@@ -202,15 +210,18 @@ async def _upsert_admin_for_skip(
                 role="admin",
             )
             created_user = await user_manager.create(admin_user, safe=False)
-            logger.info(f"Admin user created during skip: {created_user.email}")
+            logger.info("Admin user created during skip: %s", _sanitize_for_log(created_user.email))
         except UserAlreadyExists:
-            logger.warning(f"Admin already exists during skip: {admin_email}")
+            logger.warning("Admin already exists during skip: %s", _sanitize_for_log(admin_email))
         except Exception as e:
-            logger.warning(f"Failed to create admin during skip: {e}")
+            logger.warning("Failed to create admin during skip: %s", e)
         return
 
     if setup_completed:
-        logger.info(f"Forced skip: keeping existing password for {existing_user.email}")
+        # nosemgrep: python-logger-credential-disclosure - logs action, not actual password
+        logger.info(
+            "Forced skip: keeping existing password for %s", _sanitize_for_log(existing_user.email)
+        )
         return
 
     user_update = UserUpdate(
@@ -222,7 +233,7 @@ async def _upsert_admin_for_skip(
     await user_manager.update(user_update, existing_user, safe=True)
     existing_user.role = "admin"
     db.add(existing_user)
-    logger.info(f"Updated existing admin during skip: {existing_user.email}")
+    logger.info("Updated existing admin during skip: %s", _sanitize_for_log(existing_user.email))
 
 
 @router.get(
@@ -249,7 +260,7 @@ async def get_setup_status(
         state = await crud_app_settings.get_setup_state(db)
         return SetupStatus(**state)
     except Exception as e:
-        logger.error(f"Error retrieving setup status: {e}", exc_info=True)
+        logger.error("Error retrieving setup status: %s", e, exc_info=True)
         # We return a fallback status if DB fails, or raise 500?
         # Raising 500 allows frontend to see specific error if we return it in detail.
         raise HTTPException(
