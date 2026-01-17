@@ -1,9 +1,9 @@
 from collections.abc import Sequence
-from typing import Annotated
+from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import bindparam, select, update
+from sqlalchemy import Table, bindparam, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.users import current_active_superuser
@@ -126,9 +126,10 @@ async def reorder_tiles(
     Update the order_index of multiple tiles.
     """
     # Simple loop update - acceptable for small number of tiles (dashboard usually < 50 items)
+    tiles_table = cast(Table, DashboardTile.__table__)
     stmt = (
-        update(DashboardTile.__table__)
-        .where(DashboardTile.__table__.c.id == bindparam("tile_id"))
+        update(tiles_table)
+        .where(tiles_table.c.id == bindparam("tile_id"))
         .values(order_index=bindparam("order_index"))
     )
     await db.execute(
