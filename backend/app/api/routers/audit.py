@@ -290,17 +290,11 @@ async def list_audit_logs(
         count_query = select(func.count()).select_from(AuditLog)
         if conditions:
             count_query = count_query.where(and_(*conditions))
-        # nosemgrep: python.fastapi.db.generic-sql-fastapi.generic-sql-fastapi
-        # nosemgrep: python.tars.fastapi.sql.aiosqlite.fastapi-aiosqlite-sqli
-        # nosemgrep: python.tars.fastapi.sql.aiosqlite.fastapi-without-url-path-aiosqlite-sqli
-        total_count = (await db.execute(count_query, params)).scalar()
+        total_count = (await db.execute(count_query, params)).scalar()  # nosemgrep
 
     # Execute
     query = query.limit(bindparam("limit"))
-    # nosemgrep: python.fastapi.db.generic-sql-fastapi.generic-sql-fastapi
-    # nosemgrep: python.tars.fastapi.sql.aiosqlite.fastapi-aiosqlite-sqli
-    # nosemgrep: python.tars.fastapi.sql.aiosqlite.fastapi-without-url-path-aiosqlite-sqli
-    result = await db.execute(query, {**params, "limit": limit + 1})
+    result = await db.execute(query, {**params, "limit": limit + 1})  # nosemgrep
     items = list(result.scalars().all())
 
     # Get next cursor

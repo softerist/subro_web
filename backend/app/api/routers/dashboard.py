@@ -33,8 +33,6 @@ async def get_active_tiles(
 
 
 # --- Admin Endpoints ---
-
-
 @router.get(
     "/admin/tiles", response_model=list[TileRead], summary="Get all dashboard tiles (Admin)"
 )
@@ -129,14 +127,14 @@ async def reorder_tiles(
     """
     # Simple loop update - acceptable for small number of tiles (dashboard usually < 50 items)
     stmt = (
-        update(DashboardTile)
-        .where(DashboardTile.id == bindparam("tile_id"))
+        update(DashboardTile.__table__)
+        .where(DashboardTile.__table__.c.id == bindparam("tile_id"))
         .values(order_index=bindparam("order_index"))
-        .execution_options(synchronize_session=None)
     )
     await db.execute(
         stmt,
         [{"tile_id": item.id, "order_index": item.order_index} for item in reorder_list],
+        execution_options={"synchronize_session": False},
     )
 
     await db.commit()

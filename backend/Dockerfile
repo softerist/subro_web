@@ -40,8 +40,9 @@ RUN apt-get update && apt-get upgrade -y && \
     netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
-# Symlink python3 to python for convenience
-RUN ln -s /usr/bin/python3.12 /usr/local/bin/python
+# Symlink python3 and python for convenience (python3 required by poetry installer)
+RUN ln -s /usr/bin/python3.12 /usr/local/bin/python && \
+    ln -s /usr/bin/python3.12 /usr/local/bin/python3
 
 # Install Poetry using the official installer script to avoid dependency conflicts
 RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/opt/poetry python3 -
