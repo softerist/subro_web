@@ -289,6 +289,14 @@ else
     log "Production mode: Using pre-configured appuser from Dockerfile"
 fi
 
+# --- Global Permissions Fix (Root Only) ---
+# Ensure /app/logs is writable by all (shared volume with host services)
+if [ "$(id -u)" = "0" ]; then
+    log "Running as root: setting permissions for /app/logs"
+    mkdir -p /app/logs 2>/dev/null || true
+    chmod 777 /app/logs 2>/dev/null || log "Warning: Could not chmod /app/logs"
+fi
+
 # --- Wait for Database ---
 log "Waiting for PostgreSQL (timeout: ${WAIT_TIMEOUT}s)"
 

@@ -193,5 +193,4 @@ RUN poetry install --with dev --no-root --sync --no-cache && \
 
 # --- Production Stage (Worker) ---
 FROM production-api AS production-worker
-USER appuser
 CMD ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=INFO"]
