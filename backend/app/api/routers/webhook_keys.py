@@ -657,7 +657,7 @@ async def ensure_default_webhook_key(db: AsyncSession) -> None:
 
                 script_path = "/opt/subro_web/scripts/qbittorrent-nox-webhook.sh"
 
-                if configure_webhook_autorun(client, script_path, api_key=raw_key):
+                if configure_webhook_autorun(client, script_path):
                     logger.info("qBittorrent successfully auto-configured with new webhook key.")
 
                 else:
