@@ -320,7 +320,7 @@ fi
 # ============================================
 # Logging Setup (secure perms)
 # ============================================
-mkdir -p "$LOG_DIR" && chmod 750 "$LOG_DIR" 2>/dev/null || {
+mkdir -p "$LOG_DIR" && chmod 775 "$LOG_DIR" 2>/dev/null || {
   echo "ERROR: Cannot create or set permissions on $LOG_DIR" >&2
   exit 1
 }
@@ -533,13 +533,15 @@ submit_to_api() {
   log_info "Endpoint: $api_url"
 
   # Build JSON payload with proper escaping
+  local log_level="${LOG_LEVEL:-INFO}"
+
   if command -v jq >/dev/null 2>&1; then
-    json_payload="$(jq -n --arg path "$TORRENT_PATH" '{folder_path: $path, log_level: "INFO"}')"
+    json_payload="$(jq -n --arg path "$TORRENT_PATH" --arg level "$log_level" '{folder_path: $path, log_level: $level}')"
   else
     log_warning "'jq' not found; using sed fallback for JSON escaping."
     local escaped_path
     escaped_path="$(printf "%s" "$TORRENT_PATH" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-    json_payload="{\"folder_path\":\"$escaped_path\",\"log_level\":\"INFO\"}"
+    json_payload="{\"folder_path\":\"$escaped_path\",\"log_level\":\"$log_level\"}"
   fi
 
   log_info "Payload prepared (path not logged for security)."
