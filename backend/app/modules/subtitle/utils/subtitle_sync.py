@@ -20,7 +20,7 @@ except ImportError:
         SUBTITLE_SYNC_OFFSET_THRESHOLD = 1.0
         FFSUBSYNC_TIMEOUT = 180
         ALASS_TIMEOUT = 300
-        FFSUBSYNC_CHECK_TIMEOUT = 90
+        FFSUBSYNC_CHECK_TIMEOUT = 300
 
     settings = DummySettings()  # type: ignore[assignment, no-redef]
     logging.warning("Could not import config. Using default sync tool paths/timeouts.")
@@ -48,14 +48,13 @@ logger = logging.getLogger(__name__)
 # --- Configuration ---
 FFSUBSYNC_PATH = getattr(settings, "FFSUBSYNC_PATH", "ffsubsync")
 ALASS_CLI_PATH = getattr(settings, "ALASS_CLI_PATH", "alass-cli")
-# FFMPEG path might be needed implicitly by ffsubsync, ensure it's available if needed
 FFMPEG_PATH = getattr(settings, "FFMPEG_PATH", "ffmpeg")
 OFFSET_THRESHOLD = getattr(settings, "SUBTITLE_SYNC_OFFSET_THRESHOLD", 1.0)
 
 # Load timeouts from settings with defaults
-FFSUBSYNC_TIMEOUT = getattr(settings, "FFSUBSYNC_TIMEOUT", 300)  # Increased default for full sync
-ALASS_TIMEOUT = getattr(settings, "ALASS_TIMEOUT", 300)  # Default 300s for full sync
-FFSUBSYNC_CHECK_TIMEOUT = getattr(settings, "FFSUBSYNC_CHECK_TIMEOUT", 90)  # Default 90s for check
+FFSUBSYNC_TIMEOUT = getattr(settings, "FFSUBSYNC_TIMEOUT", 300)
+ALASS_TIMEOUT = getattr(settings, "ALASS_TIMEOUT", 300)
+FFSUBSYNC_CHECK_TIMEOUT = getattr(settings, "FFSUBSYNC_CHECK_TIMEOUT", 300)
 
 # --- Helper: Check Tool Availability ---
 # Module-level cache dictionary for tool availability (replaces globals() usage)
