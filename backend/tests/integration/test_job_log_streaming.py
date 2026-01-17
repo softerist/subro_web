@@ -177,7 +177,9 @@ class TestWebSocketLogStreaming:
         elif register_response.status_code in {403, 404}:
             # Registration disabled (OPEN_SIGNUP=False), use admin credentials
             print("   ⚠️  Registration disabled, falling back to admin credentials")
-            admin_email = settings.FIRST_SUPERUSER_EMAIL
+            admin_email = (
+                settings.FIRST_SUPERUSER_EMAIL.strip() if settings.FIRST_SUPERUSER_EMAIL else None
+            )
             admin_password = settings.FIRST_SUPERUSER_PASSWORD
             if not admin_email or not admin_password:
                 pytest.skip("Registration disabled and no admin credentials configured")
@@ -292,13 +294,14 @@ class TestWebSocketLogStreaming:
 
     async def _publish_test_logs(self, job_id):
         """Publishes test log messages to Redis channel."""
-        await asyncio.sleep(1.5)  # Give WebSocket time to connect
+        await asyncio.sleep(0.5)  # Give WebSocket time to connect
 
         redis_url = str(settings.REDIS_PUBSUB_URL)
         if Path("/.dockerenv").exists():
             parsed = urlparse(redis_url)
             if parsed.hostname in {"localhost", "127.0.0.1"}:
                 redis_url = redis_url.replace(parsed.hostname, "redis", 1)
+
         redis = Redis.from_url(redis_url)
         channel = f"job:{job_id}:logs"
 
@@ -417,17 +420,24 @@ class TestWebSocketLogStreaming:
                 # Receive logs and final status (ignore other message types like "info")
                 log_messages = []
                 succeeded = False
+                target_message_found = False
                 deadline = time.monotonic() + 10
-                while time.monotonic() < deadline and (len(log_messages) < 2 or not succeeded):
+                while time.monotonic() < deadline:
                     data = json.loads(await asyncio.wait_for(websocket.recv(), timeout=5))
                     msg_type = data.get("type")
                     if msg_type == "log":
-                        log_messages.append(data.get("payload", {}).get("message", ""))
+                        message = data.get("payload", {}).get("message", "")
+                        log_messages.append(message)
+                        if "Processing video" in message:
+                            target_message_found = True
                     elif (
                         msg_type == "status"
                         and data.get("payload", {}).get("status") == "SUCCEEDED"
                     ):
                         succeeded = True
+
+                    if target_message_found and succeeded:
+                        break
 
                 assert any("Processing video" in message for message in log_messages)
                 assert any("Downloading subtitles" in message for message in log_messages)
