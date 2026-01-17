@@ -27,14 +27,12 @@ ENV APP_HOME=/app \
 # Set working directory
 WORKDIR ${APP_HOME}
 
-# Install Python 3.12, pip, venv, and gosu.
+# Install Python 3.12, venv, and gosu.
 # Run apt-get upgrade to patch all OS-level CVEs.
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
     python3.12 \
     python3.12-venv \
-    python3-pip \
-    python3-setuptools \
     gosu \
     ca-certificates \
     curl \
@@ -70,6 +68,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gcc \
     python3.12-dev \
+    python3-pip \
+    python3-setuptools \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency definition files FIRST, ensuring correct ownership
@@ -95,6 +95,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     build-essential \
     python3.12-dev \
+    python3-pip \
+    python3-setuptools \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Poetry files
