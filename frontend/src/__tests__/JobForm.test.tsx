@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * @vitest-environment jsdom
  */
@@ -227,5 +226,51 @@ describe("JobForm", () => {
       },
       { timeout: 3000 },
     );
+  });
+
+  it("surfaces string detail messages from the API", async () => {
+    (jobsApi.getAllowedFolders as any).mockResolvedValue(["/media/movies"]);
+    const mockError = new Error("Generic failure");
+    (mockError as any).response = { data: { detail: "Custom detail message" } };
+    (jobsApi.create as any).mockRejectedValue(mockError);
+
+    render(<JobForm />, { wrapper });
+    await waitFor(() =>
+      expect(screen.queryByText(/loading folders/i)).toBeNull(),
+    );
+
+    fireEvent.change(screen.getByTestId("folder_path"), {
+      target: { value: "/media/movies" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /start job/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "Failed to start job: Custom detail message",
+      );
+    });
+  });
+
+  it("falls back to the error message when no detail is provided", async () => {
+    (jobsApi.getAllowedFolders as any).mockResolvedValue(["/media/movies"]);
+    const mockError = new Error("Network down");
+    (mockError as any).response = { data: {} };
+    (jobsApi.create as any).mockRejectedValue(mockError);
+
+    render(<JobForm />, { wrapper });
+    await waitFor(() =>
+      expect(screen.queryByText(/loading folders/i)).toBeNull(),
+    );
+
+    fireEvent.change(screen.getByTestId("folder_path"), {
+      target: { value: "/media/movies" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /start job/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "Failed to start job: Network down",
+      );
+    });
   });
 });

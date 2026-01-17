@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import logging
 import secrets
 from datetime import UTC, datetime
 from typing import Annotated
@@ -7,6 +8,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -16,6 +18,8 @@ from app.core.security import fastapi_users
 from app.db.models.api_key import ApiKey
 from app.db.models.user import User
 from app.db.session import get_async_session
+
+logger = logging.getLogger(__name__)
 
 # Define the API Key header scheme
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -51,6 +55,45 @@ def hash_api_key(raw_key: str) -> str:
     ).hexdigest()
 
 
+async def _migrate_legacy_api_key(
+    db: AsyncSession,
+    user: User,
+    api_key: str,
+    hashed_key: str,
+    now: datetime,
+) -> User | None:
+    api_key_record = ApiKey(
+        user_id=user.id,
+        name="Legacy",
+        scopes=None,
+        prefix=get_api_key_prefix(api_key),
+        last4=get_api_key_last4(api_key),
+        hashed_key=hashed_key,
+        created_at=now,
+        last_used_at=now,
+        use_count=1,
+    )
+    user.api_key = None
+    db.add(api_key_record)
+    db.add(user)
+    try:
+        await db.commit()
+        return user
+    except IntegrityError:
+        await db.rollback()
+        result = await db.execute(
+            select(ApiKey).where(ApiKey.hashed_key == hashed_key).options(selectinload(ApiKey.user))
+        )
+        existing = result.scalars().first()
+        if existing:
+            return existing.user
+        logger.warning(  # nosemgrep
+            "Legacy API key migration failed for user_id=%s; duplicate key but no record found.",
+            user.id,
+        )
+        return None
+
+
 async def get_user_by_api_key(
     api_key: Annotated[str | None, Security(api_key_header)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
@@ -80,12 +123,9 @@ async def get_user_by_api_key(
         )
         .options(selectinload(ApiKey.user))
     )
+    hashed = hash_api_key(api_key)
     result = await db.execute(query)
     candidates = result.scalars().all()
-    if not candidates:
-        return None
-
-    hashed = hash_api_key(api_key)
     for candidate in candidates:
         if hmac.compare_digest(candidate.hashed_key, hashed):
             candidate.last_used_at = now
@@ -93,6 +133,13 @@ async def get_user_by_api_key(
             db.add(candidate)
             await db.commit()
             return candidate.user
+
+    legacy_result = await db.execute(select(User).where(User.api_key == api_key))
+    legacy_user = legacy_result.scalars().first()
+    if legacy_user:
+        migrated_user = await _migrate_legacy_api_key(db, legacy_user, api_key, hashed, now)
+        if migrated_user:
+            return migrated_user
 
     return None
 

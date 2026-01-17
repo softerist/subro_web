@@ -67,7 +67,14 @@ fi
 echo "--- Switching Traffic to $OLD_WORKING_COLOR ---"
 TEMPLATE="$DOCK_DIR/Caddyfile.template"
 # Update Caddyfile
-sed "s/{{UPSTREAM_API}}/$OLD_WORKING_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$OLD_WORKING_COLOR-frontend-1/g" "$TEMPLATE" > "$CADDYFILE_PROD"
+# Read DOMAIN_NAME from env file for expansion
+DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+if [ -z "$DOMAIN_NAME" ]; then
+    echo "Error: DOMAIN_NAME not found in $ENV_FILE"
+    # Don't exit here to allow manual intervention, but warn loudly
+fi
+# Update Caddyfile
+sed "s/{{UPSTREAM_API}}/$OLD_WORKING_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$OLD_WORKING_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$TEMPLATE" > "$CADDYFILE_PROD"
 
 # Reload Caddy
 COMPOSE_GATEWAY="$DOCK_DIR/compose.gateway.yml"

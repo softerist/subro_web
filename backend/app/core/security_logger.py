@@ -74,12 +74,12 @@ class SecurityLogger:
     _instance = None
     _initialized = False
 
-    def __new__(cls):
+    def __new__(cls) -> "SecurityLogger":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         if SecurityLogger._initialized:
             return
 

@@ -158,6 +158,7 @@ class Translator(ProcessingStrategy):
             if (
                 result
                 and result.translated_content
+                and result.service_used is not None
                 and not result.service_used.startswith("failed")
             ):
                 # Check for potential failure markers within the content

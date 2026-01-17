@@ -3,8 +3,8 @@ import logging  # Added to configure logging
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any
 
-import pytest
 import pytest_asyncio
 
 # Need to load .env before importing app.core.config
@@ -16,8 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 project_root = Path(__file__).resolve().parents[2]
 load_dotenv(project_root / ".env")
 
-# Load test env values but don't override existing env vars (CI sets them explicitly).
-load_dotenv(Path(__file__).resolve().parents[1] / ".env.test", override=False)
+# Load test env values AND override existing env vars (ensure test settings take precedence).
+load_dotenv(Path(__file__).resolve().parents[1] / ".env.test", override=True)
 
 # Keep log output clean
 logging.getLogger("faker").setLevel(logging.WARNING)
@@ -57,32 +57,17 @@ else:
     TEST_DATABASE_URL = url.render_as_string(hide_password=False)
 
 
-@pytest.fixture(scope="session")
-def event_loop(request: pytest.FixtureRequest):  # noqa: ARG001
-    """Create an instance of the default event loop for each test session."""
-    import asyncio
-
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    asyncio.set_event_loop(loop)
-    yield loop
-    loop.close()
-
-
 @pytest_asyncio.fixture(scope="function")
-async def test_engine():
-    """Creates/Disposes an async engine FOR EACH TEST FUNCTION."""
-    # Use TEST_DATABASE_URL which should be derived from settings.ASYNC_SQLALCHEMY_DATABASE_URL
-    engine = create_async_engine(
-        TEST_DATABASE_URL, echo=getattr(settings, "DB_ECHO_TESTS", False)
-    )  # Allow specific test echo
+async def test_engine() -> AsyncGenerator:
+    """Ensures a clean database state for each test function."""
+    engine = create_async_engine(TEST_DATABASE_URL, echo=getattr(settings, "DB_ECHO_TESTS", False))
     async with engine.begin() as conn:
-        # Use CASCADE to handle foreign key dependencies
+        await conn.run_sync(Base.metadata.create_all)
         from sqlalchemy import text
 
-        # Drop all tables with CASCADE to avoid FK constraint errors
+        # Fast way to clean all tables: TRUNCATE
         for table in reversed(Base.metadata.sorted_tables):
-            await conn.execute(text(f'DROP TABLE IF EXISTS "{table.name}" CASCADE'))
-        await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(text(f'TRUNCATE TABLE "{table.name}" RESTART IDENTITY CASCADE'))
     try:
         yield engine
     finally:
@@ -91,7 +76,7 @@ async def test_engine():
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session(
-    test_engine,
+    test_engine: Any,
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yields a database session per function, using the function-scoped engine."""
     TestSessionFactory = async_sessionmaker(

@@ -24,7 +24,9 @@ async def login_user(client: AsyncClient, email: str, password: str) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_admin_can_disable_mfa_for_user(test_client: AsyncClient, db_session: AsyncSession):
+async def test_admin_can_disable_mfa_for_user(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test that admin can disable MFA for a user by setting mfa_enabled=False."""
     # Arrange: Create admin and target user with MFA enabled
     admin = UserFactory.create_user(
@@ -71,7 +73,7 @@ async def test_admin_can_disable_mfa_for_user(test_client: AsyncClient, db_sessi
 @pytest.mark.asyncio
 async def test_admin_can_force_password_change_via_update(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test that admin can set force_password_change=True for a user."""
     # Arrange
     admin = UserFactory.create_user(
@@ -109,7 +111,7 @@ async def test_admin_can_force_password_change_via_update(
 @pytest.mark.asyncio
 async def test_admin_can_reset_password_for_user(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test that admin can reset another user's password."""
     # Arrange
     admin = UserFactory.create_user(
@@ -146,7 +148,9 @@ async def test_admin_can_reset_password_for_user(
 
 
 @pytest.mark.asyncio
-async def test_admin_cannot_modify_superuser(test_client: AsyncClient, db_session: AsyncSession):
+async def test_admin_cannot_modify_superuser(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test that a non-superuser admin cannot modify a superuser."""
     # Arrange: Create a regular admin (not superuser) and a target superuser
     admin = UserFactory.create_user(

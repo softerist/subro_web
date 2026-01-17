@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # --- Helper Functions ---
 
 
-def _get_subtitle_page_url(imdb_id):
+def _get_subtitle_page_url(imdb_id: str | None) -> str | None:
     """Constructs the URL for the subs.ro page for a given IMDb ID."""
     numeric_imdb_id = "".join(filter(str.isdigit, imdb_id or ""))  # Handle potential None input
     if not numeric_imdb_id:
@@ -32,7 +32,7 @@ def _get_subtitle_page_url(imdb_id):
     return f"{SUBSRO_BASE_URL}/subtitrari/imdbid/{numeric_imdb_id}"
 
 
-def _fetch_and_parse_page(url):
+def _fetch_and_parse_page(url: str) -> BeautifulSoup | None:
     """Fetches the HTML content of a URL and parses it with BeautifulSoup."""
     logging.debug(f"Fetching Subs.ro page: {url}")
     # Use a reasonable timeout for scraping requests
@@ -62,10 +62,10 @@ def _fetch_and_parse_page(url):
     return None
 
 
-def _extract_download_links(soup, language_code):
+def _extract_download_links(soup: BeautifulSoup | None, language_code: str) -> list[str]:
     """Extracts subtitle download links for a specific language from parsed HTML."""
 
-    download_links = []
+    download_links: list[str] = []
     if not soup:
         return download_links
 
@@ -112,7 +112,7 @@ def _extract_download_links(soup, language_code):
 
         if found_link_href:
             # Make the URL absolute if it's relative
-            absolute_link = urljoin(SUBSRO_BASE_URL, found_link_href)
+            absolute_link = urljoin(SUBSRO_BASE_URL, str(found_link_href))
             if absolute_link not in processed_links:
                 logging.debug(f"Found download link: {absolute_link}")
                 download_links.append(absolute_link)
@@ -129,7 +129,7 @@ def _extract_download_links(soup, language_code):
 # --- Public Interface Functions ---
 
 
-def find_subtitle_download_urls(imdb_id, language_code="ro"):
+def find_subtitle_download_urls(imdb_id: str | None, language_code: str = "ro") -> list[str]:
     """
     Finds subtitle download URLs on Subs.ro for a given IMDb ID and language.
 
@@ -167,7 +167,9 @@ def find_subtitle_download_urls(imdb_id, language_code="ro"):
     return download_urls
 
 
-def download_subtitle_archive(download_url, output_dir, filename_prefix="subsro_archive"):  # noqa: C901
+def download_subtitle_archive(  # noqa: C901
+    download_url: str | None, output_dir: str, filename_prefix: str = "subsro_archive"
+) -> str | None:
     """
     Downloads a subtitle archive file from a given URL.
 

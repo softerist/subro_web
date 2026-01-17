@@ -5,8 +5,6 @@ services:
       dockerfile: Dockerfile
       target: production-api
     restart: always
-    # ports:
-    #   - "8000:8000" # Only for debugging/external testing if needed # For integration tests
     expose:
       - "8000"
     volumes:
@@ -14,15 +12,11 @@ services:
       - /mnt/usb3/Media:/mnt/usb3/Media
       - /tmp:/tmp
       - ../../logs:/app/logs
+      - ../../secrets:/app/secrets
     env_file:
       - ${PROJECT_ENV_FILE:-../.env.prod}
     networks:
       - internal_net
-    # Depends on DB/Redis which are external now (in Data stack)
-    # We can't use 'depends_on' for external services easily without 'external_links' or just network reachability.
-    # We remove explicit depends_on service condition, or keep it if we merge stacks.
-    # For independent stacks, we remove it and rely on healthcheck of the App itself fail/wait.
-    # Entrypoint script checks for DB anyway.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 5s
@@ -36,6 +30,9 @@ services:
       dockerfile: Dockerfile
       target: production-worker
     restart: always
+    group_add:
+      - "1000"
+      - "1002"
     volumes:
       - /mnt/sata0/Media:/mnt/sata0/Media
       - /mnt/usb3/Media:/mnt/usb3/Media
@@ -43,15 +40,46 @@ services:
       - ../../logs:/app/logs
     env_file:
       - ${PROJECT_ENV_FILE:-../.env.prod}
+    environment:
+      - CELERY_HEALTHCHECK_CHECK_WORKERS=false
     networks:
       - internal_net
-    # Entrypoint waits for DB.
     healthcheck:
-      test: ["CMD", "celery", "-A", "app.tasks.celery_app", "status"]
-      interval: 20s
-      timeout: 10s
+      test:
+        [
+          "CMD-SHELL",
+          "PYTHONPATH=/app /app/.venv/bin/python /app/scripts/worker_healthcheck.py",
+        ]
+      interval: 30s
+      timeout: 15s
       retries: 3
-      start_period: 20s
+      start_period: 40s
+
+  scheduler:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+      target: production-worker
+    restart: always
+    group_add:
+      - "1000"
+    entrypoint: []
+    command: ["celery", "-A", "app.tasks.celery_app", "beat", "--loglevel=INFO"]
+    volumes:
+      - ../../logs:/app/logs
+      - celery_beat_schedule:/app/.local/state/subro-web
+    env_file:
+      - ${PROJECT_ENV_FILE:-../.env.prod}
+    environment:
+      - CELERY_BEAT_SCHEDULE_FILENAME=/app/.local/state/subro-web/celerybeat-schedule
+    networks:
+      - internal_net
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "celery.*beat"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   frontend:
     build:
@@ -63,8 +91,7 @@ services:
         - VITE_WS_BASE_URL=${VITE_WS_BASE_URL}
     restart: always
     expose:
-      - "8080" # Nginx default port
-    # No volume needed
+      - "8080"
     env_file:
       - ${PROJECT_ENV_FILE:-../.env.prod}
     networks:
@@ -74,6 +101,9 @@ services:
       interval: 15s
       timeout: 3s
       retries: 3
+
+volumes:
+  celery_beat_schedule:
 
 networks:
   internal_net:

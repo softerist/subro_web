@@ -40,7 +40,9 @@ async def get_or_create_app_settings(db_session: AsyncSession) -> AppSettings:
 
 
 @pytest.mark.asyncio
-async def test_get_open_signup_as_superuser(test_client: AsyncClient, db_session: AsyncSession):
+async def test_get_open_signup_as_superuser(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test superuser can get open signup status."""
     # Arrange
     superuser = UserFactory.create_user(
@@ -71,7 +73,7 @@ async def test_get_open_signup_as_superuser(test_client: AsyncClient, db_session
 @pytest.mark.asyncio
 async def test_get_open_signup_as_admin_not_superuser(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test admin (non-superuser) cannot access open signup endpoint."""
     # Arrange
     admin = UserFactory.create_user(
@@ -93,7 +95,9 @@ async def test_get_open_signup_as_admin_not_superuser(
 
 
 @pytest.mark.asyncio
-async def test_get_open_signup_as_standard_user(test_client: AsyncClient, db_session: AsyncSession):
+async def test_get_open_signup_as_standard_user(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test standard user cannot access open signup endpoint."""
     # Arrange
     user = UserFactory.create_user(
@@ -113,7 +117,7 @@ async def test_get_open_signup_as_standard_user(test_client: AsyncClient, db_ses
 
 
 @pytest.mark.asyncio
-async def test_get_open_signup_unauthenticated(test_client: AsyncClient):
+async def test_get_open_signup_unauthenticated(test_client: AsyncClient) -> None:
     """Test unauthenticated user cannot access open signup endpoint."""
     response = await test_client.get(f"{API_PREFIX}/admin/settings/open-signup")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -123,7 +127,9 @@ async def test_get_open_signup_unauthenticated(test_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_set_open_signup_as_superuser(test_client: AsyncClient, db_session: AsyncSession):
+async def test_set_open_signup_as_superuser(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test superuser can toggle open signup."""
     # Arrange
     superuser = UserFactory.create_user(
@@ -158,7 +164,7 @@ async def test_set_open_signup_as_superuser(test_client: AsyncClient, db_session
 
 
 @pytest.mark.asyncio
-async def test_set_open_signup_disable(test_client: AsyncClient, db_session: AsyncSession):
+async def test_set_open_signup_disable(test_client: AsyncClient, db_session: AsyncSession) -> None:
     """Test superuser can disable open signup."""
     # Arrange
     superuser = UserFactory.create_user(
@@ -189,7 +195,9 @@ async def test_set_open_signup_disable(test_client: AsyncClient, db_session: Asy
 
 
 @pytest.mark.asyncio
-async def test_set_open_signup_as_non_superuser(test_client: AsyncClient, db_session: AsyncSession):
+async def test_set_open_signup_as_non_superuser(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test non-superuser cannot toggle open signup."""
     # Arrange
     admin = UserFactory.create_user(
@@ -220,7 +228,7 @@ async def test_set_open_signup_as_non_superuser(test_client: AsyncClient, db_ses
 @pytest.mark.asyncio
 async def test_registration_when_open_signup_enabled(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test registration works when open signup is enabled."""
     # Arrange - Enable open signup
     app_settings = await get_or_create_app_settings(db_session)
@@ -240,7 +248,7 @@ async def test_registration_when_open_signup_enabled(
 @pytest.mark.asyncio
 async def test_registration_when_open_signup_disabled(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test registration is blocked when open signup is disabled."""
     # Arrange - Disable open signup
     app_settings = await get_or_create_app_settings(db_session)

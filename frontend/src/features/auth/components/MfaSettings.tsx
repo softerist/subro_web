@@ -125,11 +125,9 @@ export function MfaSettings() {
   });
 
   const handleCopyBackupCodes = () => {
-    if (setupData) {
-      navigator.clipboard.writeText(setupData.backup_codes.join("\n"));
-      setCopiedCodes(true);
-      setTimeout(() => setCopiedCodes(false), 2000);
-    }
+    navigator.clipboard.writeText(setupData!.backup_codes.join("\n"));
+    setCopiedCodes(true);
+    setTimeout(() => setCopiedCodes(false), 2000);
   };
 
   if (statusLoading) {

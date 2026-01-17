@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Annotated
 from uuid import UUID
 
@@ -18,7 +19,7 @@ router = APIRouter()
 @router.get("/tiles", response_model=list[TileRead], summary="Get active dashboard tiles")
 async def get_active_tiles(
     db: Annotated[AsyncSession, Depends(get_async_session)],
-):
+) -> Sequence[DashboardTile]:
     """
     Get all active dashboard tiles, ordered by order_index.
     """
@@ -40,7 +41,7 @@ async def get_active_tiles(
 async def get_all_tiles(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     user: Annotated[User, Depends(current_active_superuser)],  # noqa: ARG001
-):
+) -> Sequence[DashboardTile]:
     """
     Get all dashboard tiles (active and inactive), ordered by order_index.
     """
@@ -59,7 +60,7 @@ async def create_tile(
     tile_in: TileCreate,
     db: Annotated[AsyncSession, Depends(get_async_session)],
     user: Annotated[User, Depends(current_active_superuser)],  # noqa: ARG001
-):
+) -> DashboardTile:
     """
     Create a new dashboard tile.
     """
@@ -76,7 +77,7 @@ async def update_tile(
     tile_update: TileUpdate,
     db: Annotated[AsyncSession, Depends(get_async_session)],
     user: Annotated[User, Depends(current_active_superuser)],  # noqa: ARG001
-):
+) -> DashboardTile:
     """
     Update a dashboard tile.
     """
@@ -101,7 +102,7 @@ async def delete_tile(
     tile_id: UUID,
     db: Annotated[AsyncSession, Depends(get_async_session)],
     user: Annotated[User, Depends(current_active_superuser)],  # noqa: ARG001
-):
+) -> None:
     """
     Delete a dashboard tile.
     """
@@ -122,7 +123,7 @@ async def reorder_tiles(
     reorder_list: list[TileReorder],
     db: Annotated[AsyncSession, Depends(get_async_session)],
     user: Annotated[User, Depends(current_active_superuser)],  # noqa: ARG001
-):
+) -> dict[str, str]:
     """
     Update the order_index of multiple tiles.
     """

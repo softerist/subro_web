@@ -24,7 +24,7 @@ async def login_user(client: AsyncClient, email: str, password: str) -> dict:
 @patch("app.api.routers.files.Path")
 async def test_download_file_forbidden_for_standard_user(
     _, test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     user = UserFactory.create_user(session=db_session, email="standard_files@example.com")
     await db_session.flush()
     headers = await login_user(test_client, user.email, "password123")
@@ -36,7 +36,9 @@ async def test_download_file_forbidden_for_standard_user(
 
 
 @pytest.mark.asyncio
-async def test_download_file_success_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_download_file_success_admin(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     admin = UserFactory.create_user(
         session=db_session, email="admin_files@example.com", is_superuser=True
     )

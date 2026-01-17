@@ -4,7 +4,9 @@ import base64
 import hashlib
 import logging
 import uuid
+from collections.abc import AsyncGenerator
 from functools import lru_cache
+from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from fastapi import Depends, Request
@@ -109,14 +111,15 @@ def get_password_hash(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifies a plain password against a hashed password."""
-    return password_helper.verify(plain_password, hashed_password)
+    verified, _ = password_helper.verify_and_update(plain_password, hashed_password)
+    return verified
 
 
 # END ADDED CODE
 
 
 # --- User Manager ---
-class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
+class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):  # type: ignore[type-var]
     reset_password_token_secret = str(settings.RESET_PASSWORD_TOKEN_SECRET or settings.SECRET_KEY)
     verification_token_secret = str(settings.VERIFICATION_TOKEN_SECRET or settings.SECRET_KEY)
 
@@ -180,7 +183,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         return created_user
 
 
-async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db)):
+async def get_user_manager(
+    user_db: SQLAlchemyUserDatabase = Depends(get_user_db),
+) -> AsyncGenerator[UserManager, None]:
     # Pass the module-level password_helper to the UserManager instance
     yield UserManager(user_db, password_helper)
 
@@ -225,16 +230,18 @@ bearer_auth_backend = AuthenticationBackend(
 )
 
 # --- FastAPIUsers Main Instance ---
-fastapi_users = FastAPIUsers[User, uuid.UUID](
+fastapi_users = FastAPIUsers[User, uuid.UUID](  # type: ignore[arg-type, type-var]
     get_user_manager,
     [
         cookie_auth_backend,
         bearer_auth_backend,
     ],
-)
+)  # type: ignore[arg-type, type-var]
 
 # --- Reusable Dependencies ---
-current_active_user: User = fastapi_users.current_user(active=True)
-current_active_superuser: User = fastapi_users.current_user(active=True, superuser=True)
-current_user_optional: User | None = fastapi_users.current_user(optional=True)
-current_active_verified_user: User = fastapi_users.current_user(active=True, verified=True)
+# Note: These are FastAPI dependencies (callables), not model instances.
+# We use Any here to avoid Mypy confusion with the model type.
+current_active_user: Any = fastapi_users.current_user(active=True)
+current_active_superuser: Any = fastapi_users.current_user(active=True, superuser=True)
+current_user_optional: Any = fastapi_users.current_user(optional=True)
+current_active_verified_user: Any = fastapi_users.current_user(active=True, verified=True)

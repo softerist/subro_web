@@ -32,6 +32,9 @@ class ProcessingContext:
     found_final_ro: bool = (
         False  # True if a RO subtitle (external file or embedded text) is finalized
     )
+    found_final_en: bool = (
+        False  # True if an EN subtitle is finalized (e.g., to be used for translation)
+    )
     # found_final_en: bool = False # REMOVE THIS or keep False until FinalSelector sets it
 
     # Candidate lists (populated by scanners/fetchers)
@@ -44,6 +47,7 @@ class ProcessingContext:
     candidate_en_path_standard: str | None = None  # From StandardFileChecker
     candidate_en_path_online: str | None = None  # From OnlineFetcher
     candidate_en_path_embedded: str | None = None  # From EmbedScanner
+    potential_embedded_en_info: dict[str, Any] | None = None  # From EmbedScanner
 
     # Final selected/processed subtitle path(s) - could be the target path or an embedded marker
     final_ro_sub_path_or_status: str | None = None  # Path to file or 'embedded_text_ro'
@@ -55,13 +59,13 @@ class ProcessingContext:
     # Error tracking (optional)
     errors: list[str] = field(default_factory=list)
 
-    def add_error(self, strategy_name: str, message: str):
+    def add_error(self, strategy_name: str, message: str) -> None:
         """Helper to add a formatted error message."""
         err_msg = f"[{strategy_name}] {message}"
         self.errors.append(err_msg)
         logger.error(err_msg)  # Also log immediately
 
-    def add_temp_dir(self, dir_path: str | None):
+    def add_temp_dir(self, dir_path: str | None) -> None:
         """Registers a temporary directory path that needs cleanup."""
         if dir_path and isinstance(dir_path, str):
             self.temp_dirs_to_clean.add(dir_path)
@@ -103,3 +107,5 @@ class ProcessingStrategy(ABC):
         Defaults to False.
         """
         return False
+
+    _ro_goal_logged: bool = False  # Lifecycle flag for logging

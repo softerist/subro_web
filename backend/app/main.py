@@ -1,5 +1,7 @@
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from app.core.config import settings
 
@@ -64,6 +66,7 @@ from app.api.routers.settings import router as settings_router
 from app.api.routers.storage_paths import router as storage_paths_router
 from app.api.routers.translation_stats import router as translation_stats_router
 from app.api.routers.users import router as users_router
+from app.api.routers.webhook_keys import router as webhook_keys_router
 from app.api.websockets.job_logs import router as job_logs_websocket_router
 from app.core.rate_limit import limiter  # Import the limiter instance
 from app.core.request_context import RequestContextMiddleware
@@ -86,7 +89,7 @@ logger = logging.getLogger(__name__)
 
 # --- Lifespan Management ---
 @asynccontextmanager
-async def lifespan(_app_instance: FastAPI):
+async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:  # noqa: C901
     logger.info(f"Starting up {settings.APP_NAME} v{settings.APP_VERSION}...")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
 
@@ -110,40 +113,63 @@ async def lifespan(_app_instance: FastAPI):
         and settings.FIRST_SUPERUSER_PASSWORD
     ):
         logger.info(
-            f"LIFESPAN_HOOK: Attempting to create/ensure initial superuser: {settings.FIRST_SUPERUSER_EMAIL}"
+            f"LIFESPAN_HOOK: Checking for existing superusers before creating: {settings.FIRST_SUPERUSER_EMAIL}"
         )
         # Use the FastAPISessionLocal from the db_session_module
         async with db_session_module.FastAPISessionLocal() as session:
             try:
-                user_db_adapter = SQLAlchemyUserDatabase(session, UserModel)
-                user_manager = UserManager(user_db_adapter)
+                # First, check if ANY active superuser already exists
+                existing_superuser_stmt = (
+                    select(UserModel)
+                    .where(
+                        UserModel.is_superuser == True,  # noqa: E712
+                        UserModel.is_active == True,  # noqa: E712
+                    )
+                    .limit(1)
+                )
+                existing_superuser_result = await session.execute(existing_superuser_stmt)
+                existing_superuser = existing_superuser_result.scalar_one_or_none()
 
-                try:
-                    existing_user = await user_manager.get_by_email(settings.FIRST_SUPERUSER_EMAIL)
-                    if existing_user:
-                        logger.info(
-                            f"LIFESPAN_HOOK: Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {existing_user.id}) already exists."
+                if existing_superuser:
+                    logger.info(
+                        f"LIFESPAN_HOOK: Active superuser already exists: {existing_superuser.email} (ID: {existing_superuser.id}). "
+                        f"Skipping creation of {settings.FIRST_SUPERUSER_EMAIL}."
+                    )
+                else:
+                    # No active superuser exists, create one
+                    user_db_adapter: SQLAlchemyUserDatabase = SQLAlchemyUserDatabase(
+                        session, UserModel
+                    )
+                    user_manager = UserManager(user_db_adapter)
+
+                    try:
+                        existing_user = await user_manager.get_by_email(
+                            settings.FIRST_SUPERUSER_EMAIL
                         )
-                except UserNotExists:
-                    logger.info(
-                        f"LIFESPAN_HOOK: Initial superuser {settings.FIRST_SUPERUSER_EMAIL} not found, creating..."
-                    )
-                    user_create_data = UserCreate(
-                        email=settings.FIRST_SUPERUSER_EMAIL,
-                        password=settings.FIRST_SUPERUSER_PASSWORD,
-                        is_superuser=True,
-                        is_active=True,
-                        is_verified=True,
-                        role="admin",
-                    )
-                    created_user_orm_instance = await user_manager.create(
-                        user_create_data, safe=False
-                    )
-                    await session.commit()
-                    await session.refresh(created_user_orm_instance)
-                    logger.info(
-                        f"LIFESPAN_HOOK: Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {created_user_orm_instance.id}) created."
-                    )
+                        if existing_user:
+                            logger.info(
+                                f"LIFESPAN_HOOK: Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {existing_user.id}) already exists."
+                            )
+                    except UserNotExists:
+                        logger.info(
+                            f"LIFESPAN_HOOK: No superusers found. Creating initial superuser: {settings.FIRST_SUPERUSER_EMAIL}"
+                        )
+                        user_create_data = UserCreate(
+                            email=settings.FIRST_SUPERUSER_EMAIL,
+                            password=settings.FIRST_SUPERUSER_PASSWORD,
+                            is_superuser=True,
+                            is_active=True,
+                            is_verified=True,
+                            role="admin",
+                        )
+                        created_user_orm_instance = await user_manager.create(
+                            user_create_data, safe=False
+                        )
+                        await session.commit()
+                        await session.refresh(created_user_orm_instance)
+                        logger.info(
+                            f"LIFESPAN_HOOK: Initial superuser {settings.FIRST_SUPERUSER_EMAIL} (ID: {created_user_orm_instance.id}) created."
+                        )
             except Exception as e:
                 await session.rollback()
                 logger.error(
@@ -157,6 +183,18 @@ async def lifespan(_app_instance: FastAPI):
         logger.warning(
             "LIFESPAN_HOOK: FIRST_SUPERUSER_EMAIL or FIRST_SUPERUSER_PASSWORD not set. Skipping superuser creation."
         )
+
+    # 3. Ensure Webhook Key (Auto-generation)
+    if db_session_module.FastAPISessionLocal:
+        async with db_session_module.FastAPISessionLocal() as session:
+            try:
+                from app.api.routers.webhook_keys import ensure_default_webhook_key
+
+                await ensure_default_webhook_key(session)
+            except Exception as e:
+                logger.error(
+                    f"LIFESPAN_HOOK: Error ensuring default webhook key: {e}", exc_info=True
+                )
 
     yield  # Application runs here
 
@@ -217,8 +255,8 @@ app.state.limiter = limiter
 if settings.ENVIRONMENT == "development":
     from fastapi.responses import RedirectResponse
 
-    @app.get("/", include_in_schema=False)
-    async def root_redirect():
+    @app.get("/", include_in_schema=False, response_model=None)
+    async def root_redirect() -> RedirectResponse | dict[str, str]:
         """Redirect root to API documentation in development."""
         if settings.DOCS_URL:
             return RedirectResponse(url=settings.DOCS_URL)
@@ -226,7 +264,7 @@ if settings.ENVIRONMENT == "development":
 
 
 # --- Custom Rate Limit Exception Handler for Security Logging ---
-async def security_rate_limit_handler(request: Request, exc: RateLimitExceeded):
+async def security_rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
     """
     Custom rate limit handler that logs to security log for fail2ban.
     """
@@ -246,7 +284,7 @@ async def security_rate_limit_handler(request: Request, exc: RateLimitExceeded):
     )
 
 
-app.add_exception_handler(RateLimitExceeded, security_rate_limit_handler)
+app.add_exception_handler(RateLimitExceeded, security_rate_limit_handler)  # type: ignore[arg-type]
 app.add_middleware(SlowAPIMiddleware)
 
 if settings.BACKEND_CORS_ORIGINS:
@@ -277,7 +315,9 @@ else:
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
     error_details = exc.errors()
     log_body = None
     if settings.DEBUG and request.method in ["POST", "PUT", "PATCH"]:
@@ -299,7 +339,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 @app.exception_handler(HTTPException)
-async def http_exception_handler_custom(request: Request, exc: HTTPException):
+async def http_exception_handler_custom(request: Request, exc: HTTPException) -> JSONResponse:
     # Audit 403 Forbidden
     if exc.status_code == status.HTTP_403_FORBIDDEN:
         from app.core.rate_limit import get_real_client_ip
@@ -339,7 +379,7 @@ async def http_exception_handler_custom(request: Request, exc: HTTPException):
 
 
 @app.exception_handler(Exception)
-async def generic_exception_handler_custom(request: Request, exc: Exception):
+async def generic_exception_handler_custom(request: Request, exc: Exception) -> JSONResponse:
     logger.error(
         "Unhandled exception during request: %s %s",
         request.method,
@@ -382,6 +422,10 @@ api_v1_router.include_router(
 )  # prefix is already "/translation-stats" in router
 # File download - requires admin auth
 api_v1_router.include_router(files_router)  # prefix is already "/files" in router
+# Webhook key management - requires admin auth
+api_v1_router.include_router(
+    webhook_keys_router
+)  # prefix is already "/settings/webhook-key" in router
 
 ws_api_v1_router = APIRouter()
 ws_api_v1_router.include_router(
@@ -398,7 +442,7 @@ api_v1_router.include_router(ws_api_v1_router, prefix="/ws")  # This adds the /w
 
 
 @api_v1_router.get("/", tags=["API Root"], summary="API v1 Root Endpoint")
-async def api_v1_root_endpoint():
+async def api_v1_root_endpoint() -> dict[str, str | None]:
     return {
         "message": f"Welcome to {settings.APP_NAME} - API Version 1",
         "version": settings.APP_VERSION,
@@ -409,7 +453,9 @@ async def api_v1_root_endpoint():
 if settings.ENVIRONMENT != "production":
 
     @api_v1_router.get("/test-db-users", tags=["Debug"])
-    async def test_db_users(db: AsyncSession = Depends(get_async_session)):
+    async def test_db_users(
+        db: AsyncSession = Depends(get_async_session),
+    ) -> dict[str, str]:
         try:
             stmt = select(UserModel).limit(1)
             result = await db.execute(stmt)
@@ -432,7 +478,9 @@ if settings.HEALTHZ_URL:
         summary="Detailed API and Dependencies Health Check",
         status_code=status.HTTP_200_OK,
     )
-    async def health_check_api_v1_detailed(db: AsyncSession = Depends(get_async_session)):
+    async def health_check_api_v1_detailed(
+        db: AsyncSession = Depends(get_async_session),
+    ) -> dict[str, Any]:
         db_status = "unavailable"
         try:
             await db.execute(text("SELECT 1"))
@@ -470,7 +518,7 @@ app.include_router(api_v1_router, prefix=settings.API_V1_STR)
     status_code=status.HTTP_200_OK,
     include_in_schema=False,
 )
-async def health_check_basic_system():
+async def health_check_basic_system() -> dict[str, str]:
     return {"status": "healthy"}
 
 

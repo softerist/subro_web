@@ -118,6 +118,50 @@ section_end "prod_sysctl"
 log "Stopping Development Stack (if running)..."
 docker compose -p subapp_dev -f "$DOCK_DIR/docker-compose.yml" -f "$DOCK_DIR/docker-compose.override.yml" down 2>/dev/null || true
 
+# 0.9 Ensure Caddyfile.prod exists BEFORE starting infrastructure
+# This prevents Caddy from using dev config on first boot
+section_start "prod_caddyfile_init" "Initializing Caddyfile.prod"
+TEMPLATE="$DOCK_DIR/Caddyfile.template"
+TMP_CADDYFILE="$CADDYFILE_PROD.tmp"
+
+if [ ! -f "$TEMPLATE" ]; then
+    error "Caddyfile.template not found at $TEMPLATE"
+    exit 1
+fi
+
+# Determine which color to route to (prefer existing active, fallback to blue)
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "green-api-1"; then
+    INIT_COLOR="green"
+elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "blue-api-1"; then
+    INIT_COLOR="blue"
+else
+    INIT_COLOR="blue"  # Default to blue for fresh deployments
+fi
+
+DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$ENV_FILE" | tail -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+if [ -z "$DOMAIN_NAME" ]; then
+    error "DOMAIN_NAME not found in $ENV_FILE"
+    exit 1
+fi
+
+# Only regenerate if empty or missing (preserve existing config if valid)
+if [ ! -s "$CADDYFILE_PROD" ]; then
+    log "Generating initial Caddyfile.prod (routing to $INIT_COLOR)..."
+    sed "s/{{UPSTREAM_API}}/$INIT_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$INIT_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$TEMPLATE" > "$TMP_CADDYFILE"
+
+    if [ -s "$TMP_CADDYFILE" ]; then
+        mv "$TMP_CADDYFILE" "$CADDYFILE_PROD"
+        success "Caddyfile.prod initialized"
+    else
+        error "Failed to generate Caddyfile.prod: Output is empty"
+        rm -f "$TMP_CADDYFILE"
+        exit 1
+    fi
+else
+    log "Caddyfile.prod already exists, skipping initialization"
+fi
+section_end "prod_caddyfile_init"
+
 # 1. Ensure Infrastructure (Gateway + Data) is running
 section_start "prod_infra" "Ensuring Infrastucture is Up"
 if [ "${USE_PREBUILT_IMAGES:-0}" = "1" ]; then
@@ -131,8 +175,6 @@ else
 fi
 section_end "prod_infra"
 
-# 1. Determine Active Color
-# We check if 'blue-api-1' is running. If so, next is green.
 if docker ps --format '{{.Names}}' | grep -q "blue-api-1"; then
     CURRENT_COLOR="blue"
     NEW_COLOR="green"
@@ -262,23 +304,58 @@ if [ ! -f "$TEMPLATE" ]; then
 fi
 
 # Prepare new Caddyfile content
-sed "s/{{UPSTREAM_API}}/$NEW_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$NEW_COLOR-frontend-1/g" "$TEMPLATE" > "$CADDYFILE_PROD"
+# Read DOMAIN_NAME from env file for expansion
+DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$ENV_FILE" | tail -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+if [ -z "$DOMAIN_NAME" ]; then
+    error "DOMAIN_NAME not found in $ENV_FILE"; exit 1
+fi
+sed "s/{{UPSTREAM_API}}/$NEW_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$NEW_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$TEMPLATE" > "$TMP_CADDYFILE"
 
-# Reload Caddy (in infra project)
-docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T caddy caddy reload --config /etc/caddy/Caddyfile.prod
+if [ ! -s "$TMP_CADDYFILE" ]; then
+    error "Failed to generate Caddyfile.prod (switch phase): Output is empty"
+    rm -f "$TMP_CADDYFILE"
+    exit 1
+fi
+mv "$TMP_CADDYFILE" "$CADDYFILE_PROD"
+
+# Reload Caddy by restarting the container (exec reload doesn't always pick up bind-mount changes)
+log "Restarting Caddy to apply new configuration..."
+docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" restart caddy
+
+# Verify Caddy is routing to the new color
+sleep 3
+CADDY_UPSTREAM=$(docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T caddy grep -m1 "reverse_proxy" /etc/caddy/Caddyfile.prod 2>/dev/null || echo "")
+if echo "$CADDY_UPSTREAM" | grep -q "$NEW_COLOR"; then
+    success "Caddy now routing to $NEW_COLOR"
+else
+    warn "Caddy config verification failed - check /etc/caddy/Caddyfile.prod inside container"
+fi
 
 success "Traffic Switched"
+
+# Verify API responds correctly via the new routing
+log "Verifying API health via Caddy..."
+API_RESPONSE=$(docker compose --env-file "$ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" exec -T caddy \
+    wget -q -O - --timeout=10 "http://$NEW_COLOR-api-1:8000/api/v1/" 2>/dev/null || echo "")
+if echo "$API_RESPONSE" | grep -q '"version"'; then
+    API_VERSION=$(echo "$API_RESPONSE" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+    success "API responding correctly (version: $API_VERSION)"
+else
+    warn "API health check failed - response: $API_RESPONSE"
+fi
+
 section_end "prod_switch"
 
-# 5. Cleanup Old Color
-section_start "prod_cleanup" "Cleanup Old Color"
-if [ -n "$CURRENT_COLOR" ]; then
-    # Double check we are not killing the new color
-    if [ "$CURRENT_COLOR" != "$NEW_COLOR" ]; then
-        log "Stopping Old Color ($CURRENT_COLOR)..."
-        docker compose --env-file "$ENV_FILE" -p "$CURRENT_COLOR" -f "$COMPOSE_APP" down
+# 5. Cleanup Inactive Color (and any orphaned containers)
+section_start "prod_cleanup" "Cleanup Inactive Color"
+for color in blue green; do
+    if [ "$color" != "$NEW_COLOR" ]; then
+        if docker ps -a --format '{{.Names}}' | grep -q "^$color-"; then
+            log "Cleaning up old/orphaned $color containers..."
+            docker compose --env-file "$ENV_FILE" -p "$color" -f "$COMPOSE_APP" down || true
+        fi
     fi
-fi
+done
 
 log "Pruning old images in background..."
 # Remove dangling images only, preserve tagged images for rollback (older than 1 week)
@@ -287,14 +364,26 @@ section_end "prod_cleanup"
 
 # 7. Post-Deployment Hooks
 section_start "prod_hooks" "Running Post-Deployment Hooks"
-if [ -f "$INFRA_DIR/../backend/scripts/qbittorrent-nox-webhook.sh" ]; then
-    log "Ensuring webhook script is executable..."
-    chmod +x "$INFRA_DIR/../backend/scripts/qbittorrent-nox-webhook.sh"
-    log "Ensuring log permissions for qbittorrent-nox..."
-    mkdir -p "$INFRA_DIR/../logs"
-    chown -R qbittorrent-nox:qbittorrent-nox "$INFRA_DIR/../logs" 2>/dev/null || true
-    chmod -R 775 "$INFRA_DIR/../logs"
+
+# Create directories on host for qBittorrent integration
+log "Creating /opt/subro_web directories..."
+mkdir -p /opt/subro_web/scripts /opt/subro_web/secrets /opt/subro_web/logs
+
+# Copy webhook script from Docker container to host
+# (The script runs on the HOST where qBittorrent is, not inside Docker)
+log "Copying webhook script from container to host..."
+if docker cp "$NEW_COLOR-api-1:/app/scripts/qbittorrent-nox-webhook.sh" /opt/subro_web/scripts/; then
+    chmod +x /opt/subro_web/scripts/qbittorrent-nox-webhook.sh
+    success "Webhook script copied to /opt/subro_web/scripts/"
+else
+    warn "Failed to copy webhook script (container may not have it)"
 fi
+
+# Set ownership for qbittorrent-nox user
+log "Setting permissions for qbittorrent-nox..."
+chown -R qbittorrent-nox:qbittorrent-nox /opt/subro_web/scripts /opt/subro_web/logs 2>/dev/null || true
+chmod -R 775 /opt/subro_web/logs
+
 section_end "prod_hooks"
 
 success "Deployment Complete ($NEW_COLOR Active)"

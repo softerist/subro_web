@@ -17,6 +17,7 @@ import socket
 import uuid
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,7 +54,7 @@ class AuditRateLimiter:
         await self._semaphore.acquire()
         return True
 
-    def release(self):
+    def release(self) -> None:
         try:
             self._semaphore.release()
         except ValueError:
@@ -284,14 +285,14 @@ async def log_event(
     action: str,
     severity: str | None = None,
     success: bool = True,
-    actor_user_id: str | None = None,
-    target_user_id: str | None = None,
+    actor_user_id: str | UUID | None = None,
+    target_user_id: str | UUID | None = None,
     resource_type: str | None = None,
-    resource_id: str | None = None,
+    resource_id: str | UUID | None = None,
     details: dict[str, Any] | None = None,
     http_status: int | None = None,
     error_code: str | None = None,
-    impersonator_id: str | None = None,  # NEW
+    impersonator_id: str | UUID | None = None,  # NEW
     outcome: str | None = None,  # NEW
     request_method: str | None = None,  # NEW override
     request_path: str | None = None,  # NEW override
@@ -391,7 +392,9 @@ async def anonymize_audit_actor(
         )
         result_target = await db.execute(stmt_target)
 
-        return result_actor.rowcount + result_target.rowcount
+        rowcount_actor = getattr(result_actor, "rowcount", 0) or 0
+        rowcount_target = getattr(result_target, "rowcount", 0) or 0
+        return int(rowcount_actor + rowcount_target)
     except Exception as e:
         logger.error(f"Failed to anonymize audit logs for user {user_id}: {e}")
         return 0
@@ -433,8 +436,9 @@ async def verify_log_integrity(db: AsyncSession, limit: int = 1000) -> dict[str,
         )
 
         if computed_hash != item.event_hash:
+            actual_hash = item.event_hash or "unknown"
             issues.append(
-                f"Hash mismatch at ID {item.id} (Event {item.event_id}). Expected {item.event_hash[:12]}, Computed {computed_hash[:12]}"
+                f"Hash mismatch at ID {item.id} (Event {item.event_id}). Expected {actual_hash[:12]}, Computed {computed_hash[:12]}"
             )
 
     return {"verified": len(issues) == 0, "issues": issues, "checked_count": len(items)}

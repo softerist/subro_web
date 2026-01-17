@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 # Import service modules/classes (adjust paths as needed)
 # Stateless services (can often be referenced directly by module)
@@ -25,7 +26,7 @@ class ServiceContainer:
     by the subtitle processing pipeline strategies.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initializes the container, setting up references but deferring actual client instantiation."""
         # References to stateless service modules
         self._imdb_service = imdb_service
@@ -39,12 +40,12 @@ class ServiceContainer:
         logger.debug("ServiceContainer initialized.")
 
     @property
-    def imdb(self):
+    def imdb(self) -> Any:
         """Access the IMDb service module (assumed stateless)."""
         return self._imdb_service
 
     @property
-    def subsro(self):
+    def subsro(self) -> Any:
         """Access the Subs.ro service module (assumed stateless)."""
         return self._subsro_service
 
@@ -124,7 +125,7 @@ class ServiceContainer:
                 self._opensubtitles_client_instance = None  # Ensure None on error
         return self._opensubtitles_client_instance
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         """
         Performs cleanup actions for managed services, like logging out.
         Called by the pipeline at the end of processing for a file.

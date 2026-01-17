@@ -30,7 +30,5 @@ networks:
   caddy_net:
     driver: bridge
   internal_net:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.25.0.0/16
+    name: ${NETWORK_NAME:-infra_internal_net}
+    external: ${NETWORK_EXTERNAL:-true}

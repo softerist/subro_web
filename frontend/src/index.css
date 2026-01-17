@@ -104,6 +104,10 @@
   * {
     @apply border-border;
   }
+  html {
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
   html,
   body {
     @apply h-full overflow-hidden;
@@ -148,8 +152,8 @@ input,
 textarea,
 [contenteditable="true"] {
   cursor: text;
-  user-select: text;
   -webkit-user-select: text;
+  user-select: text;
 }
 
 @layer utilities {

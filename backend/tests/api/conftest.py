@@ -1,10 +1,12 @@
 import logging
+from collections.abc import Generator
 from datetime import date
 
 import pytest
 from dateutil.relativedelta import relativedelta
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.users import current_active_user, get_current_active_admin_user
 from app.db.models.user import User
@@ -13,17 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
-def audit_admin_headers():
+def audit_admin_headers() -> dict[str, str]:
     return {"Authorization": "Bearer admin-token"}
 
 
 @pytest.fixture
-def audit_user_headers():
+def audit_user_headers() -> dict[str, str]:
     return {"Authorization": "Bearer user-token"}
 
 
 @pytest.fixture(autouse=True)
-async def create_test_partitions(db_session):
+async def create_test_partitions(db_session: AsyncSession) -> None:
     # Manually create partitions for current and next month to avoid IntegrityError
     today = date.today()
     target_months = [today + relativedelta(months=i) for i in range(2)]
@@ -47,7 +49,7 @@ async def create_test_partitions(db_session):
 
 
 @pytest.fixture(autouse=False)
-def override_auth_dependencies():
+def override_auth_dependencies() -> Generator[None, None, None]:
     import uuid
 
     from sqlalchemy import select
@@ -61,7 +63,9 @@ def override_auth_dependencies():
     admin_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
     user_id = uuid.UUID("00000000-0000-0000-0000-000000000002")
 
-    async def mock_active_user(request: Request, db: AsyncSession = Depends(get_async_session)):
+    async def mock_active_user(
+        request: Request, db: AsyncSession = Depends(get_async_session)
+    ) -> User:
         auth_header = request.headers.get("Authorization", "")
         if "admin" in auth_header:
             target_id = admin_id
@@ -97,7 +101,7 @@ def override_auth_dependencies():
 
         return user
 
-    async def mock_active_admin(user: User = Depends(mock_active_user)):
+    async def mock_active_admin(user: User = Depends(mock_active_user)) -> User:
         if user.role != "admin" and not user.is_superuser:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
         return user

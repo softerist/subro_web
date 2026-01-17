@@ -8,6 +8,7 @@ from sqlalchemy.future import select
 
 from app.core.config import settings
 from app.core.security import cookie_transport
+from app.db.models.app_settings import AppSettings
 from app.db.models.user import User
 
 from ..factories import UserFactory
@@ -15,11 +16,23 @@ from ..factories import UserFactory
 API_PREFIX = settings.API_V1_STR
 
 
+async def set_open_signup(db: AsyncSession, enabled: bool) -> None:
+    """Helper to enable/disable open signup in AppSettings."""
+    result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
+    settings_obj = result.scalars().first()
+    if not settings_obj:
+        settings_obj = AppSettings(id=1, open_signup=enabled, setup_completed=True)
+        db.add(settings_obj)
+    else:
+        settings_obj.open_signup = enabled
+    await db.flush()
+    await db.refresh(settings_obj)
+
+
 @pytest.mark.asyncio
-async def test_register_user(test_client: AsyncClient, db_session: AsyncSession):
-    # Registration doesn't use the factory, so this remains the same
-    if not settings.OPEN_SIGNUP:
-        pytest.skip("Skipping registration test because OPEN_SIGNUP is False")
+async def test_register_user(test_client: AsyncClient, db_session: AsyncSession) -> None:
+    """Test successful user registration."""
+    await set_open_signup(db_session, True)
 
     register_data = {"email": "registertest@example.com", "password": "Password123"}
     response = await test_client.post(f"{API_PREFIX}/auth/register", json=register_data)
@@ -38,9 +51,11 @@ async def test_register_user(test_client: AsyncClient, db_session: AsyncSession)
 
 
 @pytest.mark.asyncio
-async def test_register_user_already_exists(test_client: AsyncClient, db_session: AsyncSession):
-    if not settings.OPEN_SIGNUP:
-        pytest.skip("Skipping registration test because OPEN_SIGNUP is False")
+async def test_register_user_already_exists(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Test registration failure when email already exists."""
+    await set_open_signup(db_session, True)
 
     existing_email = "existing@example.com"
     # Use the factory's create_user method, passing the session
@@ -56,7 +71,7 @@ async def test_register_user_already_exists(test_client: AsyncClient, db_session
 
 
 @pytest.mark.asyncio
-async def test_login_success(test_client: AsyncClient, db_session: AsyncSession):
+async def test_login_success(test_client: AsyncClient, db_session: AsyncSession) -> None:
     user_email = "logintest@example.com"
     user_password = "Password123"
     # Use factory's create_user, passing session and password
@@ -75,7 +90,9 @@ async def test_login_success(test_client: AsyncClient, db_session: AsyncSession)
 
 
 @pytest.mark.asyncio
-async def test_login_failure_wrong_password(test_client: AsyncClient, db_session: AsyncSession):
+async def test_login_failure_wrong_password(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     user_email = "wrongpass@example.com"
     # Use factory's create_user, passing session and correct password
     UserFactory.create_user(session=db_session, email=user_email, password="CorrectPass123")
@@ -84,26 +101,27 @@ async def test_login_failure_wrong_password(test_client: AsyncClient, db_session
     login_data = {"username": user_email, "password": "WrongPass123"}
     response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
 
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
     assert response.json()["detail"] == "LOGIN_BAD_CREDENTIALS"
     assert "subRefreshToken" not in response.cookies
 
 
 @pytest.mark.asyncio
-async def test_login_failure_user_not_found(test_client: AsyncClient):
+async def test_login_failure_user_not_found(test_client: AsyncClient) -> None:
     """Test login failure for a non-existent user."""
-    # No user creation needed here
     login_data = {"username": "nosuchuser@example.com", "password": "Password123"}
     response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
 
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
     # Keep the assertion for LOGIN_BAD_CREDENTIALS as refined in auth.py
     assert response.json()["detail"] == "LOGIN_BAD_CREDENTIALS"
     assert "subRefreshToken" not in response.cookies
 
 
 @pytest.mark.asyncio
-async def test_login_failure_inactive_user(test_client: AsyncClient, db_session: AsyncSession):
+async def test_login_failure_inactive_user(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test login failure for an inactive user."""
     user_email = "inactive@example.com"
     user_password = "Password123"
@@ -116,13 +134,13 @@ async def test_login_failure_inactive_user(test_client: AsyncClient, db_session:
     login_data = {"username": user_email, "password": user_password}
     response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
 
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert response.json()["detail"] == "LOGIN_BAD_CREDENTIALS"
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json()["detail"] == "LOGIN_USER_INACTIVE"
     assert "subRefreshToken" not in response.cookies
 
 
 @pytest.mark.asyncio
-async def test_get_current_user(test_client: AsyncClient, db_session: AsyncSession):
+async def test_get_current_user(test_client: AsyncClient, db_session: AsyncSession) -> None:
     user_email = "me_user@example.com"
     user_password = "Password123"
     # Use factory's create_user, passing session and password
@@ -146,7 +164,7 @@ async def test_get_current_user(test_client: AsyncClient, db_session: AsyncSessi
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_unauthenticated(test_client: AsyncClient):
+async def test_get_current_user_unauthenticated(test_client: AsyncClient) -> None:
     # Remains the same
     response = await test_client.get(f"{API_PREFIX}/users/me")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -154,7 +172,7 @@ async def test_get_current_user_unauthenticated(test_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_refresh_token(test_client: AsyncClient, db_session: AsyncSession):
+async def test_refresh_token(test_client: AsyncClient, db_session: AsyncSession) -> None:
     user_email = "refresh_user@example.com"
     user_password = "Password123"
     # Use factory's create_user, passing session and password
@@ -194,7 +212,7 @@ async def test_refresh_token(test_client: AsyncClient, db_session: AsyncSession)
 
 
 @pytest.mark.asyncio
-async def test_refresh_token_no_cookie(test_client: AsyncClient):
+async def test_refresh_token_no_cookie(test_client: AsyncClient) -> None:
     # Remains the same
     response = await test_client.post(f"{API_PREFIX}/auth/refresh")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -202,7 +220,7 @@ async def test_refresh_token_no_cookie(test_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_refresh_token_invalid_cookie(test_client: AsyncClient):
+async def test_refresh_token_invalid_cookie(test_client: AsyncClient) -> None:
     # FIX: Set cookie on the client instead of passing in the request
     test_client.cookies.set("subRefreshToken", "invalid-token-value")
 
@@ -214,7 +232,7 @@ async def test_refresh_token_invalid_cookie(test_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_logout(test_client: AsyncClient, db_session: AsyncSession):
+async def test_logout(test_client: AsyncClient, db_session: AsyncSession) -> None:
     user_email = "logout_user@example.com"
     user_password = "Password123"
     UserFactory.create_user(session=db_session, email=user_email, password=user_password)
@@ -255,3 +273,121 @@ async def test_logout(test_client: AsyncClient, db_session: AsyncSession):
     # Assert that the request without a cookie fails as expected
     assert refresh_response_no_cookie.status_code == status.HTTP_401_UNAUTHORIZED
     assert refresh_response_no_cookie.json()["detail"] == "REFRESH_TOKEN_MISSING"
+
+
+@pytest.mark.asyncio
+async def test_login_failure_suspended_user(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Test login failure for a suspended user."""
+    user_email = "suspended@example.com"
+    user_password = "Password123"
+    UserFactory.create_user(
+        session=db_session, email=user_email, password=user_password, status="suspended"
+    )
+    await db_session.flush()
+
+    login_data = {"username": user_email, "password": user_password}
+    response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json()["detail"] == "LOGIN_ACCOUNT_SUSPENDED"
+
+
+@pytest.mark.asyncio
+async def test_login_failure_locked_user(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Test login failure for a locked user."""
+    from datetime import UTC, datetime, timedelta
+
+    user_email = "locked@example.com"
+    user_password = "Password123"
+    UserFactory.create_user(
+        session=db_session,
+        email=user_email,
+        password=user_password,
+        locked_until=datetime.now(UTC) + timedelta(minutes=15),
+    )
+    await db_session.flush()
+
+    login_data = {"username": user_email, "password": user_password}
+    response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert "Account is locked" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_register_user_disabled(test_client: AsyncClient, db_session: AsyncSession) -> None:
+    """Test registration failure when open signup is disabled."""
+    await set_open_signup(db_session, False)
+
+    register_data = {"email": "disabled@example.com", "password": "Password123"}
+    response = await test_client.post(f"{API_PREFIX}/auth/register", json=register_data)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json()["detail"] == "User registration is currently disabled."
+
+
+@pytest.mark.asyncio
+async def test_change_password_success(test_client: AsyncClient, db_session: AsyncSession) -> None:
+    """Test successful password change."""
+    user_email = "changepass@example.com"
+    old_password = "OldPassword123"
+    new_password = "NewPassword123"
+    UserFactory.create_user(session=db_session, email=user_email, password=old_password)
+    await db_session.flush()
+
+    # Login to get token
+    login_data = {"username": user_email, "password": old_password}
+    login_response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
+    access_token = login_response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    # Change password
+    change_data = {"current_password": old_password, "new_password": new_password}
+    response = await test_client.patch(
+        f"{API_PREFIX}/auth/password", json=change_data, headers=headers
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {"message": "Password changed successfully."}
+
+    # Verify new password works
+    login_data_new = {"username": user_email, "password": new_password}
+    login_response_new = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data_new)
+    assert login_response_new.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.asyncio
+async def test_check_session_authenticated(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Test /session endpoint for an authenticated user."""
+    user_email = "session@example.com"
+    user_password = "Password123"
+    UserFactory.create_user(session=db_session, email=user_email, password=user_password)
+    await db_session.flush()
+
+    login_data = {"username": user_email, "password": user_password}
+    login_response = await test_client.post(f"{API_PREFIX}/auth/login", data=login_data)
+    refresh_token = login_response.cookies.get("subRefreshToken")
+    assert refresh_token is not None
+
+    test_client.cookies.set("subRefreshToken", refresh_token)
+    response = await test_client.post(f"{API_PREFIX}/auth/session")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["is_authenticated"] is True
+    assert "access_token" in response.json()
+
+
+@pytest.mark.asyncio
+async def test_check_session_unauthenticated(test_client: AsyncClient) -> None:
+    """Test /session endpoint for an unauthenticated user."""
+    response = await test_client.post(f"{API_PREFIX}/auth/session")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["is_authenticated"] is False
+    assert response.json()["access_token"] is None

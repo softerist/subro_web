@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, UserPlus } from "lucide-react";
 import { toast } from "sonner";
@@ -20,10 +21,23 @@ export function UsersPage() {
   const currentUser = useAuthStore((state) => state.user);
   const isSuperuser = currentUser?.is_superuser === true;
 
-  const { data: users, isLoading } = useQuery({
+  const {
+    data: users,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ["admin-users"],
     queryFn: adminApi.getUsers,
+    retry: false, // Don't retry automatically to avoid infinite refresh loops during debugging
   });
+
+  useEffect(() => {
+    if (isError) {
+      console.error("[UsersPage] Failed to fetch users:", error);
+      toast.error("Failed to load users. Please check console for details.");
+    }
+  }, [isError, error]);
 
   const { data: openSignup, isLoading: isLoadingSignup } = useQuery({
     queryKey: ["open-signup"],

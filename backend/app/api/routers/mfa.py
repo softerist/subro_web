@@ -10,6 +10,7 @@ Provides endpoints for:
 
 import logging
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
@@ -168,7 +169,7 @@ async def verify_mfa_login(
     mfa_user_id: Annotated[str | None, Cookie()] = None,
     db: AsyncSession = Depends(get_async_session),
     user_manager: UserManager = Depends(get_user_manager),
-):
+) -> dict[str, str]:
     """
     Verify MFA code during login flow.
 
@@ -188,7 +189,7 @@ async def verify_mfa_login(
 
     # Get user
     try:
-        user = await user_manager.get(mfa_user_id)
+        user = await user_manager.get(UUID(mfa_user_id))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -219,7 +220,7 @@ async def verify_mfa_login(
 
     # Handle trusted device
     if request_data.trust_device:
-        client_ip = request.client.host if request.client else None
+        client_ip = request.client.host if request.client else "Unknown"
         user_agent = request.headers.get("User-Agent", "Unknown device")
         device_name = user_agent[:100] if user_agent else None
 
@@ -283,7 +284,7 @@ async def disable_mfa(
             self.password = password
 
     credentials = FakeCredentials(current_user.email, request_data.password)
-    verified_user = await user_manager.authenticate(credentials)
+    verified_user = await user_manager.authenticate(credentials)  # type: ignore
 
     if not verified_user:
         raise HTTPException(

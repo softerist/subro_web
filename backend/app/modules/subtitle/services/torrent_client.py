@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import qbittorrentapi
 
@@ -12,7 +13,7 @@ QBITTORRENT_USERNAME = getattr(settings, "QBITTORRENT_USERNAME", None)
 QBITTORRENT_PASSWORD = getattr(settings, "QBITTORRENT_PASSWORD", None)
 
 
-def get_client():
+def get_client() -> qbittorrentapi.Client | None:
     """
     Initializes and returns a qBittorrent API client instance.
     Handles basic connection setup. Returns None if configuration is missing.
@@ -48,7 +49,7 @@ def get_client():
         return None
 
 
-def login_to_qbittorrent():
+def login_to_qbittorrent() -> qbittorrentapi.Client | None:
     """
     Attempts to log in to the qBittorrent client.
 
@@ -97,7 +98,7 @@ def login_to_qbittorrent():
         return None
 
 
-def get_completed_torrents(client):
+def get_completed_torrents(client: qbittorrentapi.Client) -> list[Any]:
     """
     Retrieves a list of completed torrents from the qBittorrent client.
     Includes torrents fully downloaded but still seeding/uploading.
@@ -115,11 +116,10 @@ def get_completed_torrents(client):
         # Fetch torrents by relevant status filters
         completed = client.torrents_info(status_filter="completed")
         seeding = client.torrents_info(status_filter="seeding")
-        uploading = client.torrents_info(status_filter="uploading")
 
         # Combine lists, ensuring uniqueness by hash and checking progress
-        potentially_complete = {}
-        for t in completed + seeding + uploading:
+        potentially_complete: dict[str, Any] = {}
+        for t in completed + seeding:
             if t.progress == 1.0:  # Check if fully downloaded
                 # Use hash as key to automatically handle duplicates from different filters
                 potentially_complete[t.hash] = t
@@ -140,7 +140,7 @@ def get_completed_torrents(client):
         return []
 
 
-def get_torrent_files(client, torrent_hash):
+def get_torrent_files(client: qbittorrentapi.Client, torrent_hash: str) -> list[Any]:
     """
     Retrieves the list of files for a specific torrent.
 
@@ -160,7 +160,7 @@ def get_torrent_files(client, torrent_hash):
     try:
         files = client.torrents_files(torrent_hash=torrent_hash)
         logging.debug(f"Retrieved {len(files)} files for torrent hash {torrent_hash}.")
-        return files
+        return list(files)
     except qbittorrentapi.exceptions.NotFound404Error:
         logging.error(f"Torrent with hash {torrent_hash} not found.")
         return []
@@ -175,7 +175,9 @@ def get_torrent_files(client, torrent_hash):
         return []
 
 
-def rename_torrent_file(client, torrent_hash, old_path, new_path):
+def rename_torrent_file(
+    client: qbittorrentapi.Client, torrent_hash: str, old_path: str, new_path: str
+) -> bool:
     """
     Renames a file within a torrent in qBittorrent.
 
@@ -229,9 +231,114 @@ def rename_torrent_file(client, torrent_hash, old_path, new_path):
         return False
 
 
+def configure_webhook_autorun(
+    client: qbittorrentapi.Client,
+    script_path: str = "/opt/subro_web/scripts/qbittorrent-nox-webhook.sh",
+    api_key: str | None = None,
+) -> bool:
+    """
+    Configure qBittorrent to run the webhook script on torrent completion.
+
+    Args:
+        client: An authenticated qBittorrent client instance.
+        script_path: Path to the webhook script on the host.
+        api_key: Optional API key to pass to the script via --api-key argument.
+
+    Returns:
+        bool: True if configuration was successful, False otherwise.
+    """
+    if not client or not client.is_logged_in:
+        logging.error("Cannot configure autorun: qBittorrent client not logged in.")
+        return False
+
+    try:
+        autorun_command = f'/usr/bin/bash {script_path} "%F"'
+        if api_key:
+            # Append API key securely quoted
+            autorun_command += f' --api-key="{api_key}"'
+
+        client.app.set_preferences(
+            {
+                "autorun_enabled": True,
+                "autorun_program": autorun_command,
+            }
+        )
+        # Log command with masked key for security
+        log_cmd = autorun_command
+        if api_key:
+            log_cmd = log_cmd.replace(api_key, "***")
+        logging.info(f"Configured qBittorrent autorun: {log_cmd}")
+        return True
+    except qbittorrentapi.exceptions.APIError as e:
+        logging.error(f"API Error configuring autorun: {e}")
+        return False
+    except Exception as e:
+        logging.error(f"Unexpected error configuring autorun: {e}", exc_info=True)
+        return False
+
+
+def get_autorun_config(client: qbittorrentapi.Client) -> dict | None:
+    """
+    Get the current autorun configuration from qBittorrent.
+
+    Returns:
+        dict with 'enabled' and 'program' keys, or None on error.
+    """
+    if not client or not client.is_logged_in:
+        logging.error("Cannot get autorun config: qBittorrent client not logged in.")
+        return None
+
+    try:
+        prefs = client.app.preferences
+        return {
+            "enabled": prefs.get("autorun_enabled", False),
+            "program": prefs.get("autorun_program", ""),
+        }
+    except Exception as e:
+        logging.error(f"Error getting autorun config: {e}", exc_info=True)
+        return None
+
+
+def disable_webhook_autorun(client: qbittorrentapi.Client) -> bool:
+    """
+    Disable qBittorrent autorun configuration.
+
+    Args:
+        client: An authenticated qBittorrent client instance.
+
+    Returns:
+        bool: True if disabled successfully, False otherwise.
+    """
+    if not client or not client.is_logged_in:
+        logging.error("Cannot disable autorun: qBittorrent client not logged in.")
+        return False
+
+    try:
+        client.app.set_preferences(
+            {
+                "autorun_enabled": False,
+                # Optionally clear the program, but disabling is sufficient and safer
+                # to avoid wiping unrelated configs if someone toggles it back manually?
+                # But requirement is "remove integration".
+                "autorun_program": "",
+            }
+        )
+        logging.info("Disabled qBittorrent autorun.")
+        return True
+    except qbittorrentapi.exceptions.APIError as e:
+        logging.error(f"API Error disabling autorun: {e}")
+        return False
+    except Exception as e:
+        logging.error(f"Unexpected error disabling autorun: {e}", exc_info=True)
+        return False
+
+
 # Explicit Exports
 __all__ = [
-    "get_client",  # Expose if direct client access is needed elsewhere
+    "configure_webhook_autorun",
+    "disable_webhook_autorun",
+    "get_autorun_config",
+    "get_client",
     "get_completed_torrents",
     "get_torrent_files",
     "login_to_qbittorrent",

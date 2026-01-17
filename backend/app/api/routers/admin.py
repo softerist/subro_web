@@ -1,6 +1,7 @@
 # backend/app/api/routers/admin.py
 import logging
 import uuid
+from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
@@ -19,7 +20,7 @@ from app.core.users import (
 from app.db.models.app_settings import AppSettings
 from app.db.models.user import User  # For ORM operations and type hinting
 from app.db.session import get_async_session
-from app.schemas.user import AdminUserUpdate, UserCreate, UserRead  # Pydantic schemas
+from app.schemas.user import AdminUserUpdate, UserCreate, UserRead, UserRole  # Pydantic schemas
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ async def list_users_admin(
         le=settings.DEFAULT_PAGINATION_LIMIT_MAX,
         description="Maximum number of records to return.",
     ),
-):
+) -> Sequence[User]:
     """Retrieves a list of all users with pagination, ordered by creation date."""
     # Assuming User.created_at exists and is a DateTime field
     # Ensure User.created_at exists or change the order_by clause
@@ -101,7 +102,7 @@ async def list_users_admin(
 )
 async def get_user_by_id_admin(
     target_user: User = Depends(get_target_user_or_404),
-):
+) -> User:
     """Retrieves details for a specific user by their ID."""
     logger.info(f"Admin retrieved details for user_id: {target_user.id}")
     return target_user
@@ -119,7 +120,7 @@ async def create_user_admin(
     user_manager: UserManager = Depends(get_user_manager),
     current_user: User = Depends(get_current_active_admin_user),
     session: AsyncSession = Depends(get_async_session),
-):
+) -> User:
     """
     Creates a new user.
     """
@@ -131,10 +132,10 @@ async def create_user_admin(
         )
 
     # Ensure consistency between role and is_superuser
-    if user_create.role == "admin":
+    if user_create.role == UserRole.ADMIN:
         user_create.is_superuser = True
     elif user_create.is_superuser:
-        user_create.role = "admin"
+        user_create.role = UserRole.ADMIN
 
     try:
         created_user = await user_manager.create(user_create, safe=False)
@@ -177,7 +178,7 @@ async def update_user_by_id_admin(  # noqa: C901
     current_user: User = Depends(get_current_active_admin_user),
     user_manager: UserManager = Depends(get_user_manager),
     session: AsyncSession = Depends(get_async_session),
-):
+) -> User:
     """
     Updates a user's details. Enforces hierarchy: Admin cannot update Superuser.
     """
@@ -321,7 +322,7 @@ async def delete_user_by_id_admin(
     target_user: User = Depends(get_target_user_or_404),
     current_user: User = Depends(get_current_active_admin_user),
     session: AsyncSession = Depends(get_async_session),
-):
+) -> None:
     """
     Permanently deletes a user account.
     WARNING: This is a destructive operation.
@@ -385,16 +386,23 @@ async def delete_user_by_id_admin(
 )
 async def get_open_signup_setting(
     session: AsyncSession = Depends(get_async_session),
-):
+) -> OpenSignupResponse:
     """Get the current open signup setting."""
-    result = await session.execute(select(AppSettings).where(AppSettings.id == 1))
-    app_settings = result.scalar_one_or_none()
+    try:
+        result = await session.execute(select(AppSettings).where(AppSettings.id == 1))
+        app_settings = result.scalar_one_or_none()
 
-    if not app_settings:
-        # Return default if settings don't exist yet
-        return OpenSignupResponse(open_signup=False)
+        if not app_settings:
+            # Return default if settings don't exist yet
+            return OpenSignupResponse(open_signup=False)
 
-    return OpenSignupResponse(open_signup=app_settings.open_signup)
+        return OpenSignupResponse(open_signup=app_settings.open_signup)
+    except Exception as e:
+        logger.error(f"Error retrieving open signup setting: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve setting: {e!s}",
+        ) from e
 
 
 @admin_router.patch(
@@ -408,7 +416,7 @@ async def update_open_signup_setting(
     update_data: OpenSignupUpdate,
     current_user: User = Depends(current_active_superuser),
     session: AsyncSession = Depends(get_async_session),
-):
+) -> OpenSignupResponse:
     """Update the open signup setting. Only superusers can change this."""
     result = await session.execute(select(AppSettings).where(AppSettings.id == 1))
     app_settings = result.scalar_one_or_none()

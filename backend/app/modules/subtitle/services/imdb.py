@@ -4,6 +4,7 @@ import pkgutil
 import re
 from collections import OrderedDict, defaultdict
 from pathlib import Path
+from typing import Any, cast
 
 
 def _patch_pkgutil_find_loader() -> None:
@@ -11,7 +12,7 @@ def _patch_pkgutil_find_loader() -> None:
     if not hasattr(pkgutil, "find_loader"):
         return
 
-    def _find_loader(name: str):
+    def _find_loader(name: str) -> importlib.machinery.ModuleSpec | None:
         return importlib.util.find_spec(name)
 
     pkgutil.find_loader = _find_loader  # type: ignore[assignment]
@@ -49,7 +50,7 @@ network_session = create_session_with_retries(
 
 
 # --- Helper Function ---
-def _fuzzy_match(title, candidate, threshold=FUZZY_MATCH_THRESHOLD):
+def _fuzzy_match(title: str, candidate: str, threshold: int = FUZZY_MATCH_THRESHOLD) -> bool:
     """Internal helper for fuzzy string matching."""
     if not title or not candidate:
         return False
@@ -59,7 +60,7 @@ def _fuzzy_match(title, candidate, threshold=FUZZY_MATCH_THRESHOLD):
 
 
 # Helper for dynamic key retrieval
-def _get_dynamic_api_key(db_field, env_var_name=None):
+def _get_dynamic_api_key(db_field: str, env_var_name: str | None = None) -> str | None:
     """
     Fetches API key synchronously from DB, falling back to Environment/Settings.
     """
@@ -91,7 +92,7 @@ def _get_dynamic_api_key(db_field, env_var_name=None):
 
 
 # --- OMDb Functions ---
-def _search_omdb_api(params):
+def _search_omdb_api(params: dict[str, Any]) -> dict[str, Any] | None:
     """Internal helper to query the OMDb API."""
     api_key = _get_dynamic_api_key("omdb_api_key", "OMDB_API_KEY")
 
@@ -118,7 +119,7 @@ def _search_omdb_api(params):
 
             data = response.json()
             if data.get("Response") == "True":
-                return data
+                return cast(dict[str, Any], data)
             else:
                 error_msg = data.get("Error", "Unknown error")
                 if "not found" in error_msg.lower():
@@ -137,11 +138,13 @@ def _search_omdb_api(params):
     return None
 
 
-def search_omdb_by_title(title, year=None, content_type=None):
+def search_omdb_by_title(
+    title: str, year: str | int | None = None, content_type: str | None = None
+) -> dict[str, Any] | None:
     """Searches OMDb by title (uses 't=' parameter for specific match)."""
     params = {"t": title}
     if year:
-        params["y"] = year
+        params["y"] = str(year)
     if content_type:
         type_map = {"movie": "movie", "series": "series", "tvshow": "series", "episode": "episode"}
         omdb_type = type_map.get(str(content_type).lower())
@@ -151,11 +154,13 @@ def search_omdb_by_title(title, year=None, content_type=None):
     return _search_omdb_api(params)
 
 
-def search_omdb_by_query(query, year=None, content_type=None):
+def search_omdb_by_query(
+    query: str, year: str | int | None = None, content_type: str | None = None
+) -> dict[str, Any] | None:
     """Searches OMDb by query (uses 's=' parameter for broader search)."""
     params = {"s": query}
     if year:
-        params["y"] = year
+        params["y"] = str(year)
     if content_type:
         type_map = {"movie": "movie", "series": "series", "tvshow": "series", "episode": "episode"}
         omdb_type = type_map.get(str(content_type).lower())
@@ -166,7 +171,7 @@ def search_omdb_by_query(query, year=None, content_type=None):
 
 
 # --- TMDb Functions ---
-def _search_tmdb_api(endpoint, query_params):
+def _search_tmdb_api(endpoint: str, query_params: dict[str, Any]) -> dict[str, Any] | None:
     """Internal helper to query the TMDb API."""
     api_key = _get_dynamic_api_key("tmdb_api_key", "TMDB_API_KEY")
 
@@ -188,7 +193,7 @@ def _search_tmdb_api(endpoint, query_params):
                 logging.warning("TMDb API Error: Rate limited.")
                 return None
 
-            return response.json()
+            return cast(dict[str, Any] | None, response.json())
         except (ValueError, Exception) as e:
             logging.error(
                 f"Failed to process TMDb response for endpoint {endpoint}. Error: {e}. Status: {response.status_code}"
@@ -198,11 +203,11 @@ def _search_tmdb_api(endpoint, query_params):
     return None
 
 
-def search_tmdb_movie(title, year=None):
+def search_tmdb_movie(title: str, year: str | int | None = None) -> tuple[str | None, str | None]:
     """Searches TMDb for a movie and returns the best match's IMDb ID."""
     search_params = {"query": title}
     if year:
-        search_params["year"] = year
+        search_params["year"] = str(year)
 
     logging.debug(f"Searching TMDb movie with params: {search_params}")
     search_data = _search_tmdb_api("search/movie", search_params)
@@ -218,7 +223,7 @@ def search_tmdb_movie(title, year=None):
             year_matches = not year or not result_year_str or str(year) == result_year_str
 
             if score > highest_score and score >= FUZZY_MATCH_THRESHOLD and year_matches:
-                highest_score = score
+                highest_score = int(score)
                 best_match = result
 
         if best_match:
@@ -248,12 +253,12 @@ def search_tmdb_movie(title, year=None):
     return None, None
 
 
-def search_tmdb_tv(title, year=None):
+def search_tmdb_tv(title: str, year: str | int | None = None) -> tuple[str | None, str | None]:
     """Searches TMDb for a TV show and returns the best match's IMDb ID."""
     search_params = {"query": title}
     # Use 'first_air_date_year' for TV shows as per TMDb API docs
     if year:
-        search_params["first_air_date_year"] = year
+        search_params["first_air_date_year"] = str(year)
 
     logging.debug(f"Searching TMDb TV show with params: {search_params}")
     search_data = _search_tmdb_api("search/tv", search_params)
@@ -269,7 +274,7 @@ def search_tmdb_tv(title, year=None):
             year_matches = not year or not result_year_str or str(year) == result_year_str
 
             if score > highest_score and score >= FUZZY_MATCH_THRESHOLD and year_matches:
-                highest_score = score
+                highest_score = int(score)
                 best_match = result
 
         if best_match:
@@ -296,7 +301,7 @@ def search_tmdb_tv(title, year=None):
 
 
 # --- IMDbPY Functions ---
-def search_imdbpy(title, year=None):
+def search_imdbpy(title: str, year: str | int | None = None) -> tuple[str | None, str | None]:
     logging.getLogger("imdbpy").setLevel(logging.INFO)
     """Searches using the IMDbPY library."""
     if ia is None:
@@ -330,9 +335,8 @@ def search_imdbpy(title, year=None):
                 and score >= FUZZY_MATCH_THRESHOLD
             ):
                 # TYPE_MAP is now imported directly
-                if score > highest_score:
-                    highest_score = score
-                    best_match = result
+                highest_score = int(score)
+                best_match = result
 
         if best_match:
             imdb_id = f"tt{best_match.movieID}"
@@ -352,7 +356,9 @@ def search_imdbpy(title, year=None):
 
 
 # --- Helper for Generating Search Candidates ---
-def _generate_search_candidates(original_title, original_year):
+def _generate_search_candidates(
+    original_title: str | None, original_year: str | int | None
+) -> list[tuple[str, str | int | None]]:
     """
     Generates a list of (title, year) tuples to try for searching,
     prioritizing original, then cleaned versions.
@@ -402,7 +408,9 @@ def _generate_search_candidates(original_title, original_year):
 
 
 # --- Consolidated ID Retrieval (Modified) ---
-def get_imdb_id(title, year=None, content_type=None):  # noqa: C901
+def get_imdb_id(  # noqa: C901
+    title: str, year: str | int | None = None, content_type: str | None = None
+) -> tuple[str | None, str | None, list[str]]:
     """
     Attempts to find the most reliable IMDb ID using OMDb, TMDb, and IMDbPY.
     Tries variations of the title (removing year suffix) if initial searches fail.
@@ -422,11 +430,13 @@ def get_imdb_id(title, year=None, content_type=None):  # noqa: C901
     )
 
     errors = []
-    results_by_candidate = defaultdict(
+    results_by_candidate: dict[
+        tuple[str, str | int | None], dict[str, tuple[str | None, str | None]]
+    ] = defaultdict(
         dict
     )  # Store results keyed by candidate: {('Title', 'Year'): {'omdb_title': (id, type), ...}, ...}
-    source_log_by_candidate = defaultdict(
-        lambda: defaultdict(list)
+    source_log_by_candidate: dict[tuple[str, str | int | None], dict[str | None, list[str]]] = (
+        defaultdict(lambda: defaultdict(list))
     )  # {(title, year): {id: [sources]}}
 
     # --- Generate Candidate Search Pairs ---
@@ -449,7 +459,12 @@ def get_imdb_id(title, year=None, content_type=None):  # noqa: C901
         )
 
         # Helper to add result for the current candidate
-        def add_result(source, data_id, data_type, candidate_key=candidate_key):
+        def add_result(
+            source: str,
+            data_id: str | None,
+            data_type: str | None,
+            candidate_key: tuple[str, str | int | None] = candidate_key,
+        ) -> None:
             nonlocal results_by_candidate, source_log_by_candidate
             processed_sources_for_candidate[candidate_key].add(source)  # Mark source as run
             if data_id and data_id.startswith("tt"):
@@ -547,7 +562,7 @@ def get_imdb_id(title, year=None, content_type=None):  # noqa: C901
                         and type_compatible
                         and year_matches
                     ):
-                        highest_score = score
+                        highest_score = int(score)
                         best_omdb_query_match = result
                 if best_omdb_query_match:
                     add_result(
@@ -597,9 +612,10 @@ def get_imdb_id(title, year=None, content_type=None):  # noqa: C901
         unique_errors = list(OrderedDict.fromkeys(errors))
         return None, None, unique_errors
 
-    # Aggregate counts across all successful searches
-    id_counts = defaultdict(int)
-    type_per_id = defaultdict(lambda: defaultdict(int))  # {id: {type: count}}
+    id_counts: dict[str, int] = defaultdict(int)
+    type_per_id: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )  # {id: {type: count}}
     for r_id, r_type in all_results.values():
         if r_id:
             id_counts[r_id] += 1
@@ -627,7 +643,7 @@ def get_imdb_id(title, year=None, content_type=None):  # noqa: C901
             if len(possible_types) == 1:
                 final_type = next(iter(possible_types.keys()))
             elif possible_types:  # Multiple types reported, choose most frequent
-                final_type = max(possible_types, key=possible_types.get)
+                final_type = max(possible_types, key=lambda k: possible_types[k])
             else:  # No type reported for this ID? Fallback.
                 final_type = content_type if content_type in ["movie", "series"] else None
 
@@ -745,7 +761,7 @@ tv_show_pattern = re.compile(
 )
 
 
-def extract_tv_show_details(filename):  # noqa: C901
+def extract_tv_show_details(filename: str) -> tuple[str | None, str | None, str | None, str | None]:  # noqa: C901
     """
     Extracts TV show details using a comprehensive regex with named groups.
     Returns (show_title, season, episode, year) or (None, None, None, None).
@@ -833,7 +849,7 @@ def extract_tv_show_details(filename):  # noqa: C901
     return None, None, None, None
 
 
-def extract_movie_details(filename):
+def extract_movie_details(filename: str) -> tuple[str, str | None]:
     """Extracts movie title and year from filename."""
     base_name = Path(filename).stem
     # Keep the simpler movie pattern focused on year detection

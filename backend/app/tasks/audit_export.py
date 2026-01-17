@@ -10,8 +10,12 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
+from celery import Task
 from sqlalchemy import and_, select
+from sqlalchemy.sql import Select
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import settings
 from app.db import session as db_session  # Import module, not variable
@@ -27,8 +31,8 @@ def _make_export_filename(job_id: str) -> str:
     return f"audit_export_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{job_id[:8]}.json"
 
 
-def _build_export_conditions(filters: dict) -> list:
-    conditions = []
+def _build_export_conditions(filters: dict[str, str]) -> list[ColumnElement[bool]]:
+    conditions: list[ColumnElement[bool]] = []
 
     eq_filters = [
         ("category", AuditLog.category),
@@ -47,7 +51,7 @@ def _build_export_conditions(filters: dict) -> list:
     return conditions
 
 
-def _build_export_query(filters: dict):
+def _build_export_query(filters: dict[str, str]) -> Select[tuple[AuditLog]]:
     query = select(AuditLog).order_by(AuditLog.timestamp.desc())
     conditions = _build_export_conditions(filters)
     if conditions:
@@ -55,7 +59,7 @@ def _build_export_query(filters: dict):
     return query
 
 
-def _serialize_audit_row(row: AuditLog) -> dict:
+def _serialize_audit_row(row: AuditLog) -> dict[str, Any]:
     return {
         "event_id": str(row.event_id),
         "timestamp": row.timestamp.isoformat(),
@@ -74,7 +78,9 @@ def _serialize_audit_row(row: AuditLog) -> dict:
     }
 
 
-async def _run_audit_export_task(task, filters: dict, actor_user_id: str) -> dict:
+async def _run_audit_export_task(
+    task: Task, filters: dict[str, str], actor_user_id: str
+) -> dict[str, Any]:
     db_session.initialize_worker_db_resources()
     if db_session.WorkerSessionLocal is None:
         raise RuntimeError("WorkerSessionLocal not initialized")
@@ -114,7 +120,7 @@ async def _run_audit_export_task(task, filters: dict, actor_user_id: str) -> dic
 
 
 @celery_app.task(name="app.tasks.audit.run_audit_export", bind=True)
-def run_audit_export(self, filters: dict, actor_user_id: str):
+def run_audit_export(self: Task, filters: dict[str, str], actor_user_id: str) -> dict[str, Any]:
     """
     Celery task to export audit logs.
 

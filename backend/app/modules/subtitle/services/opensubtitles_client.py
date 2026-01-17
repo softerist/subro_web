@@ -17,7 +17,7 @@ class OpenSubtitlesClient:
     (e.g., via a DI container) to handle login/logout correctly for that run.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initializes the client with no token and resets the failure flag."""
         self._token: str | None = None
         self._auth_failed_this_session: bool = False
@@ -99,7 +99,7 @@ class OpenSubtitlesClient:
         logger.info("OpenSubtitlesClient: Attempting logout via underlying service...")
         # Call the service's logout function, which handles the API call
         # and clears the service's internal token state.
-        logout_success = opensubtitles_service.logout()
+        logout_success = bool(opensubtitles_service.logout())
 
         if logout_success:
             logger.info("OpenSubtitlesClient: Logout successful (via underlying service function).")
@@ -116,7 +116,7 @@ class OpenSubtitlesClient:
 
     # --- Wrapper methods for API calls ---
 
-    def search_subtitles(self, **kwargs) -> list[dict[str, Any]] | None:
+    def search_subtitles(self, **kwargs: Any) -> list[dict[str, Any]] | None:
         """
         Wraps the service's search function, ensuring authentication first.
 
@@ -172,7 +172,7 @@ class OpenSubtitlesClient:
             logger.debug(f"OpenSubtitlesClient: Calling get_download_info for file_id: {file_id}")
             info = opensubtitles_service.get_download_info(file_id)
             # Underlying function returns None on error
-            return info
+            return info if info is None or isinstance(info, dict) else None
         except Exception as e:
             logger.error(
                 f"OpenSubtitlesClient: Unexpected error during get_download_info call: {e}",
@@ -200,7 +200,9 @@ class OpenSubtitlesClient:
             )
             content = opensubtitles_service.download_subtitle_content(download_link)
             # Underlying function returns None on error or empty content
-            return content
+            if content is None or isinstance(content, bytes):
+                return content
+            return None
         except Exception as e:
             logger.error(
                 f"OpenSubtitlesClient: Unexpected error during download_subtitle_content call: {e}",

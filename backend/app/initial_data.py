@@ -117,7 +117,9 @@ async def create_default_paths(db: AsyncSession) -> None:
         return
 
     # Get the SQLAlchemyUserDatabase adapter
-    user_db_adapter = SQLAlchemyUserDatabase(db, UserModel)
+    user_db_adapter = SQLAlchemyUserDatabase(  # type: ignore
+        db, UserModel
+    )
     script_user_manager = UserManager(user_db_adapter)
 
     # Check if superuser credentials are provided in environment

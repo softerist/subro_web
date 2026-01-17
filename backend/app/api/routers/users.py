@@ -136,7 +136,8 @@ async def revoke_api_key(
     current_user.api_key = None
     db.add(current_user)
     await db.commit()
-    if result.rowcount == 0:
+    rowcount = getattr(result, "rowcount", 0) or 0
+    if rowcount == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No active API keys to revoke.",

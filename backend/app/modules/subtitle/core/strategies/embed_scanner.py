@@ -1,35 +1,15 @@
 import logging
 from pathlib import Path
 
-# Use relative imports assuming standard structure
-try:
-    from ...core import constants  # Go up two levels to src/, then down to core/
-    from ...utils import media_utils  # Go up two levels to src/, then down to utils/
-    from .base import ProcessingContext, ProcessingStrategy
+from ...core import constants  # Go up two levels to src/, then down to core/
+from ...utils import media_utils  # Go up two levels to src/, then down to utils/
+from .base import ProcessingContext, ProcessingStrategy
 
-    # Import specific sets from constants to avoid circular dependency via media_utils
-    TEXT_SUBTITLE_CODECS = constants.TEXT_SUBTITLE_CODECS
-    IMAGE_SUBTITLE_CODECS_EN = constants.IMAGE_SUBTITLE_CODECS_EN
+# Import specific sets from constants to avoid circular dependency via media_utils
+TEXT_SUBTITLE_CODECS = constants.TEXT_SUBTITLE_CODECS
+IMAGE_SUBTITLE_CODECS_EN = constants.IMAGE_SUBTITLE_CODECS_EN
 
-    logger = logging.getLogger(__name__)
-    logger.debug("EmbedScanner strategy: Successfully imported dependencies.")
-except (ImportError, ValueError) as e:
-    logger = logging.getLogger(__name__)
-    logger.critical(
-        f"EmbedScanner: Failed to import dependencies ({e}). Strategy will likely fail.",
-        exc_info=True,
-    )
-
-    # Define dummies if needed to prevent load-time errors, though functionality will be broken
-    class ProcessingStrategy:
-        pass
-
-    class ProcessingContext:
-        pass
-
-    media_utils = None  # Indicate missing dependency
-    TEXT_SUBTITLE_CODECS = set()
-    IMAGE_SUBTITLE_CODECS_EN = set()
+logger = logging.getLogger(__name__)
 
 
 class EmbedScanner(ProcessingStrategy):

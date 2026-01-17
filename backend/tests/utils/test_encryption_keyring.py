@@ -33,7 +33,7 @@ def _restore_keyring(original_keys: list[str]) -> None:
     security._get_fernet.cache_clear()
 
 
-def test_encrypt_uses_primary_key():
+def test_encrypt_uses_primary_key() -> None:
     original_keys = list(settings.DATA_ENCRYPTION_KEYS)
     try:
         _set_keyring(["primary-key", "secondary-key"])
@@ -50,7 +50,7 @@ def test_encrypt_uses_primary_key():
         _restore_keyring(original_keys)
 
 
-def test_decrypt_accepts_secondary_key():
+def test_decrypt_accepts_secondary_key() -> None:
     original_keys = list(settings.DATA_ENCRYPTION_KEYS)
     try:
         _set_keyring(["new-key", "old-key"])
@@ -61,7 +61,7 @@ def test_decrypt_accepts_secondary_key():
         _restore_keyring(original_keys)
 
 
-def test_reencrypt_uses_primary_key():
+def test_reencrypt_uses_primary_key() -> None:
     original_keys = list(settings.DATA_ENCRYPTION_KEYS)
     try:
         _set_keyring(["new-key", "old-key"])
@@ -78,7 +78,7 @@ def test_reencrypt_uses_primary_key():
         _restore_keyring(original_keys)
 
 
-def test_reencrypt_script_skips_without_rotation(capsys):
+def test_reencrypt_script_skips_without_rotation(capsys) -> None:
     original_keys = list(settings.DATA_ENCRYPTION_KEYS)
     original_argv = list(sys.argv)
     try:

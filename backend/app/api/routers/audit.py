@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.users import get_current_active_admin_user
 from app.db.models.audit_log import AuditLog
@@ -45,7 +46,7 @@ def _audit_uuid_filter(value: str, field_name: str) -> uuid.UUID:
         raise HTTPException(status_code=400, detail=f"Invalid {field_name} format") from err
 
 
-def _audit_cursor_condition(cursor: str):
+def _audit_cursor_condition(cursor: str) -> ColumnElement[bool]:
     try:
         ts_part, id_part = cursor.split("_")
         cursor_ts = datetime.fromisoformat(ts_part)
@@ -73,8 +74,8 @@ def _build_audit_conditions(
     success: bool | None,
     start_date: date | None,
     end_date: date | None,
-) -> list[Any]:
-    conditions: list[Any] = []
+) -> list[ColumnElement[bool]]:
+    conditions: list[ColumnElement[bool]] = []
 
     eq_filters = [
         (category, AuditLog.category),
@@ -222,7 +223,7 @@ async def list_audit_logs(
     start_date: date | None = Query(None, description="Filter from date"),
     end_date: date | None = Query(None, description="Filter to date"),
     include_count: bool = Query(False, description="Include total count (slow)"),
-):
+) -> AuditLogListResponse:
     """List audit logs with cursor-based pagination and filters."""
     # Log the audit access
     await audit_service.log_event(
@@ -284,7 +285,7 @@ async def list_audit_logs(
 @audit_router.get("/stats", response_model=AuditStatsResponse)
 async def get_audit_stats(
     db: Annotated[AsyncSession, Depends(get_async_session)],
-):
+) -> AuditStatsResponse:
     """Get aggregate audit statistics."""
     now = datetime.now(UTC)
     last_24h = now - timedelta(hours=24)
@@ -299,11 +300,11 @@ async def get_audit_stats(
     # Grouped stats
     cat_stmt = select(AuditLog.category, func.count(AuditLog.id)).group_by(AuditLog.category)
     cat_res = await db.execute(cat_stmt)
-    by_category = dict(cat_res.all())
+    by_category: dict[str, int] = {row[0]: row[1] for row in cat_res.all()}
 
     sev_stmt = select(AuditLog.severity, func.count(AuditLog.id)).group_by(AuditLog.severity)
     sev_res = await db.execute(sev_stmt)
-    by_severity = dict(sev_res.all())
+    by_severity: dict[str, int] = {row[0]: row[1] for row in sev_res.all()}
 
     # Specific security stats
     failed_logins_stmt = select(func.count(AuditLog.id)).where(
@@ -335,7 +336,7 @@ async def export_audit_logs(
     filters: AuditExportRequest,
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(get_current_active_admin_user)],
-):
+) -> AuditExportResponse:
     """Start an asynchronous audit log export."""
     # Audit Log: Export Initiation
     await audit_service.log_event(
@@ -351,7 +352,7 @@ async def export_audit_logs(
 
 
 @audit_router.get("/export/status/{job_id}", response_model=AuditExportStatus)
-async def get_export_status(job_id: str):
+async def get_export_status(job_id: str) -> AuditExportStatus:
     """Get the status of an export job."""
     res = celery_app.AsyncResult(job_id)
     if res.state == "PENDING":
@@ -366,7 +367,7 @@ async def get_export_status(job_id: str):
 
 
 @audit_router.get("/export/download/{filename}")
-async def download_audit_export(filename: str):
+async def download_audit_export(filename: str) -> FileResponse:
     """Download a completed audit log export file."""
     # Basic path traversal protection
     if ".." in filename or filename.startswith("/"):
@@ -382,7 +383,7 @@ async def download_audit_export(filename: str):
 @audit_router.post("/verify", response_model=AuditVerifyResponse)
 async def verify_audit_integrity(
     db: Annotated[AsyncSession, Depends(get_async_session)],
-):
+) -> AuditVerifyResponse:
     """Verify the cryptographic integrity of the audit log hash chain."""
     logger.info("Admin initiated audit log integrity verification.")
 
@@ -415,7 +416,7 @@ async def verify_audit_integrity(
 async def get_audit_log(
     event_id: str,
     db: Annotated[AsyncSession, Depends(get_async_session)],
-):
+) -> AuditLogRead:
     """Get a single audit log entry by event_id."""
     try:
         event_uuid = uuid.UUID(event_id)

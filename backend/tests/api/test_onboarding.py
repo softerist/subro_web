@@ -12,7 +12,7 @@ API_PREFIX = settings.API_V1_STR
 
 
 @pytest.mark.asyncio
-async def test_setup_status_returns_all_fields(test_client: AsyncClient):
+async def test_setup_status_returns_all_fields(test_client: AsyncClient) -> None:
     """Verify setup_required and setup_forced are returned along with setup_completed."""
     response = await test_client.get(f"{API_PREFIX}/onboarding/status")
     assert response.status_code == status.HTTP_200_OK
@@ -26,7 +26,7 @@ async def test_setup_status_returns_all_fields(test_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_complete_setup_success(test_client: AsyncClient, db_session: AsyncSession):
+async def test_complete_setup_success(test_client: AsyncClient, db_session: AsyncSession) -> None:
     """Standard setup completion creates admin and marks complete."""
     setup_payload = {
         "admin_email": "initial_admin@example.com",
@@ -49,7 +49,7 @@ async def test_complete_setup_success(test_client: AsyncClient, db_session: Asyn
 @pytest.mark.asyncio
 async def test_setup_endpoints_forbidden_once_completed(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Verify setup endpoints return 404 once setup is completed."""
     await crud_app_settings.mark_setup_completed(db_session)
     await db_session.commit()
@@ -61,7 +61,9 @@ async def test_setup_endpoints_forbidden_once_completed(
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("db_session")
-async def test_skip_without_credentials_fails_when_signup_disabled(test_client: AsyncClient):
+async def test_skip_without_credentials_fails_when_signup_disabled(
+    test_client: AsyncClient,
+) -> None:
     """Verify 400 returned when skipping without credentials and OPEN_SIGNUP is disabled."""
     with patch.object(settings, "OPEN_SIGNUP", False):
         with patch.object(settings, "FIRST_SUPERUSER_EMAIL", None):
@@ -73,7 +75,7 @@ async def test_skip_without_credentials_fails_when_signup_disabled(test_client: 
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("db_session")
-async def test_skip_partial_credentials_fails(test_client: AsyncClient):
+async def test_skip_partial_credentials_fails(test_client: AsyncClient) -> None:
     """Verify 400 returned when only email or password provided (not both)."""
     # Only email, no password
     response = await test_client.post(
@@ -93,7 +95,7 @@ async def test_skip_partial_credentials_fails(test_client: AsyncClient):
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("db_session")
-async def test_skip_with_env_fallback_succeeds(test_client: AsyncClient):
+async def test_skip_with_env_fallback_succeeds(test_client: AsyncClient) -> None:
     """Verify skip works when env vars are set but no credentials provided."""
     with patch.object(settings, "FIRST_SUPERUSER_EMAIL", "env_admin@example.com"):
         with patch.object(settings, "FIRST_SUPERUSER_PASSWORD", "EnvPassword123"):
@@ -107,7 +109,7 @@ async def test_skip_with_env_fallback_succeeds(test_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_complete_with_existing_admin_updates_password_on_first_setup(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Verify password is updated for existing admin during first-time setup."""
     from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
@@ -151,7 +153,7 @@ async def test_complete_with_existing_admin_updates_password_on_first_setup(
 @pytest.mark.asyncio
 async def test_force_initial_setup_shows_wizard_after_completion(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Verify FORCE_INITIAL_SETUP=true makes setup_required=true even after completion."""
     # First, mark setup as completed
     await crud_app_settings.mark_setup_completed(db_session)
@@ -177,7 +179,7 @@ async def test_force_initial_setup_shows_wizard_after_completion(
 @pytest.mark.asyncio
 async def test_forced_setup_allows_complete_after_already_completed(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Verify /complete works when FORCE_INITIAL_SETUP=true even if already completed."""
     # Mark setup as completed
     await crud_app_settings.mark_setup_completed(db_session)
@@ -200,7 +202,7 @@ async def test_forced_setup_allows_complete_after_already_completed(
 @pytest.mark.asyncio
 async def test_skip_endpoint_blocked_after_completion(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Verify /skip returns 404 after setup is completed."""
     await crud_app_settings.mark_setup_completed(db_session)
     await db_session.commit()
@@ -210,7 +212,7 @@ async def test_skip_endpoint_blocked_after_completion(
 
 
 @pytest.mark.asyncio
-async def test_get_setup_state_helper(db_session: AsyncSession):
+async def test_get_setup_state_helper(db_session: AsyncSession) -> None:
     """Unit test for get_setup_state() helper function."""
     # Fresh DB: setup_completed=False, setup_required=True
     state = await crud_app_settings.get_setup_state(db_session)
@@ -238,7 +240,7 @@ async def test_get_setup_state_helper(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_forced_setup_with_existing_admin_preserves_password(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Verify forced setup with existing admin does NOT update password."""
     from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 

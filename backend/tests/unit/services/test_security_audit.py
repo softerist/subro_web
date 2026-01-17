@@ -8,7 +8,7 @@ from app.services import account_lockout, api_validation, mfa_service
 
 
 @pytest.mark.asyncio
-async def test_mfa_setup_audit():
+async def test_mfa_setup_audit() -> None:
     db = AsyncMock()
     db.add = MagicMock()
     db.commit = AsyncMock()
@@ -24,7 +24,7 @@ async def test_mfa_setup_audit():
 
 
 @pytest.mark.asyncio
-async def test_api_key_validation_audit():
+async def test_api_key_validation_audit() -> None:
     db = AsyncMock()
     db.add = MagicMock()
     db.commit = AsyncMock()
@@ -91,7 +91,7 @@ async def test_api_key_validation_audit():
 
 
 @pytest.mark.asyncio
-async def test_account_lockout_delay_audit():
+async def test_account_lockout_delay_audit() -> None:
     db = AsyncMock()
     db.add = MagicMock()
     db.commit = AsyncMock()

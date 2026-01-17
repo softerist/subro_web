@@ -3,6 +3,7 @@ from pathlib import Path
 
 import nest_asyncio
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import worker_process_init, worker_process_shutdown
 
 from app.core.config import settings
@@ -19,7 +20,12 @@ celery_app = Celery(
     "worker",
     broker=str(settings.CELERY_BROKER_URL),
     backend=str(settings.CELERY_RESULT_BACKEND),
-    include=["app.tasks.subtitle_jobs", "app.tasks.audit_export", "app.tasks.audit_worker"],
+    include=[
+        "app.tasks.subtitle_jobs",
+        "app.tasks.audit_export",
+        "app.tasks.audit_worker",
+        "app.tasks.maintenance",
+    ],
 )
 
 # Robust configuration using pydantic settings object directly.
@@ -36,6 +42,10 @@ celery_app.conf.beat_schedule = {
         "schedule": 15.0,
         "args": (100,),
     },
+    "audit_partition_maintenance": {
+        "task": "app.tasks.maintenance.manage_audit_partitions",
+        "schedule": crontab(hour=3, minute=0),
+    },
 }
 
 # Use the configured beat schedule path and ensure the directory exists.
@@ -48,7 +58,7 @@ celery_app.conf.beat_schedule_filename = str(beat_schedule_path)
 
 
 @worker_process_init.connect(weak=False)
-def init_worker_process_signal(**_kwargs):
+def init_worker_process_signal(**_kwargs: object) -> None:
     """Signal handler for when a Celery worker process starts."""
     # Ensure all models are imported and registered
 
@@ -60,7 +70,7 @@ def init_worker_process_signal(**_kwargs):
 
 
 @worker_process_shutdown.connect(weak=False)
-def shutdown_worker_process_signal(**_kwargs):
+def shutdown_worker_process_signal(**_kwargs: object) -> None:
     """Signal handler for when a Celery worker process shuts down."""
     logger.info("CELERY_WORKER_PROCESS_SHUTDOWN: Signal received. Disposing DB resources.")
     dispose_worker_db_resources_sync()  # Call the synchronous wrapper

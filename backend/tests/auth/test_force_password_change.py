@@ -15,7 +15,7 @@ API_PREFIX = settings.API_V1_STR
 @pytest.mark.asyncio
 async def test_force_password_change_flag_returned_on_login(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test that force_password_change is returned in /users/me response."""
     user_email = "force_pw_user@example.com"
     user_password = "Password123"
@@ -43,7 +43,7 @@ async def test_force_password_change_flag_returned_on_login(
 @pytest.mark.asyncio
 async def test_password_change_clears_force_flag(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test that changing password clears the force_password_change flag."""
     user_email = "clear_force_pw@example.com"
     user_password = "OldPassword123"

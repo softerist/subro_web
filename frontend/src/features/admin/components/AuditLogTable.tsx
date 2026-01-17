@@ -42,6 +42,14 @@ export function AuditLogTable({
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const hasNextPage = Boolean(nextCursor);
 
+  const formatTimestamp = (value: string) => {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return "Invalid date";
+    }
+    return format(parsed, "MMM dd, HH:mm:ss");
+  };
+
   const getSeverityBadge = (severity: string) => {
     switch (severity.toLowerCase()) {
       case "critical":
@@ -72,7 +80,7 @@ export function AuditLogTable({
     }
   };
 
-  if (isLoading) {
+  if (isLoading && logs.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -119,7 +127,7 @@ export function AuditLogTable({
                   logs.map((log) => (
                     <TableRow key={log.id} className="group">
                       <TableCell className="py-2 text-xs text-muted-foreground">
-                        {format(new Date(log.timestamp), "MMM dd, HH:mm:ss")}
+                        {formatTimestamp(log.timestamp)}
                       </TableCell>
                       <TableCell className="py-2">
                         {getSeverityBadge(log.severity)}
@@ -188,10 +196,7 @@ export function AuditLogTable({
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 space-y-1">
                           <p className="text-xs text-muted-foreground">
-                            {format(
-                              new Date(log.timestamp),
-                              "MMM dd, HH:mm:ss",
-                            )}
+                            {formatTimestamp(log.timestamp)}
                           </p>
                           <p className="text-sm font-mono break-all">
                             {log.action}

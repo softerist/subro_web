@@ -8,7 +8,6 @@ proper TOML handling, atomic writes, and updates the database.
 
 import argparse
 import logging
-import platform
 import re
 import shutil
 import sys
@@ -20,8 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # Platform-specific imports for file locking
-IS_WINDOWS = platform.system() == "Windows"
-if IS_WINDOWS:
+if sys.platform == "win32":
     import msvcrt
 else:
     import fcntl
@@ -59,7 +57,7 @@ def file_lock(file_path: Path, timeout: int = 30):
         while True:
             try:
                 lock_file = lock_path.open("x")
-                if IS_WINDOWS:
+                if sys.platform == "win32":
                     msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
                 else:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -73,7 +71,7 @@ def file_lock(file_path: Path, timeout: int = 30):
     finally:
         if lock_file:
             try:
-                if IS_WINDOWS:
+                if sys.platform == "win32":
                     msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
                 else:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
@@ -89,15 +87,18 @@ def file_lock(file_path: Path, timeout: int = 30):
 
 @dataclass
 class Version:
-    """Represents a semantic version number."""
+    """Represents a semantic version number with an optional environment suffix."""
 
     major: int
     minor: int
     patch: int
     suffix: str | None = None
 
+    def base(self) -> str:
+        return f"{self.major}.{self.minor}.{self.patch}"
+
     def __str__(self) -> str:
-        base = f"{self.major}.{self.minor}.{self.patch}"
+        base = self.base()
         return f"{base}-{self.suffix}" if self.suffix else base
 
     def __eq__(self, other) -> bool:
@@ -112,9 +113,12 @@ class Version:
 
     @classmethod
     def from_string(cls, version_str: str) -> "Version":
-        # Handle suffix matching (e.g., 0.1.0-PROD)
-        # Regex captures: (major).(minor).(patch)(optional -suffix)
-        match = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:-([a-zA-Z0-9]+))?", version_str)
+        # Handle suffix matching (e.g., 0.1.0-PROD or 0.1.0+prod)
+        # Regex captures: (major).(minor).(patch)(optional -/+suffix)
+        match = re.match(
+            r"^(\d+)\.(\d+)\.(\d+)(?:[-+]([a-zA-Z0-9]+(?:[._-][a-zA-Z0-9]+)*))?$",
+            version_str,
+        )
         if not match:
             raise ValueError(f"Invalid version format: {version_str}")
 
@@ -243,12 +247,14 @@ class VersionBumper:
             with self.pyproject_path.open("r", encoding="utf-8") as f:
                 doc = tomlkit.load(f)
 
+            # Keep pyproject version PEP 440 compatible by storing the base only.
+            pyproject_version = new_version.base()
             updated = False
             if "tool" in doc and "poetry" in doc["tool"] and "version" in doc["tool"]["poetry"]:
-                doc["tool"]["poetry"]["version"] = str(new_version)
+                doc["tool"]["poetry"]["version"] = pyproject_version
                 updated = True
             if "project" in doc and "version" in doc["project"]:
-                doc["project"]["version"] = str(new_version)
+                doc["project"]["version"] = pyproject_version
                 updated = True
 
             if not updated:
@@ -256,7 +262,7 @@ class VersionBumper:
                 return False
 
             if self.dry_run:
-                logger.info(f"[DRY-RUN] Update pyproject.toml to {new_version}")
+                logger.info(f"[DRY-RUN] Update pyproject.toml to {pyproject_version}")
                 return True
 
             new_content = tomlkit.dumps(doc)
@@ -264,7 +270,7 @@ class VersionBumper:
             self.updaters.append(updater)
             with updater:
                 if updater.update(new_content):
-                    logger.info(f"✓ Updated pyproject.toml to {new_version}")
+                    logger.info(f"✓ Updated pyproject.toml to {pyproject_version}")
                     return True
         except Exception as e:
             logger.error(f"Failed to update pyproject.toml: {e}")
@@ -304,6 +310,36 @@ class VersionBumper:
             return False
         return False
 
+    def update_package_json(self, new_version: Version) -> bool:
+        """Update version in frontend/package.json."""
+        package_json_path = self.backend_dir.parent / "frontend" / "package.json"
+        if not package_json_path.exists():
+            logger.info("frontend/package.json not found, skipping")
+            return True
+
+        try:
+            content = package_json_path.read_text()
+            # Match "version": "x.y.z" or "version": "x.y.z-suffix"
+            pattern = r'"version":\s*"[^"]+"'
+            # Use base version without suffix for npm compatibility
+            base_version = new_version.base()
+            new_content = re.sub(pattern, f'"version": "{base_version}"', content, count=1)
+
+            if self.dry_run:
+                logger.info(f"[DRY-RUN] Update package.json to {base_version}")
+                return True
+
+            updater = FileUpdater(package_json_path, self.dry_run)
+            self.updaters.append(updater)
+            with updater:
+                if updater.update(new_content):
+                    logger.info(f"✓ Updated package.json to {base_version}")
+                    return True
+        except Exception as e:
+            logger.error(f"Failed to update package.json: {e}")
+            return False
+        return False
+
     def bump_version(self) -> bool:
         try:
             with file_lock(self.pyproject_path):
@@ -318,6 +354,9 @@ class VersionBumper:
                 logger.info(f"New version:     {new_version}")
 
                 if self.update_pyproject(new_version) and self.update_config(new_version):
+                    # Also update frontend version
+                    if not self.update_package_json(new_version):
+                        logger.warning("Failed to update package.json, continuing...")
                     # Note: Database version sync happens during deployment via sync_db_version.py
                     # We don't update the DB here to keep CI concerns separate
                     if not self.dry_run:

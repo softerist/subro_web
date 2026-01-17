@@ -21,7 +21,7 @@ async def login_user(client: AsyncClient, email: str, password: str) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_get_settings_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_get_settings_admin(test_client: AsyncClient, db_session: AsyncSession) -> None:
     admin = UserFactory.create_user(
         session=db_session, email="admin_settings@example.com", is_superuser=True
     )
@@ -34,10 +34,12 @@ async def test_get_settings_admin(test_client: AsyncClient, db_session: AsyncSes
     # Check for some expected keys in SettingsRead
     assert "tmdb_api_key" in data
     assert "deepl_api_keys" in data
+    assert "allowed_media_folders" in data
+    assert "webhook_secret" not in data
 
 
 @pytest.mark.asyncio
-async def test_update_settings_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_update_settings_admin(test_client: AsyncClient, db_session: AsyncSession) -> None:
     admin = UserFactory.create_user(
         session=db_session, email="admin_set_update@example.com", is_superuser=True
     )
@@ -56,7 +58,26 @@ async def test_update_settings_admin(test_client: AsyncClient, db_session: Async
 
 
 @pytest.mark.asyncio
-async def test_get_raw_setting_admin(test_client: AsyncClient, db_session: AsyncSession):
+async def test_update_qbittorrent_host_admin(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = UserFactory.create_user(
+        session=db_session, email="admin_qb_update@example.com", is_superuser=True
+    )
+    await db_session.flush()
+    headers = await login_user(test_client, admin.email, "password123")
+
+    with patch("app.api.routers.settings.validate_all_settings"):
+        update_data = {"qbittorrent_host": "192.168.1.100"}
+        response = await test_client.put(
+            f"{API_PREFIX}/settings", json=update_data, headers=headers
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["qbittorrent_host"] == "192.168.1.100"
+
+
+@pytest.mark.asyncio
+async def test_get_raw_setting_admin(test_client: AsyncClient, db_session: AsyncSession) -> None:
     admin = UserFactory.create_user(
         session=db_session, email="admin_raw@example.com", is_superuser=True
     )
@@ -72,7 +93,7 @@ async def test_get_raw_setting_admin(test_client: AsyncClient, db_session: Async
 @pytest.mark.asyncio
 async def test_settings_forbidden_for_standard_user(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     user = UserFactory.create_user(session=db_session, email="standard_settings@example.com")
     await db_session.flush()
     headers = await login_user(test_client, user.email, "password123")

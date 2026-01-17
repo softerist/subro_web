@@ -11,14 +11,14 @@ from app.services.audit_service import (
 )
 
 
-def test_sanitize_details_allowed_keys():
+def test_sanitize_details_allowed_keys() -> None:
     details = {"changed_fields": ["status"], "secret_token": "hidden"}
     sanitized = sanitize_details(details)
     assert "changed_fields" in sanitized
     assert "secret_token" not in sanitized
 
 
-def test_sanitize_details_size_cap():
+def test_sanitize_details_size_cap() -> None:
     # Large value that exceeds MAX_DETAILS_SIZE (32KB)
     large_details = {"reason": "a" * 100000}
     sanitized = sanitize_details(large_details)
@@ -27,7 +27,7 @@ def test_sanitize_details_size_cap():
     assert "reason" not in sanitized
 
 
-def test_compute_event_hash_consistency():
+def test_compute_event_hash_consistency() -> None:
     params = {
         "event_id": "uuid-123",
         "timestamp": "2024-01-01T00:00:00Z",
@@ -46,7 +46,7 @@ def test_compute_event_hash_consistency():
     assert hash1 == hash2
 
 
-def test_get_severity_mapping():
+def test_get_severity_mapping() -> None:
     assert get_severity("auth.login", True) == "info"
     assert get_severity("auth.login", False) == "warning"
     assert get_severity("auth.mfa.disable", True) == "critical"
@@ -54,7 +54,7 @@ def test_get_severity_mapping():
 
 
 @pytest.mark.asyncio
-async def test_anonymize_audit_actor_updates_ip_and_details():
+async def test_anonymize_audit_actor_updates_ip_and_details() -> None:
     db = AsyncMock()
     actor_result = MagicMock()
     actor_result.rowcount = 2

@@ -23,7 +23,7 @@ def mock_settings():
     pass
 
 
-def test_subtitle_module_import():
+def test_subtitle_module_import() -> None:
     """Simple smoke test to ensure module can be imported and config is accessible."""
     assert settings.APP_NAME is not None
     # Check if a subtitle specific setting exists (assuming we added one)
@@ -32,7 +32,7 @@ def test_subtitle_module_import():
     assert getattr(settings, "OMDB_API_KEY", "NotFound") != "NotFound"
 
 
-def test_service_container_init():
+def test_service_container_init() -> None:
     """Test that DI container initializes services (mocking deps if needed)."""
     # We might need to mock some environment variables or files if they are checked on init
     try:

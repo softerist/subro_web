@@ -7,7 +7,7 @@ from app.services.audit_service import AuditRateLimiter, anonymize_audit_actor, 
 
 
 @pytest.mark.asyncio
-async def test_audit_rate_limiter_acquire():
+async def test_audit_rate_limiter_acquire() -> None:
     # Test strict limit
     limiter = AuditRateLimiter(max_concurrent=2)
     assert await limiter.acquire() is True
@@ -19,7 +19,7 @@ async def test_audit_rate_limiter_acquire():
 
 
 @pytest.mark.asyncio
-async def test_audit_rate_limiter_release_error_safe():
+async def test_audit_rate_limiter_release_error_safe() -> None:
     limiter = AuditRateLimiter(max_concurrent=1)
     # Releasing without acquiring shouldn't crash (ValueError ignored)
     try:
@@ -28,7 +28,7 @@ async def test_audit_rate_limiter_release_error_safe():
         pytest.fail(f"release() raised exception: {e}")
 
 
-def test_sanitize_details_allowlist():
+def test_sanitize_details_allowlist() -> None:
     details = {"status": "active", "unexpected_key": "some_value", "reason": "user_action"}
     # status and reason are now allowed. unexpected_key is not.
     sanitized = sanitize_details(details)
@@ -38,7 +38,7 @@ def test_sanitize_details_allowlist():
     assert "unexpected_key" not in sanitized
 
 
-def test_sanitize_details_pii_masking():
+def test_sanitize_details_pii_masking() -> None:
     details = {
         "status": "active",
         "access_token": "secret_token_value",  # Not allowed, will be dropped
@@ -59,7 +59,7 @@ def test_sanitize_details_pii_masking():
     assert sanitized2["key_id"] == "12345"
 
 
-def test_sanitize_details_truncation():
+def test_sanitize_details_truncation() -> None:
     # Create huge details
     # We need a key that is allowed
     huge_val = "x" * (33 * 1024)  # > 32KB
@@ -77,7 +77,7 @@ def test_sanitize_details_truncation():
 
 
 @pytest.mark.asyncio
-async def test_anonymize_audit_actor():
+async def test_anonymize_audit_actor() -> None:
     mock_db = AsyncMock()
     user_id = uuid.uuid4()
 

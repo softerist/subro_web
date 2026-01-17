@@ -27,7 +27,7 @@ from app.core.users import (
 )
 from app.db.models.user import User as UserModel  # Your DB model, aliased
 from app.db.session import get_async_session
-from app.schemas.auth import Token
+from app.schemas.auth import SessionStatus, Token
 from app.schemas.user import UserCreate, UserRead  # UserCreate for register router
 from app.services import audit_service
 
@@ -73,103 +73,98 @@ async def _decode_manual_refresh_token(token: str, user_manager: UserManager) ->
         return None
 
 
-auth_router = APIRouter(
-    tags=["Auth - Authentication & Authorization"],
-)
-
-
-# --- Custom Login Endpoint ---
-@auth_router.post("/login", summary="Login for access and refresh tokens")
-@limiter.limit("5/minute")
-async def custom_login(
-    request: Request,
-    response: Response,
-    credentials: OAuth2PasswordRequestForm = Depends(),
-    user_manager: UserManager = Depends(get_user_manager),
-    access_token_strategy: JWTStrategy = Depends(get_access_token_jwt_strategy),
-    db: AsyncSession = Depends(get_async_session),
-):
+async def _apply_login_delay(db: AsyncSession, email: str) -> None:
     import asyncio
 
-    from app.services.account_lockout import (
-        clear_failed_attempts,
-        get_progressive_delay,
-        record_login_attempt,
-    )
+    from app.services.account_lockout import get_progressive_delay
 
-    # Get client IP using trusted proxy-aware extraction
-    client_ip = get_real_client_ip(request)
-
-    user_agent = request.headers.get("User-Agent")
-    email = credentials.username.lower()
-
-    logger.debug(f"Login attempt for user: {email} from IP: {client_ip}")
-
-    # Apply progressive delay based on failed attempts (exponential backoff)
     delay_status = await get_progressive_delay(db, email)
-    if delay_status.delay_seconds > 0:
-        logger.info(f"Applying {delay_status.delay_seconds}s delay for {email}")
-        await asyncio.sleep(delay_status.delay_seconds)
-
-    # 1. Check if account is suspended BEFORE authenticating
-    # We fetch the user manually here to check status
-    from sqlalchemy import select
-
-    res = await db.execute(select(UserModel).where(UserModel.email == email))
-    pre_auth_user = res.scalar_one_or_none()
-
-    if pre_auth_user and pre_auth_user.status == "suspended":
+    if delay_status.is_suspended:
         logger.warning(f"Login attempt for suspended user: {email}")
+        # Fetch user manually for audit log (DelayStatus doesn't have user object)
+        from sqlalchemy import select
+
+        res = await db.execute(select(UserModel).where(UserModel.email == email))
+        user_obj = res.scalar_one_or_none()
+
         await audit_service.log_event(
             db,
             category="auth",
             action="auth.login",
             severity="warning",
             success=False,
-            target_user_id=pre_auth_user.id,
+            target_user_id=str(user_obj.id) if user_obj else None,
             details={"reason": "ACCOUNT_SUSPENDED"},
         )
         await db.commit()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="LOGIN_BAD_CREDENTIALS")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="LOGIN_ACCOUNT_SUSPENDED")
 
-    # Attempt authentication
-    user = await user_manager.authenticate(credentials)
-
-    if user is None:
-        # Record failed attempt
-        await record_login_attempt(db, email, client_ip, success=False, user_agent=user_agent)
-
-        # Audit Log: Failed Login
-        await audit_service.log_event(
-            db,
-            category="auth",
-            action="auth.login",
-            success=False,
-            details={"reason": "INVALID_CREDENTIALS"},
-        )
-        await db.commit()
-
-        # Get updated delay info for logging
-        updated_delay = await get_progressive_delay(db, email)
-        logger.warning(
-            f"Login failed for {email} - next delay will be {updated_delay.delay_seconds}s"
+    if delay_status.is_locked:
+        logger.warning(f"Login attempt for locked user: {email}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=delay_status.message or "LOGIN_ACCOUNT_LOCKED",
         )
 
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="LOGIN_BAD_CREDENTIALS")
+    if delay_status.delay_seconds > 0:
+        logger.info(f"Applying {delay_status.delay_seconds}s delay for {email}")
+        await asyncio.sleep(delay_status.delay_seconds)
 
-    if not user.is_active:
-        logger.warning(f"Login attempt for inactive user: {user.email} (ID: {user.id})")
-        security_log.failed_login(client_ip, email, "USER_INACTIVE")
-        await audit_service.log_event(
-            db,
-            category="auth",
-            action="auth.login",
-            success=False,
-            target_user_id=user.id,
-            details={"reason": "USER_INACTIVE"},
-        )
-        await db.commit()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="LOGIN_BAD_CREDENTIALS")
+
+async def _raise_bad_credentials(
+    db: AsyncSession,
+    email: str,
+    client_ip: str,
+    user_agent: str | None,
+) -> None:
+    from app.services.account_lockout import record_login_attempt
+
+    # Record failed attempt
+    await record_login_attempt(db, email, client_ip, success=False, user_agent=user_agent)
+
+    # Audit Log: Failed Login
+    await audit_service.log_event(
+        db,
+        category="auth",
+        action="auth.login",
+        success=False,
+        details={"reason": "INVALID_CREDENTIALS"},
+    )
+    await db.commit()
+
+    # Use 401 Unauthorized for bad credentials
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="LOGIN_BAD_CREDENTIALS")
+
+
+async def _raise_inactive_user(
+    db: AsyncSession,
+    user: UserModel,
+    client_ip: str,
+    email: str,
+) -> None:
+    logger.warning(f"Login attempt for inactive user: {user.email} (ID: {user.id})")
+    security_log.failed_login(client_ip, email, "USER_INACTIVE")
+    await audit_service.log_event(
+        db,
+        category="auth",
+        action="auth.login",
+        success=False,
+        target_user_id=str(user.id),
+        details={"reason": "USER_INACTIVE"},
+    )
+    await db.commit()
+    # Use 403 Forbidden for inactive users
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="LOGIN_USER_INACTIVE")
+
+
+async def _record_successful_login(
+    db: AsyncSession,
+    user: UserModel,
+    email: str,
+    client_ip: str,
+    user_agent: str | None,
+) -> None:
+    from app.services.account_lockout import clear_failed_attempts, record_login_attempt
 
     # Successful password authentication - record and clear failed attempts
     await record_login_attempt(db, email, client_ip, success=True, user_agent=user_agent)
@@ -185,6 +180,85 @@ async def custom_login(
     )
     await db.commit()
 
+
+def _set_mfa_cookie(response: Response, user_id: str) -> None:
+    response.set_cookie(
+        key="mfa_user_id",
+        value=user_id,
+        max_age=300,  # 5 minutes to complete MFA
+        httponly=True,
+        secure=True,
+        samesite="strict",
+    )
+
+
+async def _maybe_require_mfa(
+    request: Request,
+    response: Response,
+    db: AsyncSession,
+    user: UserModel,
+) -> dict[str, str | bool] | None:
+    if not user.mfa_enabled:
+        return None
+
+    from app.services.mfa_service import verify_trusted_device
+
+    # Check for trusted device cookie
+    trusted_device_token = request.cookies.get("subTrustedDevice")
+    if trusted_device_token:
+        is_trusted = await verify_trusted_device(db, str(user.id), trusted_device_token)
+        if is_trusted:
+            logger.info(f"Trusted device login for {user.email}, skipping MFA")
+            return None
+        # Invalid trusted device, require MFA
+        logger.info(f"MFA required for {user.email} (invalid trusted device)")
+    else:
+        # No trusted device, require MFA
+        logger.info(f"MFA required for {user.email}")
+
+    _set_mfa_cookie(response, str(user.id))
+    return {"requires_mfa": True, "message": "MFA verification required"}
+
+
+auth_router = APIRouter(
+    tags=["Auth - Authentication & Authorization"],
+)
+
+
+# --- Custom Login Endpoint ---
+@auth_router.post("/login", summary="Login for access and refresh tokens")
+@limiter.limit("5/minute")
+async def custom_login(
+    request: Request,
+    response: Response,
+    credentials: OAuth2PasswordRequestForm = Depends(),
+    user_manager: UserManager = Depends(get_user_manager),
+    access_token_strategy: JWTStrategy = Depends(get_access_token_jwt_strategy),
+    db: AsyncSession = Depends(get_async_session),
+) -> dict[str, str | bool]:
+    # Get client IP using trusted proxy-aware extraction
+    client_ip = get_real_client_ip(request)
+
+    user_agent = request.headers.get("User-Agent")
+    email = credentials.username.lower()
+
+    logger.debug(f"Login attempt for user: {email} from IP: {client_ip}")
+
+    # Apply progressive delay based on failed attempts (exponential backoff)
+    await _apply_login_delay(db, email)
+
+    # Attempt authentication
+    user = await user_manager.authenticate(credentials)
+
+    if user is None:
+        await _raise_bad_credentials(db, email, client_ip, user_agent)
+    assert user is not None
+
+    if not user.is_active:
+        await _raise_inactive_user(db, user, client_ip, email)
+
+    await _record_successful_login(db, user, email, client_ip, user_agent)
+
     # SECURITY: Superusers/admins should have MFA enabled
     # We allow login but flag the response so frontend shows persistent warning
     mfa_setup_required = user.is_superuser and not user.mfa_enabled
@@ -192,39 +266,9 @@ async def custom_login(
         logger.warning(f"Superuser {user.email} logged in without MFA enabled")
 
     # Check if MFA is required
-    if user.mfa_enabled:
-        from app.services.mfa_service import verify_trusted_device
-
-        # Check for trusted device cookie
-        trusted_device_token = request.cookies.get("subTrustedDevice")
-        if trusted_device_token:
-            is_trusted = await verify_trusted_device(db, str(user.id), trusted_device_token)
-            if is_trusted:
-                logger.info(f"Trusted device login for {user.email}, skipping MFA")
-            else:
-                # Invalid trusted device, require MFA
-                logger.info(f"MFA required for {user.email} (invalid trusted device)")
-                response.set_cookie(
-                    key="mfa_user_id",
-                    value=str(user.id),
-                    max_age=300,  # 5 minutes to complete MFA
-                    httponly=True,
-                    secure=True,
-                    samesite="strict",
-                )
-                return {"requires_mfa": True, "message": "MFA verification required"}
-        else:
-            # No trusted device, require MFA
-            logger.info(f"MFA required for {user.email}")
-            response.set_cookie(
-                key="mfa_user_id",
-                value=str(user.id),
-                max_age=300,  # 5 minutes to complete MFA
-                httponly=True,
-                secure=True,
-                samesite="strict",
-            )
-            return {"requires_mfa": True, "message": "MFA verification required"}
+    mfa_response = await _maybe_require_mfa(request, response, db, user)
+    if mfa_response:
+        return mfa_response
 
     # Generate tokens (no MFA or trusted device verified)
     access_token = await access_token_strategy.write_token(user)
@@ -246,7 +290,7 @@ async def custom_login(
     logger.info(f"User logged in successfully: {user.email} (ID: {user.id})")
 
     # Return token with MFA setup warning for admins without MFA
-    result = {"access_token": access_token, "token_type": "bearer"}
+    result: dict[str, str | bool] = {"access_token": access_token, "token_type": "bearer"}
     if mfa_setup_required:
         result["mfa_setup_required"] = True
     return result
@@ -260,7 +304,7 @@ async def custom_refresh(
     user_manager: UserManager = Depends(get_user_manager),
     access_token_strategy: JWTStrategy = Depends(get_access_token_jwt_strategy),  # <<< CORRECTED
     # refresh_token_strategy: JWTStrategy = Depends(get_refresh_token_jwt_strategy), # if separated
-):
+) -> Token:
     refresh_token_from_cookie = request.cookies.get(cookie_transport.cookie_name)
     if not refresh_token_from_cookie:
         logger.debug("Refresh attempt without refresh token cookie.")
@@ -343,14 +387,12 @@ async def check_session(
     response: Response,
     user_manager: UserManager = Depends(get_user_manager),
     access_token_strategy: JWTStrategy = Depends(get_access_token_jwt_strategy),
-):
+) -> SessionStatus:
     """
     Check if a valid refresh token exists in cookies.
     If valid: returns new access token and is_authenticated=True.
     If invalid: returns is_authenticated=False (no 401 error).
     """
-    from app.schemas.auth import SessionStatus
-
     refresh_token_from_cookie = request.cookies.get(cookie_transport.cookie_name)
     if not refresh_token_from_cookie:
         return SessionStatus(is_authenticated=False)
@@ -409,7 +451,7 @@ async def change_password(
     body: ChangePasswordRequest,
     current_user: UserModel = Depends(current_active_user),
     user_manager: UserManager = Depends(get_user_manager),
-):
+) -> dict[str, str]:
     """
     Change password for the currently logged-in user.
     Requires the current password for verification.
@@ -475,7 +517,7 @@ async def custom_logout(
     response: Response,
     current_user: UserModel = Depends(current_active_user),
     db: AsyncSession = Depends(get_async_session),
-):
+) -> dict[str, str]:
     logger.info(
         f"Logout attempt for {current_user.email}. Deleting cookie: {cookie_transport.cookie_name}"
     )
@@ -515,7 +557,7 @@ async def register_user(
     user_create: UserCreate,
     user_manager: UserManager = Depends(get_user_manager),
     db: AsyncSession = Depends(get_async_session),
-):
+) -> UserRead:
     """
     Register a new user account.
     Only available when open signup is enabled in app settings.
@@ -551,7 +593,7 @@ async def register_user(
             category="auth",
             action="auth.register",
             severity="info",
-            actor_user_id=created_user.id,
+            actor_user_id=str(created_user.id),
             details={"email": created_user.email},
         )
         await db.commit()

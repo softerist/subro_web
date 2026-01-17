@@ -22,7 +22,7 @@ async def login_user(client: AsyncClient, email: str, password: str) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_me(test_client: AsyncClient, db_session: AsyncSession):
+async def test_get_current_user_me(test_client: AsyncClient, db_session: AsyncSession) -> None:
     user = UserFactory.create_user(session=db_session, email="me@example.com")
     await db_session.flush()
     headers = await login_user(test_client, user.email, "password123")
@@ -35,7 +35,9 @@ async def test_get_current_user_me(test_client: AsyncClient, db_session: AsyncSe
 
 
 @pytest.mark.asyncio
-async def test_regenerate_api_key_success(test_client: AsyncClient, db_session: AsyncSession):
+async def test_regenerate_api_key_success(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     user = UserFactory.create_user(session=db_session, email="apikey_user@example.com")
     await db_session.flush()
     headers = await login_user(test_client, user.email, "password123")
@@ -60,7 +62,7 @@ async def test_regenerate_api_key_success(test_client: AsyncClient, db_session: 
 
 
 @pytest.mark.asyncio
-async def test_revoke_api_key_success(test_client: AsyncClient, db_session: AsyncSession):
+async def test_revoke_api_key_success(test_client: AsyncClient, db_session: AsyncSession) -> None:
     user = UserFactory.create_user(session=db_session, email="revoke_user@example.com")
     await db_session.flush()
     headers = await login_user(test_client, user.email, "password123")

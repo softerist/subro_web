@@ -24,12 +24,16 @@ export function AuditLogFilters({
   return (
     <div className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:items-end bg-card/50 p-4 rounded-lg border border-border/60">
       <div className="space-y-1.5 w-full sm:flex-1 sm:min-w-[200px]">
-        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        <label
+          htmlFor="actor-email-filter"
+          className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+        >
           Actor Email
         </label>
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
+            id="actor-email-filter"
             placeholder="Search by email..."
             className="pl-9 bg-background/50"
             value={filters.actor_email || ""}
@@ -41,7 +45,10 @@ export function AuditLogFilters({
       </div>
 
       <div className="space-y-1.5 w-full sm:w-48">
-        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        <label
+          htmlFor="severity-filter"
+          className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+        >
           Severity
         </label>
         <Select
@@ -53,7 +60,7 @@ export function AuditLogFilters({
             })
           }
         >
-          <SelectTrigger className="bg-background/50">
+          <SelectTrigger id="severity-filter" className="bg-background/50">
             <SelectValue placeholder="All Severities" />
           </SelectTrigger>
           <SelectContent>
@@ -67,10 +74,14 @@ export function AuditLogFilters({
       </div>
 
       <div className="space-y-1.5 w-full sm:flex-1 sm:min-w-[200px]">
-        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        <label
+          htmlFor="action-filter"
+          className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+        >
           Action
         </label>
         <Input
+          id="action-filter"
           placeholder="e.g. auth.login"
           className="bg-background/50"
           value={filters.action || ""}

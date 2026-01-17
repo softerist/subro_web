@@ -95,6 +95,8 @@ stop-prod: ## Stop production stacks to free up ports
 # or you might adjust its dependencies if 'ensure-migrations' logic should also apply here.
 # For now, let's assume its current dependencies are fine.
 rebuild-dev: ensure-dev-cleanup compose-down db-migrate compose-up ensure-test-db ## Clean rebuild: stop, wipe volumes, migrate, then start fresh
+	@echo "Running migrations..."
+	@make db-migrate
 	@echo "Development stack fully rebuilt and started."
 	@echo "Gateway (Caddy HTTP)  available at http://localhost:8090"
 	@echo "Gateway (Caddy HTTPS) available at https://localhost:8444"
@@ -273,6 +275,10 @@ rebuild-prod: ## DESTRUCTIVE: Stop production, WIPE database, and redeploy
 	@docker volume rm infra_postgres_data || true
 	@echo "Restarting infrastructure..."
 	@docker compose -f infra/docker/compose.data.yml -f infra/docker/compose.gateway.yml -p infra up -d
+	@echo "Running migrations..."
+	@# Wait for DB to be ready before migrating
+	@sleep 5
+	@docker compose --env-file infra/.env.prod -p infra -f infra/docker/compose.prod.yml run --rm --entrypoint "" api poetry run alembic upgrade head
 	@echo "Redeploying application..."
 	@# Explicitly set --env-file to ensure build args like VITE_API_BASE_URL are picked up
 	@docker compose --env-file infra/.env.prod -p blue -f infra/docker/compose.prod.yml build --pull
@@ -318,8 +324,8 @@ lint: ## Run all linters via pre-commit on staged files
 lint-all: ## Run all linters via pre-commit on all files
 	pre-commit run --all-files
 
-lint-py: ## Run Python linters (Ruff) on the backend
-	cd backend && poetry run ruff check .
+lint-py: ## Run Python linters (Ruff) and type checker (Mypy) on the backend
+	cd backend && poetry run ruff check . && poetry run mypy .
 
 lint-ts: ## Run TypeScript/JS linters (ESLint) on the frontend
 	cd frontend && npm run lint -- --fix
@@ -337,7 +343,8 @@ format-ts: ## Run TypeScript/JS formatter (Prettier)
 # Testing & Coverage (Run inside Docker)
 # ==============================================================================
 .PHONY: test test-py test-ts test-integration test-integration-prod coverage coverage-py coverage-ts test-audit
-test: test-py scan-all ## Run backend Python tests and all security scans
+test: test-py scan-all ## Run backend Python tests, security scans, and type checks
+	cd backend && poetry run mypy .
 
 test-py: ## Run backend Python tests
 	@echo "Running backend tests..."
@@ -395,8 +402,8 @@ build: ## Build production Docker images
 	@echo "Building production Docker images..."
 	# Ensure correct build context and tagging strategy
 	# Consider parameterizing TAG=latest or TAG=$$(git rev-parse --short HEAD)
-	docker build -t subtitle-downloader-api:latest --target production-api ./backend
-	docker build -t subtitle-downloader-worker:latest --target production-worker ./backend
+	docker build --build-arg POETRY_VERSION=$$(awk '/poetry/ {print $$2}' .tool-versions) -t subtitle-downloader-api:latest --target production-api ./backend
+	docker build --build-arg POETRY_VERSION=$$(awk '/poetry/ {print $$2}' .tool-versions) -t subtitle-downloader-worker:latest --target production-worker ./backend
 	docker build -t subtitle-downloader-frontend:latest --target production ./frontend
 	@echo "Note: Production build uses 'latest' tag. Use specific tags for releases."
 
@@ -427,12 +434,12 @@ permissions: ## Fix potential file permission issues from Docker volumes
 
 scan-vulns: ## Scan production target image for CRITICAL vulnerabilities using Trivy
 	@echo "Scanning production API image for CRITICAL vulnerabilities..."
-	@docker build -t subro-api:scan --target production-api ./backend
+	@docker build --build-arg POETRY_VERSION=$$(awk '/poetry/ {print $$2}' .tool-versions) -t subro-api:scan --target production-api ./backend
 	@trivy image --severity CRITICAL subro-api:scan
 
 scan-secrets: ## Scan filesystem for secrets using Trivy
 	@echo "Scanning filesystem for secrets..."
-	@trivy fs --scanners secret --include-dev-deps --skip-dirs backend/.venv --skip-dirs frontend/node_modules .
+	@trivy fs --scanners secret --include-dev-deps --skip-dirs .venv --skip-dirs backend/.venv --skip-dirs frontend/node_modules .
 
 scan-sast: ## Scan code for security issues using Semgrep
 	@echo "Running Semgrep SAST scan..."

@@ -2,6 +2,7 @@ import logging
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 # Import constants and other utilities safely
 try:
@@ -34,7 +35,7 @@ except ImportError:
         )
 
         # Define a dummy function to avoid immediate crash, but scoring will be 0
-        def tokenize_and_normalize(_text):
+        def tokenize_and_normalize(text: str | None) -> list[str]:  # type: ignore[misc] # noqa: ARG001
             return []
 
 
@@ -50,7 +51,7 @@ except ImportError:
         LOCAL_MIN_MATCH_SCORE = 5
         SUBTITLE_MIN_OVERALL_SCORE = 10
 
-    settings = DummySettings()
+    settings = DummySettings()  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,14 @@ except Exception as e:
 
 
 # --- Candidate Scoring ---
-def score_candidate(candidate, media_tokens, media_basename, media_s, media_e, required_language):  # noqa: C901
+def score_candidate(  # noqa: C901
+    candidate: dict[str, Any],
+    media_tokens: list[str],
+    media_basename: str,
+    media_s: str | None,
+    media_e: str | None,
+    required_language: str,
+) -> tuple[float, int, dict[str, Any]] | None:
     """
     Scores a subtitle candidate dictionary against media file info.
     Handles different sources (OpenSubtitles, Subs.ro) and language priority.
@@ -280,7 +288,7 @@ def score_candidate(candidate, media_tokens, media_basename, media_s, media_e, r
 # --- Filename Parsing ---
 
 
-def extract_season_episode(filename):
+def extract_season_episode(filename: str | None) -> tuple[str | None, str | None]:
     """
     Extracts season and episode numbers (as strings, zero-padded) from a filename.
     Returns (season, episode) or (None, None).
@@ -345,7 +353,7 @@ def extract_season_episode(filename):
     return None, None
 
 
-def is_matching_episode(media_filename, subtitle_filename):
+def is_matching_episode(media_filename: str | None, subtitle_filename: str | None) -> bool:
     """
     Checks if a subtitle filename corresponds to the same episode as a media filename.
     Returns True if episodes match (and seasons match if both are present), False otherwise.
@@ -386,7 +394,7 @@ def is_matching_episode(media_filename, subtitle_filename):
     return True
 
 
-def get_subtitle_language_code(filename):
+def get_subtitle_language_code(filename: str | None) -> str | None:
     """
     Extracts a 2-letter language code from the filename (e.g., .en.srt, _ro.srt).
     Normalizes common 3-letter codes (eng->en, rum->ro) using constant mapping.
@@ -435,7 +443,7 @@ def get_subtitle_language_code(filename):
 # --- Scoring Logic ---
 
 
-def calculate_match_score(media_tokens, subtitle_tokens):  # noqa: C901
+def calculate_match_score(media_tokens: list[str], subtitle_tokens: list[str]) -> int:  # noqa: C901
     """
     Calculates a match score based on shared tokens and weighted keywords.
 
@@ -514,7 +522,9 @@ def calculate_match_score(media_tokens, subtitle_tokens):  # noqa: C901
 # --- Finding Best Local Match (Kept for potential utility use) ---
 
 
-def find_best_matching_subtitle_local(media_file_path, subtitle_files_dir, required_language="ro"):  # noqa: C901
+def find_best_matching_subtitle_local(  # noqa: C901
+    media_file_path: str, subtitle_files_dir: str, required_language: str = "ro"
+) -> tuple[str | None, int]:
     """
     Finds the best matching local subtitle file for a given media file.
     Searches recursively in subtitle_files_dir. Prioritizes required language.

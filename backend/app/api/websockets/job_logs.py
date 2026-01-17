@@ -1,7 +1,9 @@
 # backend/app/api/websockets/job_logs.py
 import asyncio
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 from uuid import UUID
 
 import jwt
@@ -56,7 +58,7 @@ class JobAccessForbiddenForStreamError(WebSocketFlowException):
 
 
 class RedisConfigurationError(WebSocketFlowException):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             code=status.WS_1011_INTERNAL_ERROR,
             reason="Server configuration error for log streaming.",
@@ -68,7 +70,7 @@ class RedisConfigurationError(WebSocketFlowException):
 
 
 class RedisConnectionError(WebSocketFlowException):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             code=status.WS_1011_INTERNAL_ERROR,
             reason="Log streaming service temporarily unavailable.",
@@ -166,7 +168,9 @@ async def _validate_job_access_for_stream(
 
 
 @asynccontextmanager
-async def redis_pubsub_listener(redis_url: str, channel_name: str, job_id: UUID):
+async def redis_pubsub_listener(
+    redis_url: str, channel_name: str, job_id: UUID
+) -> AsyncGenerator[Any, None]:
     """Manages Redis connection and Pub/Sub subscription."""
     if not redis_url:
         logger.error(f"REDIS_PUBSUB_URL not configured for job {job_id}.")
@@ -210,7 +214,7 @@ async def redis_pubsub_listener(redis_url: str, channel_name: str, job_id: UUID)
                 )
 
 
-async def _websocket_monitor_task(websocket: WebSocket, job_id: UUID):
+async def _websocket_monitor_task(websocket: WebSocket, job_id: UUID) -> None:
     """Monitors the WebSocket for client-side disconnections."""
     try:
         while True:
@@ -223,7 +227,9 @@ async def _websocket_monitor_task(websocket: WebSocket, job_id: UUID):
         raise
 
 
-async def _redis_to_websocket_forwarder_task(websocket: WebSocket, listener, job_id: UUID):
+async def _redis_to_websocket_forwarder_task(
+    websocket: WebSocket, listener: Any, job_id: UUID
+) -> None:
     """Listens to Redis Pub/Sub and forwards messages to the WebSocket."""
     try:
         async for message in listener.listen():  # listener is the pubsub object
@@ -265,7 +271,7 @@ async def _redis_to_websocket_forwarder_task(websocket: WebSocket, listener, job
 
 async def _handle_websocket_flow_exception(
     websocket: WebSocket, exc: WebSocketFlowException, job_id: UUID, user_email: str
-):
+) -> None:
     """Handles custom WebSocketFlowException by logging and sending appropriate response to client."""
     logger.warning(
         f"WebSocketFlowException for job {job_id} (user {user_email}): {exc.reason} (Code: {exc.code})"
@@ -281,13 +287,13 @@ async def _handle_websocket_flow_exception(
 
 async def _run_streaming_session(  # noqa: C901
     websocket: WebSocket, job_id: UUID, current_user: User, db: AsyncSession
-):
+) -> None:
     """Manages the core log streaming session including tasks and Redis listener."""
     await _validate_job_access_for_stream(job_id, current_user, db)
 
     redis_channel_name = f"job:{job_id}:logs"
-    monitor_task = None  # Initialize to None
-    forwarder_task = None  # Initialize to None
+    monitor_task: asyncio.Task[None] | None = None
+    forwarder_task: asyncio.Task[None] | None = None
 
     try:
         async with redis_pubsub_listener(
@@ -362,24 +368,25 @@ async def _run_streaming_session(  # noqa: C901
             for task in pending:
                 task.cancel()
             for task in done:
-                if task.exception():
-                    raise task.exception()
+                task_exc = task.exception()
+                if task_exc:
+                    raise task_exc
         logger.info(f"Log streaming session ended normally for job {job_id}.")
     finally:
         # Ensure tasks are cancelled if an exception occurred that prevented normal completion of asyncio.wait
         # or if they were in 'pending' list from asyncio.wait.
-        for task in [monitor_task, forwarder_task]:
-            if task and not task.done():
-                task.cancel()
+        for cleanup_task in [monitor_task, forwarder_task]:
+            if cleanup_task and not cleanup_task.done():
+                cleanup_task.cancel()
                 try:
-                    await task  # Give task a chance to handle cancellation
+                    await cleanup_task  # Give task a chance to handle cancellation
                 except asyncio.CancelledError:
                     logger.debug(
-                        f"Task {task.get_name()} for job {job_id} confirmed cancelled during session cleanup."
+                        f"Task {cleanup_task.get_name()} for job {job_id} confirmed cancelled during session cleanup."
                     )
                 except Exception as task_cleanup_err:
                     logger.error(
-                        f"Error during task {task.get_name()} cleanup for job {job_id}: {task_cleanup_err}",
+                        f"Error during task {cleanup_task.get_name()} cleanup for job {job_id}: {task_cleanup_err}",
                         exc_info=False,  # Keep log concise for cleanup errors
                     )
 
@@ -391,7 +398,7 @@ async def websocket_job_log_stream(
     job_id: UUID,
     current_user: User | None = Depends(get_current_user_ws),
     db: AsyncSession = Depends(get_async_session),
-):
+) -> None:
     # Handle authentication failure outside the dependency to avoid ASGI exception noise
     if current_user is None:
         logger.info(f"Rejecting WebSocket connection for job {job_id}: Authentication failed.")

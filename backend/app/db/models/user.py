@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
+from uuid import UUID
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
 from sqlalchemy import JSON, DateTime, String, func  # text is not needed if no server_default
@@ -16,6 +17,14 @@ if TYPE_CHECKING:
 
 class User(SQLAlchemyBaseUserTableUUID, Base):
     __tablename__ = "users"
+
+    # Explicitly hint fields inherited from mixins to help Mypy/SQLAlchemy plugin
+    id: Mapped[UUID]
+    email: Mapped[str]
+    hashed_password: Mapped[str]
+    is_active: Mapped[bool]
+    is_superuser: Mapped[bool]
+    is_verified: Mapped[bool]
 
     role: Mapped[Literal["admin", "standard"]] = mapped_column(
         String(50), default="standard", nullable=False, index=True
@@ -68,7 +77,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     @property
     def api_key_preview(self) -> str | None:
         if not self.api_keys:
-            return None
+            if not self.api_key:
+                return None
+            prefix_len = 8
+            prefix = self.api_key[:prefix_len]
+            last4 = self.api_key[-4:] if len(self.api_key) >= 4 else self.api_key
+            return f"{prefix}...{last4}"
         now = datetime.now(UTC)
         active_keys = [
             key

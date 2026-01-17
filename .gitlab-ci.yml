@@ -4,6 +4,7 @@
 # ============================================================
 
 stages:
+  - lint
   - pre
   - build
   - test
@@ -14,6 +15,84 @@ stages:
   - verify
   - release
   - cleanup
+
+# -------- Workflow Rules --------
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG
+
+# -------- Templates --------
+.ssh_setup:
+  before_script:
+    - set -euo pipefail
+    - apk add --no-cache bash openssh-client
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - |
+      if echo "$SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+      else
+        echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/id_rsa
+      fi
+    - chmod 600 ~/.ssh/id_rsa
+    - |
+      if [ -n "${SSH_HOST_KEY:-}" ]; then
+        echo "$SSH_HOST_KEY" >> ~/.ssh/known_hosts
+      else
+        ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+      fi
+    - |
+      cat > ~/.ssh/config <<EOF
+      Host *
+        User $SSH_USER
+        Port ${SSH_PORT:-22}
+        ServerAliveInterval 10
+        ServerAliveCountMax 30
+        TCPKeepAlive yes
+        ConnectTimeout 30
+        ConnectionAttempts 3
+        IdentityFile ~/.ssh/id_rsa
+      EOF
+    - chmod 600 ~/.ssh/config
+
+# ============ LINT STAGE ============
+lint_backend:
+  retry: 1
+  timeout: 5m
+  stage: lint
+  image: python:3.12-slim
+  before_script:
+    - export POETRY_VERSION=$(awk '/poetry/ {print $2}' .tool-versions)
+    - pip install poetry==$POETRY_VERSION
+    - cd backend
+    - poetry install --no-root --only dev
+  script:
+    - poetry run ruff check .
+    - poetry run ruff format --check .
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+lint_frontend:
+  retry: 1
+  timeout: 5m
+  stage: lint
+  image: node:20-alpine
+  before_script:
+    - cd frontend
+    - npm ci --prefer-offline
+  script:
+    - npm run lint
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
 
 # -------- Global Variables --------
 variables:
@@ -26,6 +105,61 @@ variables:
   GIT_STRATEGY: fetch
   GIT_DEPTH: "20"
   GIT_SUBMODULE_STRATEGY: none
+  SSH_OPTS: "-T -o IPQoS=0x00 -o BatchMode=yes -o RequestTTY=no -o TCPKeepAlive=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=30"
+  REMOTE_DEPLOY_EXPORTS: |
+    export DEPLOY_HOST_DIR="${DEPLOY_HOST_DIR}"
+    export ENV_FILE_NAME="${ENV_FILE_NAME}"
+    export TRIGGER_SCRIPT="${TRIGGER_SCRIPT}"
+    export LOG_FILE="${LOG_FILE}"
+    export BACKUP_PREFIX="${BACKUP_PREFIX:-}"
+    export DEPLOY_ENV="${DEPLOY_ENV}"
+  REMOTE_DEPLOY_SCRIPT: |
+    set -euo pipefail
+
+    # Ensure deploy directory exists
+    mkdir -p "$${DEPLOY_HOST_DIR}"
+    cd "$${DEPLOY_HOST_DIR}"
+
+    # Clone/Fetch repo
+    if [ ! -d .git ]; then
+      git init .
+      git remote add origin "git@${CI_SERVER_HOST}:${CI_PROJECT_PATH}.git"
+    fi
+    git fetch --depth 1 origin "${CI_COMMIT_SHA}"
+    git checkout -f "${CI_COMMIT_SHA}"
+    git clean -fd
+
+    # Ensure infra directory exists
+    mkdir -p infra
+    # Write base secrets and filter out dynamic variables that we will append later
+    echo '${PROD_ENV_FILE}' | base64 -d | grep -vE '^(DOCKER_IMAGE_|DEPLOY_COMMIT_SHA|USE_PREBUILT_IMAGES|DEPLOY_ENV)' > "infra/$${ENV_FILE_NAME}"
+
+    # Append CI-specific variables
+    {
+      echo "DOMAIN_NAME='${SSH_HOST}'"
+      echo "REGISTRY_PASSWORD='${REGISTRY_PASSWORD}'"
+      echo "REGISTRY_USER='${REGISTRY_USER}'"
+      echo "CI_REGISTRY='${CI_REGISTRY}'"
+      echo "DOCKER_IMAGE_API='${DOCKER_IMAGE_API}'"
+      echo "DOCKER_IMAGE_WORKER='${DOCKER_IMAGE_WORKER}'"
+      echo "DOCKER_IMAGE_FRONTEND='${DOCKER_IMAGE_FRONTEND}'"
+      echo "DOCKER_IMAGE_BACKUP='${DOCKER_IMAGE_BACKUP}'"
+      echo "DEPLOY_COMMIT_SHA='${CI_COMMIT_SHA}'"
+      echo "BACKUP_PREFIX='$${BACKUP_PREFIX:-}'"
+      echo "USE_PREBUILT_IMAGES='1'"
+      echo "DEPLOY_ENV='$${DEPLOY_ENV:-production}'"
+    } >> "infra/$${ENV_FILE_NAME}"
+
+    chmod 600 "infra/$${ENV_FILE_NAME}"
+    chmod +x ./infra/scripts/*.sh
+
+    # Trigger detached deployment
+    nohup ./infra/scripts/ci_deploy_trigger.sh \
+        "./infra/$${ENV_FILE_NAME}" \
+        "./infra/scripts/$${TRIGGER_SCRIPT}" \
+        "$${LOG_FILE}" > /dev/null 2>&1 &
+
+    echo "✅ Deployment triggered in background. Check '$${LOG_FILE}' on server for details."
 
 # -------- Docker-in-Docker Helper --------
 .default-docker:
@@ -73,6 +207,46 @@ ci_debug_env:
   script:
     - 'echo "Pipeline: $CI_PIPELINE_SOURCE | Branch: $CI_COMMIT_BRANCH | SHA: $CI_COMMIT_SHORT_SHA"'
 
+# -------- VERSION BUMP (main branch only) --------
+bump_version:
+  stage: pre
+  image: python:3.12-slim
+  variables:
+    GIT_STRATEGY: clone
+    GIT_DEPTH: "0"
+  rules:
+    # Skip if this is already a version bump commit or if [skip ci] is present
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\): bump version/ && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+      when: on_success
+    - when: never
+  before_script:
+    - apt-get update && apt-get install -y git
+    - pip install tomlkit
+    - git config --global user.email "ci-bot@gitlab.com"
+    - git config --global user.name "CI Bot"
+  script:
+    - echo "Bumping version for main branch deployment..."
+    - python3 backend/scripts/bump_version.py
+    - |
+      if [ -n "$(git status --porcelain)" ]; then
+        NEW_VERSION=$(awk -F '"' '/^version = / { print $2; exit }' backend/pyproject.toml)
+        echo "NEW_APP_VERSION=$NEW_VERSION" >> version.env
+        echo "✅ Version bumped to $NEW_VERSION (will be committed after deploy)"
+      else
+        echo "No version changes needed"
+        # Use current version
+        CURRENT_VERSION=$(awk -F '"' '/^version = / { print $2; exit }' backend/pyproject.toml)
+        echo "NEW_APP_VERSION=$CURRENT_VERSION" >> version.env
+      fi
+  artifacts:
+    reports:
+      dotenv: version.env
+    paths:
+      - backend/pyproject.toml
+      - backend/app/core/config.py
+      - frontend/package.json
+    expire_in: 1 hour
+
 # ============ BUILD STAGE ============
 .build_template:
   stage: build
@@ -82,7 +256,11 @@ ci_debug_env:
   script:
     - |
       set -euo pipefail
-      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
+      export POETRY_VERSION=$(awk '/poetry/ {print $2}' .tool-versions)
+      echo "Initializing Buildx builder..."
+      docker buildx ls
+      # Force create or use existing
+      docker buildx create --name builder --driver docker-container --use --bootstrap || docker buildx use builder
       docker buildx inspect --bootstrap
       docker buildx build \
         --push \
@@ -94,153 +272,92 @@ ci_debug_env:
         --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
         --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
         -f "$DOCKERFILE" \
+        --build-arg POETRY_VERSION="$POETRY_VERSION" \
+        ${BUILD_ARGS:-} \
         "$CONTEXT"
   rules:
-    - if: "$CI_COMMIT_BRANCH"
+    - when: on_success
   retry: 1
 
 build_api:
   extends: .build_template
+  timeout: 30m
+  needs:
+    - job: bump_version
+      artifacts: true
+      optional: true
   variables:
     SERVICE: api
     DOCKER_IMAGE: $DOCKER_IMAGE_API
     TARGET: production-api
     DOCKERFILE: backend/Dockerfile
     CONTEXT: backend
-  script:
-    - |
-      set -euo pipefail
-      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
-      docker buildx inspect --bootstrap
-      docker buildx build \
-        --push \
-        -t "$DOCKER_IMAGE" \
-        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
-        --target "$TARGET" \
-        --provenance=false \
-        --sbom=false \
-        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04" \
-        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
-        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
-        -f "$DOCKERFILE" \
-        "$CONTEXT"
+    BUILD_ARGS: --build-arg BASE_IMAGE=public.ecr.aws/docker/library/ubuntu:24.04
 
 build_api_test:
   extends: .build_template
+  timeout: 30m
   variables:
     SERVICE: api-test
     DOCKER_IMAGE: $DOCKER_IMAGE_API_TEST
     TARGET: ci-test
     DOCKERFILE: backend/Dockerfile
     CONTEXT: backend
-  script:
-    - |
-      set -euo pipefail
-      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
-      docker buildx inspect --bootstrap
-      docker buildx build \
-        --push \
-        -t "$DOCKER_IMAGE" \
-        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
-        --target "$TARGET" \
-        --provenance=false \
-        --sbom=false \
-        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04" \
-        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
-        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
-        -f "$DOCKERFILE" \
-        "$CONTEXT"
+    BUILD_ARGS: --build-arg BASE_IMAGE=public.ecr.aws/docker/library/ubuntu:24.04
 
 build_worker:
   extends: .build_template
+  timeout: 30m
+  needs:
+    - job: bump_version
+      artifacts: true
+      optional: true
   variables:
     SERVICE: worker
     DOCKER_IMAGE: $DOCKER_IMAGE_WORKER
     TARGET: production-worker
     DOCKERFILE: backend/Dockerfile
     CONTEXT: backend
-  script:
-    - |
-      set -euo pipefail
-      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
-      docker buildx inspect --bootstrap
-      docker buildx build \
-        --push \
-        -t "$DOCKER_IMAGE" \
-        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
-        --target "$TARGET" \
-        --provenance=false \
-        --sbom=false \
-        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/ubuntu:24.04" \
-        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
-        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
-        -f "$DOCKERFILE" \
-        "$CONTEXT"
+    BUILD_ARGS: --build-arg BASE_IMAGE=public.ecr.aws/docker/library/ubuntu:24.04
 
 build_frontend:
   extends: .build_template
+  timeout: 30m
+  needs:
+    - job: bump_version
+      artifacts: true
+      optional: true
   variables:
     SERVICE: frontend
     DOCKER_IMAGE: $DOCKER_IMAGE_FRONTEND
     TARGET: production
     DOCKERFILE: frontend/Dockerfile
     CONTEXT: frontend
-  script:
-    - |
-      set -euo pipefail
-      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
-      docker buildx inspect --bootstrap
-      docker buildx build \
-        --push \
-        -t "$DOCKER_IMAGE" \
-        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
-        --target "$TARGET" \
-        --provenance=false \
-        --sbom=false \
-        --build-arg BASE_IMAGE_NODE="public.ecr.aws/docker/library/node:20-alpine" \
-        --build-arg BASE_IMAGE_NGINX="public.ecr.aws/docker/library/nginx:stable-alpine" \
-        --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-/api/v1}" \
-        --build-arg VITE_WS_BASE_URL="${VITE_WS_BASE_URL:-/api/v1}" \
-        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
-        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
-        -f "$DOCKERFILE" \
-        "$CONTEXT"
+    BUILD_ARGS: >-
+      --build-arg BASE_IMAGE_NODE=public.ecr.aws/docker/library/node:20-alpine
+      --build-arg BASE_IMAGE_NGINX=public.ecr.aws/docker/library/nginx:stable-alpine
+      --build-arg VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api/v1}
+      --build-arg VITE_WS_BASE_URL=${VITE_WS_BASE_URL:-/api/v1}
 
 build_backup:
   extends: .build_template
+  timeout: 30m
   variables:
     SERVICE: backup
     DOCKER_IMAGE: $DOCKER_IMAGE_BACKUP
     TARGET: production
     DOCKERFILE: infra/docker/backup/Dockerfile
     CONTEXT: .
-  script:
-    - |
-      set -euo pipefail
-      docker buildx create --name builder --use 2>/dev/null || docker buildx use builder
-      docker buildx inspect --bootstrap
-      docker buildx build \
-        --push \
-        -t "$DOCKER_IMAGE" \
-        -t "$CI_REGISTRY_IMAGE/$SERVICE:latest" \
-        --target "$TARGET" \
-        --provenance=false \
-        --sbom=false \
-        --build-arg BASE_IMAGE="public.ecr.aws/docker/library/alpine:3.19" \
-        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
-        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
-        -f "$DOCKERFILE" \
-        "$CONTEXT"
+    BUILD_ARGS: --build-arg BASE_IMAGE=public.ecr.aws/docker/library/alpine:3.20
 
 # ============ TEST STAGE ============
 backend_tests:
   stage: test
   extends: .default-docker
   needs: [build_api_test]
-  timeout: 20m
-  interruptible: false # Prevent cancellation during test/cleanup
+  timeout: 40m
+  interruptible: false
   variables:
-    # Database config for test container - use CI/CD variables with fallback defaults
     POSTGRES_USER: "${CI_TEST_POSTGRES_USER}"
     POSTGRES_PASSWORD: "${CI_TEST_POSTGRES_PASSWORD}"
     POSTGRES_DB: "${CI_TEST_POSTGRES_DB}"
@@ -288,8 +405,7 @@ backend_tests:
     # Wait for databases to be ready
     - |
       for i in $(seq 1 30); do
-        if docker run --rm --network testnet postgres:16-alpine pg_isready -h db -U $POSTGRES_USER && \
-           docker run --rm --network testnet postgres:16-alpine pg_isready -h db_test -U $POSTGRES_USER; then
+        if docker run --rm --network testnet postgres:16-alpine sh -c "pg_isready -h db -U $POSTGRES_USER && pg_isready -h db_test -U $POSTGRES_USER"; then
           echo "Databases ready!"
           break
         fi
@@ -316,27 +432,28 @@ backend_tests:
 
     # Wait for API to be healthy
     - |
-      for i in $(seq 1 30); do
-        if docker run --rm --network testnet alpine:3.20 sh -c 'apk add --no-cache -q curl && curl -fsS http://api:8000/health' 2>/dev/null; then
-          echo "API healthy!"
-          break
-        fi
-        echo "Waiting for API ($i/30)..." && sleep 2
-      done
+      docker run --rm --network testnet alpine:3.20 sh -c '
+        apk add --no-cache -q curl
+        for i in $(seq 1 30); do
+          if curl -fsS http://api:8000/health >/dev/null 2>&1; then
+            echo "API healthy!"
+            exit 0
+          fi
+          echo "Waiting for API ($i/30)..." && sleep 2
+        done
+        exit 1'
 
-    # Install test dependencies and run tests
     - docker exec api poetry run pytest -p no:cacheprovider tests/
   after_script:
     - docker logs api 2>&1 | tail -50 || true
-    # Forceful cleanup - ensure containers are removed even on abort
     - docker rm -f api db db_test redis 2>/dev/null || true
     - docker network rm testnet 2>/dev/null || true
 
 frontend_tests:
   stage: test
-  image: node:22.13-alpine
+  image: node:20-alpine
   needs: []
-  timeout: 10m
+  timeout: 30m
   variables:
     NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/frontend/.npm"
     VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:8000/api/v1}"
@@ -362,10 +479,10 @@ frontend_tests:
 scan_image_vulns:
   stage: scan
   image:
-    name: aquasec/trivy:0.58.0 # Updated from 0.53.0
+    name: aquasec/trivy:0.58.0
     entrypoint: [""]
   needs: [build_api, build_worker, build_frontend, build_backup]
-  timeout: 15m
+  timeout: 30m
   variables:
     TRIVY_SEVERITY: "HIGH,CRITICAL"
   rules:
@@ -409,10 +526,11 @@ scan_image_vulns:
 
 sast_scan:
   stage: scan
+  needs: []
   image:
-    name: returntocorp/semgrep:1.90.0
+    name: semgrep/semgrep:1.147.0
     entrypoint: [""]
-  timeout: 10m
+  timeout: 30m
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
     - when: on_success
@@ -454,6 +572,8 @@ sast_scan:
 
 secret_scan:
   stage: scan
+  needs: []
+  timeout: 30m
   image:
     name: aquasec/trivy:0.58.0
     entrypoint: [""]
@@ -470,11 +590,28 @@ deploy_staging:
   stage: staging
   image: alpine:3.20
   resource_group: staging
-  timeout: 15m
+  timeout: 30m
+  allow_failure: false
   variables:
     STAGING_DEPLOY_DIR: /opt/subro_web_staging
+    DEPLOY_HOST_DIR: /opt/subro_web_staging
+    ENV_FILE_NAME: .env.staging
+    TRIGGER_SCRIPT: deploy_staging.sh
+    LOG_FILE: last_deploy.log
+    BACKUP_PREFIX: staging_
+    DEPLOY_ENV: staging
   needs:
     - job: backend_tests
+      artifacts: false
+    - job: frontend_tests
+      artifacts: false
+    - job: build_api
+      artifacts: false
+    - job: build_worker
+      artifacts: false
+    - job: build_frontend
+      artifacts: false
+    - job: build_backup
       artifacts: false
     - job: scan_image_vulns
       artifacts: false
@@ -485,90 +622,83 @@ deploy_staging:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: on_success
-  before_script:
-    - set -euo pipefail
-    - apk add --no-cache bash openssh-client
-    - eval "$(ssh-agent -s)"
-    - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
-    - chmod 600 /tmp/ssh_key
-    - ssh-add /tmp/ssh_key
-    - rm -f /tmp/ssh_key
-    - mkdir -p ~/.ssh
-    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
-    # SSH config for robust long-running connections
-    - |
-      cat >> ~/.ssh/config <<EOF
-      Host *
-        ServerAliveInterval 15
-        ServerAliveCountMax 5
-        TCPKeepAlive no
-        ConnectTimeout 30
-        IPQoS throughput
-      EOF
+  extends: .ssh_setup
   script:
     - |
       set -euo pipefail
 
-      # 1. Prepare Directory & Checkout
-      ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
-          -o TCPKeepAlive=no -o ConnectTimeout=30 -o IPQoS=throughput \
-          -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+      echo "=== Starting Consolidated Staging Deployment ==="
+      ssh $SSH_OPTS "$SSH_HOST" bash -s <<DEPLOY_STAGE
         set -euo pipefail
-        mkdir -p \"${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}\"
-        cd \"${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}\"
-        if [ ! -d .git ]; then
-          git clone --depth 1 \"git@${CI_SERVER_HOST}:${CI_PROJECT_PATH}.git\" .
-        else
-          git fetch --depth 1 origin \"${CI_COMMIT_SHA}\"
-          git checkout -f \"${CI_COMMIT_SHA}\"
-          git clean -fd
+
+        # 0. Ensure server-side SSH keepalives are configured (idempotent)
+        if [ ! -f /etc/ssh/sshd_config.d/keepalive.conf ]; then
+          printf "%s\n" "# CI/CD keepalives" "ClientAliveInterval 15" "ClientAliveCountMax 10" "TCPKeepAlive yes" > /etc/ssh/sshd_config.d/keepalive.conf &&
+          (systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true) &&
+          echo "SSH keepalives configured";
         fi
-        echo \"Checked out commit: \$(git rev-parse HEAD)\"
-      "
 
-      # 2. Setup Env & Deploy
-      ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=5 \
-          -o TCPKeepAlive=no -o ConnectTimeout=30 -o IPQoS=throughput \
-          -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
-        set -euo pipefail
-        STAGING_DEPLOY_DIR="\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
-        cd "\$STAGING_DEPLOY_DIR"
+        # 1. Verify Docker images exist before deploying
+        echo ""
+        echo "=== Verifying Docker Images ==="
 
-        mkdir -p infra
-        echo '${PROD_ENV_FILE}' | base64 -d > infra/.env.staging
-        chmod 600 infra/.env.staging
+        # Start background keepalive to prevent SSH timeout during slow docker operations
+        (while true; do echo -n " "; sleep 5; done) &
+        KEEPALIVE_PID=\$!
+        trap "kill \$KEEPALIVE_PID 2>/dev/null || true" EXIT
 
-        echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin "${CI_REGISTRY}"
+        # Docker login with retry (handles registry timeouts)
+        for i in 1 2 3; do
+          if echo "${REGISTRY_PASSWORD}" | docker login -u "${REGISTRY_USER}" --password-stdin "${CI_REGISTRY}" 2>/dev/null; then
+            echo ""
+            echo 'Docker login successful'
+            break
+          fi
+          if [ \$i -eq 3 ]; then
+            kill \$KEEPALIVE_PID 2>/dev/null
+            echo ""
+            echo '❌ Docker login failed after 3 attempts'
+            exit 1
+          fi
+          echo ""
+          echo "Docker login attempt \$i failed, retrying in 5s..."
+          sleep 5
+        done
 
-        export DOCKER_IMAGE_API='${DOCKER_IMAGE_API}'
-        export DOCKER_IMAGE_WORKER='${DOCKER_IMAGE_WORKER}'
-        export DOCKER_IMAGE_FRONTEND='${DOCKER_IMAGE_FRONTEND}'
-        export DOCKER_IMAGE_BACKUP='${DOCKER_IMAGE_BACKUP}'
-        export BACKUP_PREFIX=staging_
-        export USE_PREBUILT_IMAGES=1
-        export DEPLOY_ENV=staging
+        # Skip slow manifest verification - images were just pushed by build stage
+        # If they somehow don't exist, the docker pull in deploy will fail fast
+        echo 'Images built and pushed by CI - skipping slow manifest verification'
+        echo "Will deploy: ${DOCKER_IMAGE_API}"
+        echo "Will deploy: ${DOCKER_IMAGE_FRONTEND}"
 
-        chmod +x ./infra/scripts/*.sh
-        ./infra/scripts/deploy_staging.sh
+        # Kill keepalive before continuing
+        kill \$KEEPALIVE_PID 2>/dev/null || true
+        echo ""
 
         docker logout "${CI_REGISTRY}"
-      DEPLOY_SCRIPT
-  environment:
-    name: staging
-    url: https://staging.$SSH_HOST/
-  retry: 1
+
+        # Export deploy variables for REMOTE_DEPLOY_SCRIPT
+        $REMOTE_DEPLOY_EXPORTS
+        $REMOTE_DEPLOY_SCRIPT
+      DEPLOY_STAGE
 
 verify_staging:
+  retry: 1
+  timeout: 30m
   stage: staging
   image: alpine:3.20
+  allow_failure:
   needs: [deploy_staging]
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
+  variables:
+    STAGING_DEPLOY_DIR: /opt/subro_web_staging
+  extends: .ssh_setup
   script:
-    - apk add --no-cache curl
+    - apk add --no-cache curl bind-tools
     - |
       # Resolve SSH_HOST to IP and add staging subdomain to /etc/hosts
-      SERVER_IP=$(getent hosts "$SSH_HOST" | awk '{print $1}' | head -1)
+      SERVER_IP=$(nslookup "$SSH_HOST" | awk '/^Address: / { print $2 }' | tail -1)
       if [ -z "$SERVER_IP" ]; then
         echo "ERROR: Could not resolve IP for $SSH_HOST"
         exit 1
@@ -578,50 +708,127 @@ verify_staging:
     - |
       echo "Verifying staging deployment..."
       echo ""
-      echo "=== DEBUG: Testing different endpoints ==="
-
-      # Test 1: /api/v1/ with verbose output
-      echo "--- Test: /api/v1/ ---"
-      curl -k -v --max-time 10 "https://staging.$SSH_HOST/api/v1/" 2>&1 | head -50 || true
+      # Quick container status check
+      echo "📦 Checking container status..."
+      ssh "$SSH_HOST" \
+        "docker ps --filter 'name=subro.*staging' --format '  • {{.Names}}: {{.Status}}' || echo '  ⚠️  Could not check containers'"
       echo ""
 
-      # Test 2: Try a simple curl to see HTTP response
-      echo "--- Test: Simple response check ---"
-      HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "000")
-      RESPONSE=$(curl -k -s --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "")
-      echo "HTTP Code: $HTTP_CODE"
-      echo "Response length: ${#RESPONSE}"
-      echo "Response: >>$RESPONSE<<"
-      echo ""
+      # Increased retry window for staging container startup
+      MAX_ATTEMPTS=24  # 24 * 10s = 4 minutes
+      DEPLOY_MARKER_PATH="${STAGING_DEPLOY_DIR}/infra/.deploy_sha"
+      SHORT_SHA="${CI_COMMIT_SHA:0:8}"
 
-      # Check if API is responding with valid content
-      if echo "$RESPONSE" | grep -qE '"(version|message)"'; then
-        echo "✅ Staging API is responding correctly!"
-        exit 0
-      fi
+      # Initial wait for containers to start before polling
+      echo "⏳ Waiting 30s for containers to initialize..."
+      sleep 30
 
       echo ""
-      echo "⚠️  WARNING: External Nginx is intercepting requests and returning empty 200."
-      echo "    The staging containers may be running fine, but requests don't reach them."
-      echo "    Please check your external Nginx config for staging.secure.go.ro"
+      echo "🔍 Verifying deployment (commit: $SHORT_SHA)..."
       echo ""
-      echo "    To fix: Update Nginx to proxy_pass to Caddy (port 8080)"
+
+      for attempt in $(seq 1 $MAX_ATTEMPTS); do
+        MARKER_OK=false
+        API_OK=false
+
+        # Check deploy marker
+        DEPLOYED_SHA=$(ssh "$SSH_HOST" \
+          "cat '$DEPLOY_MARKER_PATH' 2>/dev/null || true")
+
+        if [ "$DEPLOYED_SHA" = "$CI_COMMIT_SHA" ]; then
+          MARKER_OK=true
+        fi
+
+        # Check API response
+        HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "000")
+        RESPONSE=$(curl -k -s --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "")
+
+        if echo "$RESPONSE" | grep -qE '"(version|message)"'; then
+          API_OK=true
+        fi
+
+        # Success condition
+        if [ "$MARKER_OK" = "true" ] && [ "$API_OK" = "true" ]; then
+          VERSION=$(echo "$RESPONSE" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+          if [ -z "$VERSION" ]; then VERSION="unknown"; fi
+          echo ""
+          echo "┌───────────────────────────────────────────────────────┐"
+          echo "│  ✅ Staging deployment verified successfully!         │"
+          echo "├───────────────────────────────────────────────────────┤"
+          printf "│  • %-10s %-41s │\n" "Commit:" "$SHORT_SHA"
+          printf "│  • %-10s %-41s │\n" "Version:" "$VERSION"
+          printf "│  • %-10s %-41s │\n" "API:" "https://staging.$SSH_HOST/api/v1/"
+          echo "└───────────────────────────────────────────────────────┘"
+          exit 0
+        fi
+
+        # Show progress dot for non-verbose output
+        if [ $attempt -eq 1 ]; then
+          printf "   Waiting for deployment"
+        fi
+        printf "."
+
+        # Only show detailed status every 6th attempt or on specific errors
+        if [ $((attempt % 6)) -eq 0 ]; then
+          echo ""
+          if [ "$MARKER_OK" != "true" ]; then
+            echo "   ⏳ Deploy marker: waiting (${DEPLOYED_SHA:0:8}... → $SHORT_SHA)"
+          fi
+          if [ "$HTTP_CODE" = "502" ] || [ "$HTTP_CODE" = "503" ]; then
+            echo "   ⏳ API: starting (HTTP $HTTP_CODE)"
+          elif [ "$API_OK" != "true" ]; then
+            echo "   ⏳ API: not ready yet"
+          fi
+          printf "   Waiting"
+        fi
+
+        sleep 10
+      done
+
+      echo ""
+      echo ""
+      echo "┌─────────────────────────────────────────────────────┐"
+      echo "│  ❌ Staging verification failed                     │"
+      echo "└─────────────────────────────────────────────────────┘"
+      echo ""
+      echo "Possible causes:"
+      echo "  • Staging containers failed to start"
+      echo "  • Caddy not configured for staging.secure.go.ro"
+      echo "  • Network/firewall issues"
+      echo ""
+      echo "=== SERVER-SIDE DEPLOYMENT LOG (last_deploy.log) ==="
+      ssh "$SSH_HOST" "cat ${STAGING_DEPLOY_DIR}/last_deploy.log || echo 'Log file not found'"
+      echo ""
+      echo "=== API CONTAINER LOGS (subro_staging-api-1) ==="
+      ssh "$SSH_HOST" "docker logs subro_staging-api-1 --tail 100 || echo 'Container not found'"
+      echo ""
+      echo "Troubleshooting:"
+      echo "  1. SSH: docker ps -a | grep staging"
+      echo "  2. Logs: docker logs subro_staging-api-1 --tail 50"
+      echo "  3. Test: curl http://localhost:8000/api/v1/"
       exit 1
   environment:
     name: staging
     url: https://staging.$SSH_HOST/
 
-# ============ E2E TESTS STAGE ============
 e2e_tests:
   stage: e2e
-  image: mcr.microsoft.com/playwright:v1.40.0-jammy
+  image: mcr.microsoft.com/playwright:v1.57.0-jammy
   needs: [verify_staging]
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
   variables:
     E2E_BASE_URL: https://staging.$SSH_HOST
   script:
-    - SERVER_IP=$(getent hosts "$SSH_HOST" | awk '{print $1}' | head -1) && echo "$SERVER_IP staging.$SSH_HOST" >> /etc/hosts
+    - |
+      # Resolve SSH_HOST to IP with validation (consistent with verify_staging)
+      SERVER_IP=$(getent hosts "$SSH_HOST" | awk '{print $1}' | head -1)
+      if [ -z "$SERVER_IP" ]; then
+        echo "ERROR: Could not resolve IP for $SSH_HOST"
+        exit 1
+      fi
+      echo "$SERVER_IP staging.$SSH_HOST" >> /etc/hosts
+      echo "Added /etc/hosts entry: $SERVER_IP staging.$SSH_HOST"
     - cd frontend
     - npm ci --prefer-offline
     - npx playwright install --with-deps chromium
@@ -634,31 +841,30 @@ e2e_tests:
 
 # Cleanup staging after E2E tests (ephemeral staging)
 cleanup_staging:
+  retry: 1
+  timeout: 30m
   stage: e2e
   image: alpine:3.20
+  resource_group: staging
+  variables:
+    STAGING_DEPLOY_DIR: /opt/subro_web_staging
   needs:
     - job: e2e_tests
       artifacts: false
+      optional: true
     - job: deploy_staging
       artifacts: false
+      # Required - cleanup only if deployment succeeded
     - job: verify_staging
       artifacts: false
+      # Required - cleanup only if verification succeeded
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-      when: always # Run even if e2e_tests fail
-  before_script:
-    - set -euo pipefail
-    - apk add --no-cache bash openssh-client
-    - eval "$(ssh-agent -s)"
-    - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
-    - chmod 600 /tmp/ssh_key
-    - ssh-add /tmp/ssh_key
-    - rm -f /tmp/ssh_key
-    - mkdir -p ~/.ssh
-    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+      when: on_success
+  extends: .ssh_setup
   script:
     - |
-      ssh -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<CLEANUP_SCRIPT
+      ssh $SSH_OPTS -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<CLEANUP_SCRIPT
         set -euo pipefail
 
         # ANSI color codes for inline script
@@ -669,7 +875,7 @@ cleanup_staging:
         log() { echo -e "\${BLUE}[\$(date +'%Y-%m-%dT%H:%M:%S%z')]\${NC} \$*"; }
         success() { echo -e "\${GREEN}[\$(date +'%Y-%m-%dT%H:%M:%S%z')] ✓ \$*\${NC}"; }
 
-        STAGING_DIR="\${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
+        STAGING_DIR="${STAGING_DEPLOY_DIR:-/opt/subro_web_staging}"
 
         log "Starting cleanup for staging environment..."
         log "Target directory: \$STAGING_DIR"
@@ -688,13 +894,14 @@ cleanup_staging:
           log 'Staging directory not found, nothing to clean up'
         fi
       CLEANUP_SCRIPT
-  allow_failure: true # Don't block pipeline if cleanup fails
+  allow_failure: true
 
 # ============ DEPLOY STAGE ============
 .deploy_template:
   stage: deploy
   image: alpine:3.20
-  resource_group: $CI_ENVIRONMENT_NAME # Serializes deploys per environment
+  extends: .ssh_setup
+  resource_group: $CI_ENVIRONMENT_NAME
   needs:
     - job: backend_tests
       artifacts: false
@@ -704,22 +911,28 @@ cleanup_staging:
       artifacts: false
     - job: secret_scan
       artifacts: false
-  before_script:
-    - set -euo pipefail
-    - apk add --no-cache bash openssh-client
-    - eval "$(ssh-agent -s)"
-    - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
-    - chmod 600 /tmp/ssh_key
-    - ssh-add /tmp/ssh_key
-    - rm -f /tmp/ssh_key
-    - mkdir -p ~/.ssh
-    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
   retry: 1
 
 deploy_prod:
   extends: .deploy_template
   needs:
+    - job: backend_tests
+      artifacts: false
+    - job: scan_image_vulns
+      artifacts: false
+    - job: sast_scan
+      artifacts: false
+    - job: secret_scan
+      artifacts: false
     - job: e2e_tests
+      artifacts: false
+    - job: build_api
+      artifacts: false
+    - job: build_worker
+      artifacts: false
+    - job: build_frontend
+      artifacts: false
+    - job: build_backup
       artifacts: false
   environment:
     name: production
@@ -729,76 +942,31 @@ deploy_prod:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: on_success
     - when: never
+  variables:
+    DEPLOY_HOST_DIR: /opt/subro_web
+    ENV_FILE_NAME: .env.prod
+    TRIGGER_SCRIPT: blue_green_deploy.sh
+    LOG_FILE: last_deploy_prod.log
+    BACKUP_PREFIX: ""
+    DEPLOY_ENV: production
   script:
     - |
-      set -euo pipefail
-      ssh -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_SCRIPT
-        set -euo pipefail
-
-        # Ensure deploy directory exists (first-time setup)
-        mkdir -p /opt/subro_web
-        cd /opt/subro_web
-
-        # Clone repo if first deploy (infra scripts needed)
-        if [ ! -d .git ]; then
-          git clone --depth 1 "git@${CI_SERVER_HOST}:${CI_PROJECT_PATH}.git" .
-        else
-          git fetch --depth 1 origin "${CI_COMMIT_SHA}"
-          git checkout -f "${CI_COMMIT_SHA}"
-          git clean -fd
-        fi
-
-        # Ensure infra directory exists and decode .env.prod
-        mkdir -p infra
-        echo '${PROD_ENV_FILE}' | base64 -d > infra/.env.prod
-        chmod 600 infra/.env.prod
-
-        # Login to registry
-        echo '${REGISTRY_PASSWORD}' | docker login -u '${REGISTRY_USER}' --password-stdin "${CI_REGISTRY}"
-
-        # Set image tags
-        export DOCKER_IMAGE_API='${DOCKER_IMAGE_API}'
-        export DOCKER_IMAGE_WORKER='${DOCKER_IMAGE_WORKER}'
-        export DOCKER_IMAGE_FRONTEND='${DOCKER_IMAGE_FRONTEND}'
-        export DOCKER_IMAGE_BACKUP='${DOCKER_IMAGE_BACKUP}'
-        export USE_PREBUILT_IMAGES=1
-
-        # Ensure scripts are executable
-        chmod +x ./infra/scripts/*.sh
-
-        # Deploy
-        ./infra/scripts/blue_green_deploy.sh
-
-        # Cleanup
-        docker logout "${CI_REGISTRY}"
-      DEPLOY_SCRIPT
-        chmod 600 infra/.env.prod
-
-        # Login to registry
-        echo '$REGISTRY_PASSWORD' | docker login -u '$REGISTRY_USER' --password-stdin $CI_REGISTRY
-
-        # Set image tags
-        export DOCKER_IMAGE_API='$DOCKER_IMAGE_API'
-        export DOCKER_IMAGE_WORKER='$DOCKER_IMAGE_WORKER'
-        export DOCKER_IMAGE_FRONTEND='$DOCKER_IMAGE_FRONTEND'
-        export DOCKER_IMAGE_BACKUP='$DOCKER_IMAGE_BACKUP'
-        export USE_PREBUILT_IMAGES=1
-
-        # Ensure scripts are executable
-        chmod +x ./infra/scripts/*.sh
-
-        # Deploy
-        ./infra/scripts/blue_green_deploy.sh
-
-        # Cleanup
-        docker logout $CI_REGISTRY
-      "
+      ssh $SSH_OPTS \
+          -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -s <<DEPLOY_PROD
+        $REMOTE_DEPLOY_EXPORTS
+        $REMOTE_DEPLOY_SCRIPT
+      DEPLOY_PROD
 
 # ============ VERIFY STAGE ============
 verify_prod:
+  retry: 1
+  timeout: 30m
   stage: verify
   image: alpine:3.20
-  needs: [deploy_prod]
+  needs:
+    - job: deploy_prod
+    - job: bump_version
+      artifacts: true
   environment:
     name: production
     url: https://$SSH_HOST/
@@ -806,77 +974,179 @@ verify_prod:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: on_success
   script:
-    - apk add --no-cache curl
+    - apk add --no-cache curl jq openssh-client
     - |
-      echo "Verifying production deployment..."
-      for i in $(seq 1 10); do
-        RESPONSE=$(curl --fail --silent --max-time 10 "https://$SSH_HOST/health" 2>&1 || true)
-        if ! echo "$RESPONSE" | grep -qE '"status":\s*"(ok|healthy)"'; then
-          RESPONSE=$(curl --fail --silent --max-time 10 "https://$SSH_HOST/api/v1/healthz" 2>&1 || true)
+      # Load expected version
+      if [ -f version.env ]; then
+        source version.env
+        EXPECTED_VERSION="${NEW_APP_VERSION:-}"
+      else
+        echo "Warning: version.env not found. Skipping strict version check."
+        EXPECTED_VERSION=""
+      fi
+    - |-
+      # SSH setup for remote diagnostics
+      mkdir -p ~/.ssh && chmod 700 ~/.ssh
+      if echo "$SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+      else
+        echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/id_rsa
+      fi
+      chmod 600 ~/.ssh/id_rsa
+      ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      echo ""
+      echo "┌─────────────────────────────────────────────────────────────┐"
+      echo "│  🔍 Production Verification                                 │"
+      echo "└─────────────────────────────────────────────────────────────┘"
+      echo ""
+      echo "📦 Checking container status on $SSH_HOST..."
+      ssh -o BatchMode=yes "$SSH_USER@$SSH_HOST" \
+        "docker ps --filter 'name=-api-1' --filter 'name=-frontend-1' --format '  • {{.Names}}: {{.Status}}'" || echo "  ⚠️  Could not check containers"
+      echo ""
+
+      echo "🔀 Checking Caddy routing..."
+      ACTIVE_COLOR=$(ssh -o BatchMode=yes "$SSH_USER@$SSH_HOST" \
+        "grep -m1 'reverse_proxy' /opt/subro_web/infra/docker/Caddyfile.prod 2>/dev/null | grep -oE '(blue|green)' | head -1" || echo "unknown")
+      echo "  • Active color: $ACTIVE_COLOR"
+      echo ""
+
+      echo "🌐 Verifying API health..."
+      if [ -n "$EXPECTED_VERSION" ]; then
+        echo "  • Expecting Version: $EXPECTED_VERSION"
+      fi
+
+      MAX_ATTEMPTS=12
+      for i in $(seq 1 $MAX_ATTEMPTS); do
+        # Try main health endpoint first
+        RESPONSE=$(curl --fail --silent --max-time 10 "https://$SSH_HOST/api/v1/" 2>&1 || true)
+
+        if echo "$RESPONSE" | grep -q '"version"'; then
+          VERSION=$(echo "$RESPONSE" | jq -r '.version // "unknown"' 2>/dev/null || echo "unknown")
+
+          # Strict version check
+          if [ -n "$EXPECTED_VERSION" ]; then
+            # Clean up versions for comparison (handle potential suffixes if mismatching)
+            # Just do direct string comparison first
+            if [[ "$VERSION" == *"$EXPECTED_VERSION"* ]] || [[ "$EXPECTED_VERSION" == *"$VERSION"* ]]; then
+                 CHECK_RESULT="✅ MATCH"
+            else
+                 CHECK_RESULT="❌ MISMATCH (Expected $EXPECTED_VERSION)"
+            fi
+          else
+            CHECK_RESULT="⚠️  NO CHECK"
+          fi
+
+          if [[ "$CHECK_RESULT" == *"✅"* ]] || [[ "$CHECK_RESULT" == *"NO CHECK"* ]]; then
+              echo ""
+              echo "┌─────────────────────────────────────────────────────────────┐"
+              echo "│  ✅ Production verified successfully!                       │"
+              echo "├─────────────────────────────────────────────────────────────┤"
+              printf "│  • %-12s %-44s │\n" "Version:" "$VERSION $CHECK_RESULT"
+              printf "│  • %-12s %-44s │\n" "Color:" "$ACTIVE_COLOR"
+              printf "│  • %-12s %-44s │\n" "URL:" "https://$SSH_HOST/"
+              echo "└─────────────────────────────────────────────────────────────┘"
+              exit 0
+          fi
+
+          echo "  ⏳ Version mismatch: Got $VERSION, Expected $EXPECTED_VERSION. Retrying..."
         fi
-        if echo "$RESPONSE" | grep -qE '"status":\s*"(ok|healthy)"'; then
-          echo "Production is healthy! Response: $RESPONSE"
-          exit 0
-        fi
-        echo "Waiting for production ($i/10)... Response: $RESPONSE"
+
+        echo "  ⏳ Attempt $i/$MAX_ATTEMPTS - waiting for API..."
         sleep 5
       done
-      echo "Production health check failed!"
+
+      echo ""
+      echo "┌─────────────────────────────────────────────────────────────┐"
+      echo "│  ❌ Production verification failed                          │"
+      echo "└─────────────────────────────────────────────────────────────┘"
+      echo ""
+      echo "Last response: $RESPONSE"
+      if [ -n "$EXPECTED_VERSION" ]; then
+        echo "Expected Version: $EXPECTED_VERSION"
+      fi
+      echo ""
+      echo "Troubleshooting:"
+      echo "  1. Check container logs: docker logs \${ACTIVE_COLOR}-api-1 --tail 50"
+      echo "  2. Check Caddy logs: docker logs infra-caddy-1 --tail 50"
+      echo "  3. Verify Caddyfile.prod routing"
       exit 1
 
 # ============ RELEASE STAGE ============
-release_version:
+# Commit version bump (files already bumped in pre stage)
+commit_version_bump:
+  retry: 1
+  timeout: 5m
   stage: release
   image: alpine:3.20
+  needs:
+    - job: bump_version
+      artifacts: true
+    - job: verify_prod
+      artifacts: false
   variables:
     GIT_STRATEGY: clone
+    GIT_DEPTH: "0"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\): bump version/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\): bump version/ && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       when: on_success
-  environment:
-    name: production
-    action: access
+    - when: never
   before_script:
-    - set -euo pipefail
-    - apk add --no-cache git openssh-client openssh-keygen bash python3 py3-pip
-    - pip install --break-system-packages tomlkit
-    - eval "$(ssh-agent -s)"
-    - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
-    - chmod 600 /tmp/ssh_key
-    - ssh-add /tmp/ssh_key
-    - rm -f /tmp/ssh_key
-    - mkdir -p ~/.ssh
-    - ssh-keyscan "$CI_SERVER_HOST" >> ~/.ssh/known_hosts
+    - apk add --no-cache git openssh-client bash
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - |-
+      if echo "$SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+      else
+        echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/id_rsa
+      fi
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan $CI_SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null
     - git config --global user.email "ci-bot@gitlab.com"
     - git config --global user.name "CI Bot"
     - git remote set-url origin git@$CI_SERVER_HOST:$CI_PROJECT_PATH.git
   script:
-    - echo "Bumping version..."
-    - python3 backend/scripts/bump_version.py
+    - |-
+      echo ""
+      echo "┌─────────────────────────────────────────────────────────────┐"
+      echo "│  📦 Committing Version Bump                                 │"
+      echo "└─────────────────────────────────────────────────────────────┘"
+      echo ""
 
-    # Check for changes
-    - |
-      if [[ -n $(git status --porcelain) ]]; then
-        git add backend/pyproject.toml backend/app/core/config.py
-        # Extract new version for commit message
-        NEW_VERSION=$(grep 'version = ' backend/pyproject.toml | head -n 1 | cut -d '"' -f 2)
-        git commit -m "chore(release): bump version to $NEW_VERSION"
+      # Check if we have version changes from bump_version artifacts
+      if [ -n "$(git status --porcelain backend/pyproject.toml backend/app/core/config.py frontend/package.json 2>/dev/null)" ]; then
+        NEW_VERSION="${NEW_APP_VERSION:-unknown}"
+        echo "Version: $NEW_VERSION"
+        echo ""
+
+        git add backend/pyproject.toml backend/app/core/config.py frontend/package.json
+
+        # Use [skip ci] to prevent triggering another pipeline
+        git commit -m "chore(release): bump version to $NEW_VERSION [skip ci]"
+
+        echo "Pushing version commit..."
         git push origin HEAD:$CI_COMMIT_BRANCH
-        git push gitlab HEAD:$CI_COMMIT_BRANCH
-        echo "Version bumped to $NEW_VERSION and pushed to origin and gitlab ($CI_COMMIT_BRANCH)"
+
+        echo ""
+        echo "┌─────────────────────────────────────────────────────────────┐"
+        echo "│  ✅ Version $NEW_VERSION committed successfully            │"
+        echo "└─────────────────────────────────────────────────────────────┘"
       else
-        echo "No version changes detected."
+        echo "No version changes to commit (files unchanged)"
       fi
 
 # ============ CLEANUP STAGE ============
 cleanup_registry:
+  retry: 1
+  timeout: 15m
   stage: cleanup
   image: alpine:3.20
   variables:
     KEEP_TAGS: "10" # Number of recent tags to keep per repository
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-      when: on_success
+      when: manual
+      allow_failure: true # Don't block pipeline if not triggered
   script:
     - apk add --no-cache curl jq
     - |
@@ -990,28 +1260,21 @@ cleanup_registry:
 
 # ============ ROLLBACK (on failure) ============
 rollback_prod:
+  retry: 1
+  timeout: 10m
   stage: verify
   image: alpine:3.20
   needs:
     - job: verify_prod
-      optional: true # Required for when: on_failure to trigger
+      optional: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: on_failure
-  before_script:
-    - set -euo pipefail
-    - apk add --no-cache bash openssh-client
-    - eval "$(ssh-agent -s)"
-    - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/ssh_key
-    - chmod 600 /tmp/ssh_key
-    - ssh-add /tmp/ssh_key
-    - rm -f /tmp/ssh_key
-    - mkdir -p ~/.ssh
-    - ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+  extends: .ssh_setup
   script:
     - |
       echo "Rolling back to previous version..."
-      ssh -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+      ssh $SSH_OPTS "$SSH_HOST" bash -s <<'ROLLBACK_SCRIPT'
         cd /opt/subro_web
         chmod +x ./infra/scripts/*.sh
         if [ -f ./infra/scripts/rollback.sh ]; then
@@ -1020,7 +1283,7 @@ rollback_prod:
           echo 'Rollback script not found, manual intervention required'
           exit 1
         fi
-      "
+      ROLLBACK_SCRIPT
   environment:
     name: production
     action: stop

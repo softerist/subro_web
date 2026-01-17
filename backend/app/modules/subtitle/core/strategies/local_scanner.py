@@ -74,7 +74,7 @@ class LocalScanner(ProcessingStrategy):
 
                 self.logger.info(f"Found potential non-standard local subtitle: {item_name}")
                 try:
-                    sub_content = file_utils.read_srt_file(item_path)
+                    sub_content = file_utils.read_srt_file(str(item_path))
                     if not sub_content or not sub_content.strip():
                         self.logger.warning(f"Local subtitle '{item}' is empty. Skipping.")
                         continue

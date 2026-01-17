@@ -9,7 +9,7 @@ fallback logic, used primarily by the Celery worker tasks.
 
 import json
 import logging
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,12 +45,12 @@ async def _get_db_settings(db: AsyncSession) -> AppSettings | None:
     return result.scalar_one_or_none()
 
 
-def _get_env_value(env_attr: str) -> Any:
+def _get_env_value(env_attr: str) -> str | int | list[str] | None:
     """Get a value from environment settings."""
-    return getattr(env_settings, env_attr, None)
+    return cast(str | int | list[str] | None, getattr(env_settings, env_attr, None))
 
 
-async def get_effective_setting(db: AsyncSession, field: str) -> str | int | list[str] | None:
+async def get_effective_setting(db: AsyncSession, field: str) -> str | int | list[str] | None:  # noqa: C901
     """
     Get a single effective setting value.
 
@@ -76,22 +76,32 @@ async def get_effective_setting(db: AsyncSession, field: str) -> str | int | lis
                     # Parse JSON arrays
                     if field in JSON_ARRAY_FIELDS:
                         try:
-                            return json.loads(decrypted)
+                            parsed = json.loads(decrypted)
                         except json.JSONDecodeError:
                             logger.warning(f"Failed to parse JSON for {field}")
                             return []
+                        if isinstance(parsed, list) and all(
+                            isinstance(item, str) for item in parsed
+                        ):
+                            return parsed
+                        logger.warning(f"Unexpected JSON format for {field}")
+                        return []
                     return decrypted
                 except ValueError:
                     logger.warning(f"Failed to decrypt {field}, falling back to env")
             elif field in JSON_ARRAY_FIELDS:
                 # Non-encrypted JSON array
                 try:
-                    return json.loads(raw_value)
+                    parsed = json.loads(raw_value)
                 except json.JSONDecodeError:
                     logger.warning(f"Failed to parse JSON for {field}")
                     return []
+                if isinstance(parsed, list) and all(isinstance(item, str) for item in parsed):
+                    return parsed
+                logger.warning(f"Unexpected JSON format for {field}")
+                return []
             else:
-                return raw_value
+                return cast(str | int | list[str] | None, raw_value)
 
     # Fallback to environment
     env_attr = DB_TO_ENV_MAPPING.get(field)

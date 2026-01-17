@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="app.tasks.maintenance.manage_audit_partitions")
-def manage_audit_partitions_task():
+def manage_audit_partitions_task() -> str:
     """
     Periodic task to ensure audit log partitions exist for the next 4 months.
     Run this as an async wrapper for the actual logic.
@@ -27,7 +27,7 @@ def manage_audit_partitions_task():
     return asyncio.run(manage_audit_partitions())
 
 
-async def manage_audit_partitions():
+async def manage_audit_partitions() -> str:
     """
     Logic to check and create monthly partitions for 'audit_logs'.
     Ensures partitions exist for the current month and the next 3 months.

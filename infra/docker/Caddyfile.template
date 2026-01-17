@@ -13,9 +13,6 @@
 		# HSTS (Strict-Transport-Security): Enforce HTTPS for 1 year, include subdomains
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 
-		# Prevent Clickjacking
-		X-Frame-Options "DENY"
-
 		# Prevent MIME Sniffing
 		X-Content-Type-Options "nosniff"
 
@@ -24,6 +21,9 @@
 
 		# Permissions Policy (Restrict browser features)
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+
+		# Cache-Control (Default to no-cache to ensure freshness for dashboard)
+		Cache-Control "no-cache"
 
 		# Remove Server header for obscurity
 		-Server
@@ -34,7 +34,8 @@
 		# style-src 'self' 'unsafe-inline': Allow local styles and inline styles (required for CSS-in-JS/Tailwind)
 		# img-src 'self' data:: Allow local images and data URIs (base64)
 		# connect-src 'self' wss:: Allow XHR/Fetch to same origin and WebSockets to secure protocols
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:;"
+		# frame-ancestors 'none': Prevent embedding in iframes (replaces X-Frame-Options)
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss:; frame-ancestors 'none';"
 	}
 }
 
@@ -46,7 +47,10 @@ http://{$DOMAIN_NAME}, {$DOMAIN_NAME} {
 
 	# Define named matchers
 	@api path /api*
-	@websockets path /ws*
+	@websockets {
+		path /ws*
+		path /api/v1/ws*
+	}
 	@health path /health
 
 	# 0. Handle Health Check requests (for CI/CD verification)
@@ -54,17 +58,7 @@ http://{$DOMAIN_NAME}, {$DOMAIN_NAME} {
 		reverse_proxy {{UPSTREAM_API}}:8000
 	}
 
-	# 1. Handle API requests
-	route @api {
-		reverse_proxy {{UPSTREAM_API}}:8000 {
-			lb_try_duration 5s
-			lb_try_interval 250ms
-			header_up Host {http.request.host}
-			header_up X-Real-IP {http.request.remote}
-		}
-	}
-
-	# 2. Handle WebSocket requests
+	# 1. Handle WebSocket requests (Must be before @api since it overlaps)
 	route @websockets {
 		reverse_proxy {{UPSTREAM_API}}:8000 {
 			lb_try_duration 5s
@@ -73,6 +67,17 @@ http://{$DOMAIN_NAME}, {$DOMAIN_NAME} {
 			header_up X-Real-IP {http.request.remote}
 			header_up Connection {http.request.header.Connection}
 			header_up Upgrade {http.request.header.Upgrade}
+		}
+	}
+
+	# 2. Handle API requests
+	route @api {
+		header Cache-Control "no-store, max-age=0"
+		reverse_proxy {{UPSTREAM_API}}:8000 {
+			lb_try_duration 5s
+			lb_try_interval 250ms
+			header_up Host {http.request.host}
+			header_up X-Real-IP {http.request.remote}
 		}
 	}
 
@@ -98,26 +103,30 @@ http://staging.{$DOMAIN_NAME}, staging.{$DOMAIN_NAME} {
 	import common_security_headers
 
 	@api path /api*
-	@websockets path /ws*
+	@websockets {
+		path /ws*
+		path /api/v1/ws*
+	}
 	@health path /health
 
 	route @health {
 		reverse_proxy subro_staging-api-1:8000
 	}
 
-	route @api {
-		reverse_proxy subro_staging-api-1:8000 {
-			lb_try_duration 5s
-			lb_try_interval 250ms
-		}
-	}
-
+	# Prioritize WebSockets
 	route @websockets {
 		reverse_proxy subro_staging-api-1:8000 {
 			lb_try_duration 5s
 			lb_try_interval 250ms
 			header_up Connection {http.request.header.Connection}
 			header_up Upgrade {http.request.header.Upgrade}
+		}
+	}
+
+	route @api {
+		reverse_proxy subro_staging-api-1:8000 {
+			lb_try_duration 5s
+			lb_try_interval 250ms
 		}
 	}
 

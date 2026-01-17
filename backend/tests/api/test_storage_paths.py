@@ -25,7 +25,9 @@ async def login_user(client: AsyncClient, email: str, password: str) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_superuser_can_add_any_path(test_client: AsyncClient, db_session: AsyncSession):
+async def test_superuser_can_add_any_path(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test that superuser can add any valid path."""
     # Arrange
     superuser = UserFactory.create_user(
@@ -53,7 +55,7 @@ async def test_superuser_can_add_any_path(test_client: AsyncClient, db_session: 
 @pytest.mark.asyncio
 async def test_standard_user_cannot_add_root_path(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test that standard user cannot add a new root path."""
     # Arrange
     user = UserFactory.create_user(
@@ -81,7 +83,7 @@ async def test_standard_user_cannot_add_root_path(
 @pytest.mark.asyncio
 async def test_standard_user_can_add_subdirectory_of_existing_path(
     test_client: AsyncClient, db_session: AsyncSession
-):
+) -> None:
     """Test that standard user can add subdirectory of an existing path."""
     # Arrange: First, create an existing root path in DB
     _existing_path = await crud.storage_path.create(
@@ -122,7 +124,9 @@ async def test_standard_user_can_add_subdirectory_of_existing_path(
 
 
 @pytest.mark.asyncio
-async def test_admin_user_cannot_add_root_path(test_client: AsyncClient, db_session: AsyncSession):
+async def test_admin_user_cannot_add_root_path(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test that admin (non-superuser) cannot add a new root path."""
     # Arrange
     admin = UserFactory.create_user(
@@ -147,7 +151,7 @@ async def test_admin_user_cannot_add_root_path(test_client: AsyncClient, db_sess
 
 
 @pytest.mark.asyncio
-async def test_any_user_can_list_paths(test_client: AsyncClient, db_session: AsyncSession):
+async def test_any_user_can_list_paths(test_client: AsyncClient, db_session: AsyncSession) -> None:
     """Test that any authenticated user can list storage paths."""
     # Arrange
     user = UserFactory.create_user(
@@ -171,7 +175,9 @@ async def test_any_user_can_list_paths(test_client: AsyncClient, db_session: Asy
 
 
 @pytest.mark.asyncio
-async def test_only_superuser_can_delete_path(test_client: AsyncClient, db_session: AsyncSession):
+async def test_only_superuser_can_delete_path(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test that only superuser can delete a storage path."""
     # Arrange: Create a path
     path = await crud.storage_path.create(db_session, obj_in=StoragePathCreate(path="/tmp"))
@@ -200,7 +206,9 @@ async def test_only_superuser_can_delete_path(test_client: AsyncClient, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_user_can_update_path_label(test_client: AsyncClient, db_session: AsyncSession):
+async def test_user_can_update_path_label(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     """Test that any authenticated user can update the label of a storage path."""
     # Arrange: Create a path
     path = await crud.storage_path.create(

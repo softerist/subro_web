@@ -14,11 +14,11 @@ class TestMockScriptBehavior:
     when executed as a subprocess.
     """
 
-    def test_mock_script_exists(self):
+    def test_mock_script_exists(self) -> None:
         """Ensure the mock script file actually exists."""
         assert MOCK_SCRIPT_PATH.exists(), f"Mock script not found at {MOCK_SCRIPT_PATH}"
 
-    def test_mock_script_success_output(self):
+    def test_mock_script_success_output(self) -> None:
         """Test that the script prints to stdout and exits with 0."""
         cmd = [
             sys.executable,
@@ -44,7 +44,7 @@ class TestMockScriptBehavior:
         # Verify stderr is empty (default)
         assert result.stderr == ""
 
-    def test_mock_script_failure_behavior(self):
+    def test_mock_script_failure_behavior(self) -> None:
         """Test that the script produces stderr and non-zero exit code when asked."""
         cmd = [
             sys.executable,
@@ -67,7 +67,7 @@ class TestMockScriptBehavior:
         # Verify stderr
         assert "[MOCK ERROR] Simulated error message 1" in result.stderr
 
-    def test_mock_script_argument_parsing(self):
+    def test_mock_script_argument_parsing(self) -> None:
         """Test that the script accepts the required --folder-path argument."""
         # Run without required args
         cmd = [sys.executable, str(MOCK_SCRIPT_PATH)]

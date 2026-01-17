@@ -68,6 +68,10 @@ volumes:
 
 networks:
   internal_net:
-    # Defined in compose.gateway.yml (when running as one project 'infra')
-    # If running independently, would need external: true.
-    # But current deploy script combines them.
+    # Shared network for all app containers (prod blue/green, staging)
+    # Created by infra project, used as external by app projects
+    name: ${NETWORK_NAME:-infra_internal_net}
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16

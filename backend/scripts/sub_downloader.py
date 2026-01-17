@@ -27,11 +27,11 @@ if hasattr(sys.stderr, "reconfigure"):
 class ErrorTrackingHandler(logging.Handler):
     """Custom handler to track if any ERROR level logs were emitted."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.has_errors = False
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         if record.levelno >= logging.ERROR:
             self.has_errors = True
 
@@ -55,7 +55,7 @@ from app.modules.subtitle.utils.logging_config import setup_logging  # noqa: E40
 logger = logging.getLogger("sub_downloader")
 
 
-def main():
+def main() -> None:
     """Main function to orchestrate the subtitle tool."""
     # Immediate print to verify output capture
     print("=== SUBTITLE DOWNLOADER SCRIPT STARTED ===", flush=True)

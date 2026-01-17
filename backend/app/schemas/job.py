@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, constr
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.models.job import JobStatus
 
@@ -10,8 +10,9 @@ class JobBase(BaseModel):
     folder_path: str = Field(
         min_length=1, max_length=1024, description="Absolute path to the media folder"
     )
-    language: constr(max_length=10) | None = Field(
+    language: str | None = Field(
         default=None,
+        max_length=10,
         description="Optional language code (e.g., 'en', 'es-ES')",
     )
     log_level: str = Field(
@@ -39,8 +40,9 @@ class JobUpdate(BaseModel):
     folder_path: str | None = Field(
         default=None, min_length=1, max_length=1024, description="Absolute path to the media folder"
     )
-    language: constr(max_length=10) | None = Field(
+    language: str | None = Field(
         default=None,
+        max_length=10,
         description="Optional language code (e.g., 'en', 'es-ES')",
     )
     status: JobStatus | None = Field(default=None, description="The current status of the job")

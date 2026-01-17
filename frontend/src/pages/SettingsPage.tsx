@@ -13,8 +13,13 @@ import {
   HardDrive,
   Settings,
   ShieldCheck,
+  Code2,
+  ArrowUpRight,
 } from "lucide-react";
+import { FlowDiagram } from "@/components/common/FlowDiagram";
+import { HelpIcon } from "@/components/common/HelpIcon";
 import { usersApi } from "@/lib/users";
+import { api } from "@/lib/apiClient";
 import { useAuthStore } from "@/store/authStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -40,7 +45,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { MfaSettings } from "@/features/auth/components/MfaSettings";
 import { PasswordSettings } from "@/features/auth/components/PasswordSettings";
 
-type SettingsTab = "integrations" | "qbittorrent" | "security";
+type SettingsTab = "integrations" | "qbittorrent" | "developer" | "security";
 
 export default function SettingsPage() {
   const { user, setUser } = useAuthStore();
@@ -65,10 +70,21 @@ export default function SettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
   const [generatedApiKey, setGeneratedApiKey] = useState<string | null>(null);
+  const [exampleTab, setExampleTab] = useState<"curl" | "python" | "node">(
+    "curl",
+  );
+
+  // qBittorrent webhook configuration state
+  const [isConfiguringWebhook, setIsConfiguringWebhook] = useState(false);
+  const [webhookConfigResult, setWebhookConfigResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+  const [isConfigured, setIsConfigured] = useState(false);
 
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
-    type: "deepl" | "google" | null;
+    type: "deepl" | "google" | "regenerate_api" | null;
     index?: number;
     title: string;
     description: React.ReactNode;
@@ -86,26 +102,27 @@ export default function SettingsPage() {
   const tabs = [
     { id: "integrations", label: "API Integrations", icon: Plug },
     { id: "qbittorrent", label: "qBittorrent", icon: HardDrive },
+    { id: "developer", label: "Developer API", icon: Code2 },
     { id: "security", label: "Security", icon: ShieldCheck },
   ].filter((tab) => (isAdmin ? true : tab.id === "security"));
 
   const hasChanges = Object.keys(formData).length > 0;
 
   const handleRegenerateApiKey = async () => {
-    try {
-      setIsGeneratingKey(true);
-      const createdKey = await usersApi.regenerateApiKey();
-      setGeneratedApiKey(createdKey.api_key);
-      setShowApiKey(true);
-      setUser({ ...user!, api_key_preview: createdKey.preview });
-      setSuccess("API key generated. This value is shown only once.");
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (error) {
-      setError("Failed to regenerate API key.");
-      console.error(error);
-    } finally {
-      setIsGeneratingKey(false);
-    }
+    setConfirmState({
+      open: true,
+      type: "regenerate_api",
+      title: "Confirm API Key Regeneration",
+      description: (
+        <div className="space-y-2">
+          <p>Are you sure you want to regenerate your API key?</p>
+          <p className="text-sm font-bold text-destructive">
+            This will immediately invalidate the current key. Any scripts or
+            integrations using it will stop working until updated.
+          </p>
+        </div>
+      ),
+    });
   };
 
   const handleRevokeApiKey = async () => {
@@ -122,6 +139,65 @@ export default function SettingsPage() {
       console.error(error);
     } finally {
       setIsGeneratingKey(false);
+    }
+  };
+
+  // Configure qBittorrent webhook automatically
+  const handleConfigureQBittorrentWebhook = async () => {
+    setIsConfiguringWebhook(true);
+    setWebhookConfigResult(null);
+    try {
+      const response = await api.post(
+        "/v1/settings/webhook-key/configure-qbittorrent",
+      );
+      const data = response.data;
+      setWebhookConfigResult({
+        success: data.success,
+        message: data.message,
+      });
+      if (data.success) {
+        setSuccess(data.message);
+        setIsConfigured(true);
+        setTimeout(() => setSuccess(null), 5000);
+      } else {
+        setError(data.message);
+        setTimeout(() => setError(null), 5000);
+      }
+    } catch (_err) {
+      const message = "Failed to configure webhook. Check your connection.";
+      setWebhookConfigResult({ success: false, message });
+      setError(message);
+    } finally {
+      setIsConfiguringWebhook(false);
+    }
+  };
+
+  const handleRemoveQBittorrentWebhook = async () => {
+    setIsConfiguringWebhook(true);
+    setWebhookConfigResult(null);
+    try {
+      const response = await api.delete(
+        "/v1/settings/webhook-key/configure-qbittorrent",
+      );
+      const data = response.data;
+      setWebhookConfigResult({
+        success: data.success,
+        message: data.message,
+      });
+      if (data.success) {
+        setSuccess(data.message);
+        setIsConfigured(false);
+        setTimeout(() => setSuccess(null), 5000);
+      } else {
+        setError(data.message);
+        setTimeout(() => setError(null), 5000);
+      }
+    } catch (_err) {
+      const message = "Failed to remove webhook configuration.";
+      setWebhookConfigResult({ success: false, message });
+      setError(message);
+    } finally {
+      setIsConfiguringWebhook(false);
     }
   };
 
@@ -147,6 +223,14 @@ export default function SettingsPage() {
         // to avoid overwriting user typing.
         // But here we just set it initially.
         setDeeplKeys(data.deepl_api_keys);
+      }
+
+      // Load webhook status
+      try {
+        const statusRes = await api.get("/v1/settings/webhook-key/status");
+        setIsConfigured(statusRes.data.configured);
+      } catch {
+        // Silently ignore webhook status errors (endpoint may not exist or user lacks permission)
       }
     } catch (_err) {
       setError("Failed to load settings");
@@ -217,12 +301,8 @@ export default function SettingsPage() {
         ];
         let isEqual = false;
 
-        // Array comparison (for allowed_media_folders)
-        if (Array.isArray(value) && Array.isArray(originalValue)) {
-          isEqual = JSON.stringify(value) === JSON.stringify(originalValue);
-        }
         // Strict equality for primitives
-        else if (value === originalValue) {
+        if (value === originalValue) {
           isEqual = true;
         }
         // Handle empty string vs null/undefined mismatch
@@ -283,27 +363,44 @@ export default function SettingsPage() {
     });
   };
 
-  const executeDelete = async () => {
+  const executeConfirm = async () => {
     setIsSaving(true);
-    setConfirmState((prev) => ({ ...prev, open: false })); // Close dialog immediately or wait? Better wait? No, user wants feedback.
-    // Actually confirming acts as "Save".
-    // We can keep dialog open if we wanted loading state there.
-    // ConfirmDialog has isLoading prop.
-    // Let's implement isLoading on Dialog.
+    // Don't close immediately if we want to show loading state in dialog,
+    // but typically we close and show global loading or keep it open.
+    // The ConfirmDialog component handles isLoading prop by showing spinner on confirm button.
+    // So we keep it open until success.
 
     try {
       let updatePayload: Partial<SettingsUpdate> = {};
       let successMsg = "";
 
-      if (confirmState.type === "deepl" && confirmState.index !== undefined) {
-        // DeepL Deletion
-        const newKeys = deeplKeys.filter((_, i) => i !== confirmState.index);
-        updatePayload = { deepl_api_keys: newKeys };
-        successMsg = "DeepL key removed successfully.";
-      } else if (confirmState.type === "google") {
-        // Google Cloud Removal
-        updatePayload = { google_cloud_credentials: "" };
-        successMsg = "Google Cloud configuration removed.";
+      switch (confirmState.type) {
+        case "deepl":
+          // DeepL Deletion
+          // confirmState.index is guaranteed to be set for DeepL type deletions by UI logic
+          {
+            const newKeys = deeplKeys.filter(
+              (_, i) => i !== confirmState.index!,
+            );
+            updatePayload = { deepl_api_keys: newKeys };
+            successMsg = "DeepL key removed successfully.";
+          }
+          break;
+        case "google":
+          // Google Cloud Removal
+          updatePayload = { google_cloud_credentials: "" };
+          successMsg = "Google Cloud configuration removed.";
+          break;
+        case "regenerate_api":
+          // API Key Regeneration
+          {
+            const createdKey = await usersApi.regenerateApiKey();
+            setGeneratedApiKey(createdKey.api_key);
+            setShowApiKey(true);
+            setUser({ ...user!, api_key_preview: createdKey.preview });
+            successMsg = "API key generated. This value is shown only once.";
+          }
+          break;
       }
 
       if (Object.keys(updatePayload).length > 0) {
@@ -318,22 +415,29 @@ export default function SettingsPage() {
         // Clean up formData if it contained related pending changes
         setFormData((prev) => {
           const newData = { ...prev };
-          if (confirmState.type === "deepl") {
-            delete newData.deepl_api_keys;
-          } else if (confirmState.type === "google") {
-            delete newData.google_cloud_credentials;
+          switch (confirmState.type) {
+            case "deepl":
+              delete newData.deepl_api_keys;
+              break;
+            case "google":
+              delete newData.google_cloud_credentials;
+              break;
           }
           return newData;
         });
-
-        setSuccess(successMsg);
-        setTimeout(() => setSuccess(null), 3000);
       }
+
+      setSuccess(successMsg);
+      // Close dialog on success
+      setConfirmState((prev) => ({ ...prev, open: false, type: null }));
+      setTimeout(() => setSuccess(null), 3000);
     } catch (_err) {
-      setError("Failed to execute removal.");
+      setError("Failed to execute action.");
+      // Close dialog on error? Or let user retry? Let's keep open on error but standard is close.
+      setConfirmState((prev) => ({ ...prev, open: false, type: null }));
     } finally {
       setIsSaving(false);
-      setConfirmState((prev) => ({ ...prev, open: false, type: null }));
+      setIsGeneratingKey(false);
     }
   };
 
@@ -341,6 +445,18 @@ export default function SettingsPage() {
     setFormData({});
     if (settings?.deepl_api_keys) {
       setDeeplKeys(settings.deepl_api_keys);
+    }
+  };
+
+  const handleCopyDeveloperApiKey = async () => {
+    if (!generatedApiKey) return;
+
+    try {
+      await navigator.clipboard.writeText(generatedApiKey);
+      setSuccess("Copied!");
+      setTimeout(() => setSuccess(null), 2000);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -609,7 +725,7 @@ export default function SettingsPage() {
                         htmlFor="opensubtitles-api-key"
                         className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer"
                       >
-                        API Key
+                        OpenSubtitles API Key
                       </Label>
                       {settings?.opensubtitles_api_key &&
                       settings.opensubtitles_api_key.trim() !== "" ? (
@@ -795,11 +911,9 @@ export default function SettingsPage() {
                         if (!key.trim()) {
                           status = "not_connected";
                         } else {
-                          let suffix = key;
-                          if (key.length >= 8) {
-                            suffix = key.slice(-8);
-                          } else if (key.includes("...")) {
-                            suffix = key.replace(/^\.\.\./, "");
+                          let suffix = key.replace(/^\.\.\./, "");
+                          if (suffix.length >= 8) {
+                            suffix = suffix.slice(-8);
                           }
 
                           usage = settings?.deepl_usage?.find((u) =>
@@ -1245,26 +1359,331 @@ export default function SettingsPage() {
         {/* qBittorrent */}
         {currentTab === "qbittorrent" && (
           <>
-            <CardHeader>
-              <CardTitle className="text-lg sm:text-xl font-bold title-gradient">
-                qBittorrent Settings
+            <CardHeader className="pb-4">
+              <CardTitle className="text-xl sm:text-2xl font-bold title-gradient flex items-center gap-2">
+                qBittorrent Integration
+                <HelpIcon tooltip="Connect Subro to your qBittorrent client for automatic subtitle management." />
               </CardTitle>
               <CardDescription className="text-muted-foreground">
-                Configure connection to your qBittorrent instance for torrent
-                monitoring.
+                Automate subtitle downloads whenever a new torrent completes.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* API Key Section */}
-              <div className="bg-card/50 rounded-lg p-4 border border-border">
-                <div className="flex items-center justify-between mb-4">
+            <CardContent className="space-y-8">
+              {/* Auto-Configure Section */}
+              <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-primary/5 p-6">
+                <div className="relative z-10 space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <h4 className="text-lg font-bold text-foreground mb-2">
+                        {isConfigured
+                          ? "Integration Active"
+                          : "Automatic Setup"}
+                      </h4>
+                      <p className="text-sm text-muted-foreground">
+                        {isConfigured
+                          ? "qBittorrent is configured to notify Subro when downloads complete."
+                          : "Click below to automatically configure qBittorrent to download subtitles when torrents complete."}
+                      </p>
+                      <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+                        <li className="flex items-center gap-2">
+                          <span className="h-1 w-1 rounded-full bg-primary/60" />
+                          {isConfigured
+                            ? "Webhook key is active"
+                            : "Generates a dedicated webhook key"}
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <span className="h-1 w-1 rounded-full bg-primary/60" />
+                          {isConfigured
+                            ? "Subro is listening for completion events"
+                            : "Configures qBittorrent to call Subro on completion"}
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={
+                      isConfigured
+                        ? handleRemoveQBittorrentWebhook
+                        : handleConfigureQBittorrentWebhook
+                    }
+                    disabled={isConfiguringWebhook}
+                    className={`w-full sm:w-auto text-white transition-all shadow-lg ${
+                      isConfigured
+                        ? "bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 shadow-red-500/20 hover:shadow-red-500/40"
+                        : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-500/20 hover:shadow-emerald-500/40"
+                    }`}
+                  >
+                    {isConfiguringWebhook ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        {isConfigured ? "Removing..." : "Configuring..."}
+                      </>
+                    ) : (
+                      <>
+                        {isConfigured ? (
+                          <Trash2 className="h-4 w-4 mr-2" />
+                        ) : (
+                          <Settings className="h-4 w-4 mr-2" />
+                        )}
+                        {isConfigured
+                          ? "Remove Integration"
+                          : "Configure Automatically"}
+                      </>
+                    )}
+                  </Button>
+
+                  {webhookConfigResult && (
+                    <div
+                      className={`mt-4 p-3 rounded-lg text-sm ${
+                        webhookConfigResult.success
+                          ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                          : "bg-destructive/10 border border-destructive/30 text-destructive"
+                      }`}
+                    >
+                      {webhookConfigResult.message}
+                    </div>
+                  )}
+                </div>
+                {/* Decorative background element */}
+                <div className="absolute -right-8 -bottom-8 h-32 w-32 bg-primary/10 blur-3xl rounded-full" />
+              </div>
+
+              {/* Visual Flow Diagram */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    Data Flow
+                  </h4>
+                  <HelpIcon tooltip="How information moves from your torrent client to the subtitle download." />
+                </div>
+                <FlowDiagram isActive={true} />
+              </div>
+
+              {/* Setup Guide */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    Setup Guide
+                  </h4>
+                  <HelpIcon tooltip="Follow these steps to configure your qBittorrent instance." />
+                </div>
+
+                <div className="grid gap-4">
+                  <div className="rounded-xl border border-border bg-card/50 p-4 hover:border-emerald-500/30 transition-colors group">
+                    <div className="flex gap-4">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600 font-bold text-sm">
+                        1
+                      </div>
+                      <div className="flex-1">
+                        <h5 className="text-sm font-bold text-foreground mb-1">
+                          Place Webhook Script
+                        </h5>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          The script is located at:{" "}
+                          <code className="bg-muted px-1 rounded">
+                            /app/scripts/qbittorrent-nox-webhook.sh
+                          </code>{" "}
+                          inside the container.
+                          <HelpIcon tooltip="This script is already mounted to your server's host system by default." />
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-card/50 p-4 hover:border-emerald-500/30 transition-colors group">
+                    <div className="flex gap-4">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600 font-bold text-sm">
+                        2
+                      </div>
+                      <div className="flex-1">
+                        <h5 className="text-sm font-bold text-foreground mb-1">
+                          Configure qBittorrent
+                        </h5>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          Go to{" "}
+                          <span className="font-semibold">
+                            Tools › Options › Downloads › Run external program
+                            on torrent completion
+                          </span>
+                          .
+                        </p>
+                        <div className="space-y-2">
+                                                  <div className="text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
+                                                    Command to Paste                            <span
+                              className="text-emerald-500 cursor-pointer hover:underline"
+                              onClick={async () => {
+                                const cmd = `/usr/bin/bash /opt/subro_web/scripts/qbittorrent-nox-webhook.sh "%F"`;
+                                try {
+                                  await navigator.clipboard.writeText(cmd);
+                                  setSuccess("Command copied!");
+                                  setTimeout(() => setSuccess(null), 2000);
+                                } catch (e) {
+                                  console.error(e);
+                                }
+                              }}
+                            >
+                              Click to copy
+                            </span>
+                          </div>
+                          <div
+                            className="p-3 bg-muted/50 rounded-lg font-mono text-xs border border-border cursor-pointer hover:bg-muted transition-colors break-all"
+                            onClick={async () => {
+                              const cmd = `/usr/bin/bash /opt/subro_web/scripts/qbittorrent-nox-webhook.sh "%F"`;
+                              try {
+                                await navigator.clipboard.writeText(cmd);
+                                setSuccess("Command copied!");
+                                setTimeout(() => setSuccess(null), 2000);
+                              } catch (e) {
+                                console.error(e);
+                              }
+                            }}
+                          >
+                            {`/usr/bin/bash /opt/subro_web/scripts/qbittorrent-nox-webhook.sh "%F"`}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 space-y-6 max-w-xl">
+                <div className="flex items-center gap-2 mb-2">
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    qBittorrent connection (Optional)
+                  </h4>
+                  <HelpIcon tooltip="These credentials allow Subro to manually query your qBittorrent instance if needed." />
+                </div>
+
+                <div className="pl-10 space-y-6 max-w-xl">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="qbittorrent-host"
+                      className="text-xs uppercase tracking-wider text-muted-foreground"
+                    >
+                      Host
+                    </Label>
+                    <Input
+                      id="qbittorrent-host"
+                      name="qbittorrent_host"
+                      placeholder={
+                        settings?.qbittorrent_host || "Not configured"
+                      }
+                      value={formData.qbittorrent_host || ""}
+                      onChange={(e) =>
+                        updateField("qbittorrent_host", e.target.value)
+                      }
+                      onKeyDown={handleInputKeyDown}
+                      className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="qbittorrent-port"
+                      className="text-xs uppercase tracking-wider text-muted-foreground"
+                    >
+                      Port
+                    </Label>
+                    <Input
+                      id="qbittorrent-port"
+                      name="qbittorrent_port"
+                      type="number"
+                      placeholder={
+                        settings?.qbittorrent_port?.toString() || "8080"
+                      }
+                      value={formData.qbittorrent_port || ""}
+                      onChange={(e) =>
+                        updateField(
+                          "qbittorrent_port",
+                          parseInt(e.target.value) || 0,
+                        )
+                      }
+                      onKeyDown={handleInputKeyDown}
+                      className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="qbittorrent-username"
+                      className="text-xs uppercase tracking-wider text-muted-foreground"
+                    >
+                      Username
+                    </Label>
+                    <Input
+                      id="qbittorrent-username"
+                      name="qbittorrent_username"
+                      placeholder={
+                        settings?.qbittorrent_username || "Not configured"
+                      }
+                      value={formData.qbittorrent_username || ""}
+                      onChange={(e) =>
+                        updateField("qbittorrent_username", e.target.value)
+                      }
+                      onKeyDown={handleInputKeyDown}
+                      autoComplete="off"
+                      className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="qbittorrent-password"
+                      className="text-xs uppercase tracking-wider text-muted-foreground"
+                    >
+                      Password
+                    </Label>
+                    <Input
+                      id="qbittorrent-password"
+                      name="qbittorrent_password"
+                      type="password"
+                      placeholder={
+                        settings?.qbittorrent_password
+                          ? "••••••••"
+                          : "Not configured"
+                      }
+                      value={formData.qbittorrent_password || ""}
+                      onChange={(e) =>
+                        updateField("qbittorrent_password", e.target.value)
+                      }
+                      onKeyDown={handleInputKeyDown}
+                      autoComplete="new-password"
+                      className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </>
+        )}
+
+        {/* Developer API */}
+        {currentTab === "developer" && (
+          <>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-xl sm:text-2xl font-bold title-gradient flex items-center gap-2">
+                Developer API
+                <HelpIcon tooltip="Your secret key for programmatic access to the Subro API." />
+              </CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Build custom integrations and automate subtitle workflows.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {/* API Key Card */}
+              <div className="bg-card/50 rounded-2xl border border-border p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                   <div>
-                    <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
-                      <Terminal className="h-4 w-4 text-primary/80" />
-                      Webhook Integration / API Key
+                    <h4 className="text-lg font-bold text-foreground flex items-center gap-2">
+                      <Terminal className="h-5 w-5 text-primary/80" />
+                      Authentication Key
                     </h4>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Use this key to trigger downloads from qBittorrent
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Include this in the{" "}
+                      <code className="bg-muted px-1 rounded text-xs">
+                        X-API-Key
+                      </code>{" "}
+                      header.
+                      <HelpIcon tooltip="Never share this key publicly. It provides full access to your account's job management." />
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -1273,10 +1692,10 @@ export default function SettingsPage() {
                       size="sm"
                       onClick={handleRegenerateApiKey}
                       disabled={isGeneratingKey}
-                      className="h-8 border-emerald-400 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-blue-500 dark:text-blue-400 dark:bg-blue-500/25 dark:hover:bg-blue-500/40 dark:hover:text-blue-300"
+                      className="h-9 border-primary/30 hover:border-primary/50 transition-all font-medium"
                     >
                       <RefreshCw
-                        className={`h-3.5 w-3.5 mr-2 ${isGeneratingKey ? "animate-spin" : ""}`}
+                        className={`h-4 w-4 mr-2 ${isGeneratingKey ? "animate-spin" : ""}`}
                       />
                       {user?.api_key_preview ? "Regenerate" : "Generate"}
                     </Button>
@@ -1286,9 +1705,9 @@ export default function SettingsPage() {
                         size="sm"
                         onClick={handleRevokeApiKey}
                         disabled={isGeneratingKey}
-                        className="h-8 border-destructive/50 text-destructive hover:bg-destructive/10 dark:border-red-500 dark:text-red-400 dark:bg-red-500/25 dark:hover:bg-red-500/40 dark:hover:text-red-300"
+                        className="h-9 border-destructive/30 text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20 transition-all"
                       >
-                        <Trash2 className="h-3.5 w-3.5 mr-2" />
+                        <Trash2 className="h-4 w-4 mr-2" />
                         Revoke
                       </Button>
                     )}
@@ -1296,218 +1715,286 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-4">
-                  {/* API Key Value */}
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="qbittorrent-api-key"
-                      className="text-xs uppercase tracking-wider text-muted-foreground"
-                    >
-                      Your API Key
-                    </Label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <Input
-                          id="qbittorrent-api-key"
-                          name="api_key"
-                          readOnly
-                          value={
-                            generatedApiKey ||
-                            user?.api_key_preview ||
-                            "No API key generated — click Generate to create one"
-                          }
-                          type={
-                            generatedApiKey && !showApiKey ? "password" : "text"
-                          }
-                          className={`font-mono bg-background border-input pr-10 ${generatedApiKey || user?.api_key_preview ? "text-foreground" : "text-muted-foreground italic"}`}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-0 top-0 h-full text-muted-foreground hover:text-foreground"
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          disabled={!generatedApiKey}
-                          aria-label={
-                            showApiKey ? "Hide API key" : "Show API key"
-                          }
-                        >
-                          {showApiKey ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
+                  <div className="relative group">
+                    <Input
+                      id="developer-api-key"
+                      readOnly
+                      value={
+                        generatedApiKey ||
+                        user?.api_key_preview ||
+                        "No API key generated — click Generate to create one"
+                      }
+                      type={
+                        generatedApiKey && !showApiKey ? "password" : "text"
+                      }
+                      className={`font-mono bg-background/80 border-input pr-24 h-12 text-sm ${generatedApiKey || user?.api_key_preview ? "text-foreground" : "text-muted-foreground italic"}`}
+                    />
+                    <div className="absolute right-0 top-0 h-full flex items-center pr-2 gap-1">
                       <Button
-                        variant="secondary"
+                        type="button"
+                        variant="ghost"
                         size="icon"
-                        className="bg-secondary/70 hover:bg-secondary text-secondary-foreground"
-                        onClick={() => {
-                          if (generatedApiKey) {
-                            navigator.clipboard.writeText(generatedApiKey);
-                            setSuccess("API Key copied to clipboard.");
-                            setTimeout(() => setSuccess(null), 2000);
-                          }
-                        }}
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        disabled={!generatedApiKey}
+                        aria-label={
+                          showApiKey ? "Hide API key" : "Show API key"
+                        }
+                      >
+                        {showApiKey ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={handleCopyDeveloperApiKey}
                         disabled={!generatedApiKey}
                         aria-label="Copy API key"
                       >
                         <Copy className="h-4 w-4" />
                       </Button>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      {generatedApiKey
-                        ? "Save this key now. It won't be shown again."
-                        : "Only a preview is shown. Regenerate to view a new key."}
-                    </p>
                   </div>
-
-                  {/* qBittorrent Command Helper */}
                   {generatedApiKey && (
-                    <div className="space-y-2">
-                      <Label className="text-xs tracking-wider text-muted-foreground flex items-center justify-between">
-                        <span>
-                          qBittorrent Command (&quot;Run external program&quot;)
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">
-                          Click to copy
-                        </span>
-                      </Label>
-                      <div
-                        className="rounded-md border border-emerald-200 dark:border-sky-900/50 bg-emerald-50 dark:bg-sky-950/30 p-3 font-mono text-xs text-emerald-900 dark:text-sky-200 break-all cursor-pointer transition-colors hover:bg-emerald-100 dark:hover:bg-sky-950/50 hover:border-emerald-300 dark:hover:border-sky-800"
-                        onClick={() => {
-                          const cmd = `curl -X POST ${window.location.origin}/api/v1/jobs/ -H "X-API-Key: ${generatedApiKey}" -H "Content-Type: application/json" -d "{\\"folder_path\\": \\"%R/%N\\", \\"log_level\\": \\"INFO\\"}"`;
-                          navigator.clipboard.writeText(cmd);
-                          setSuccess("Command copied to clipboard.");
-                          setTimeout(() => setSuccess(null), 2000);
-                        }}
-                      >
-                        curl -X POST {window.location.origin}/api/v1/jobs/ \
-                        <br />
-                        &nbsp;&nbsp;-H &quot;X-API-Key: {generatedApiKey}&quot;
-                        \
-                        <br />
-                        &nbsp;&nbsp;-H &quot;Content-Type:
-                        application/json&quot; \<br />
-                        &nbsp;&nbsp;-d &quot;&#123;\&quot;folder_path\&quot;:
-                        \&quot;%R/%N\&quot;, \&quot;log_level\&quot;:
-                        \&quot;INFO\&quot;&#125;&quot;
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">
-                        Note: Replace <code>%R/%N</code> with qBittorrent&apos;s
-                        path variables if needed (e.g., <code>%D/%N</code> or{" "}
-                        <code>%F</code>).
+                    <div className="px-1" aria-live="polite">
+                      <p className="text-xs font-semibold text-foreground flex items-center gap-2">
+                        <span>New key:</span>
+                        <code className="rounded bg-muted px-2 py-1 font-mono break-all">
+                          {generatedApiKey}
+                        </code>
                       </p>
                     </div>
                   )}
+                  <div className="flex items-center justify-between px-1">
+                    <p className="text-[11px] text-muted-foreground">
+                      {generatedApiKey
+                        ? "✓ Key generated. Copy it now, it won't be shown again."
+                        : user?.api_key_preview
+                          ? "Authentication key is configured and active."
+                          : "Start by generating a new developer key."}
+                    </p>
+                    <HelpIcon tooltip="Only a preview is stored for existing keys. Regenerating allows you to see the full key again." />
+                  </div>
                 </div>
               </div>
 
-              <div className="pl-10 space-y-6 max-w-xl">
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="qbittorrent-host"
-                    className="text-xs uppercase tracking-wider text-muted-foreground"
-                  >
-                    Host
-                  </Label>
-                  <Input
-                    id="qbittorrent-host"
-                    name="qbittorrent_host"
-                    placeholder={settings?.qbittorrent_host || "Not configured"}
-                    value={formData.qbittorrent_host || ""}
-                    onChange={(e) =>
-                      updateField("qbittorrent_host", e.target.value)
-                    }
-                    onKeyDown={handleInputKeyDown}
-                    className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
-                  />
+              {/* Quick Start Examples */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    Quick Start Examples
+                  </h4>
+                  <HelpIcon tooltip="Ready-to-use code snippets for common integrations." />
                 </div>
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="qbittorrent-port"
-                    className="text-xs uppercase tracking-wider text-muted-foreground"
-                  >
-                    Port
-                  </Label>
-                  <Input
-                    id="qbittorrent-port"
-                    name="qbittorrent_port"
-                    type="number"
-                    placeholder={
-                      settings?.qbittorrent_port?.toString() || "8080"
-                    }
-                    value={formData.qbittorrent_port || ""}
-                    onChange={(e) =>
-                      updateField(
-                        "qbittorrent_port",
-                        parseInt(e.target.value) || 0,
-                      )
-                    }
-                    onKeyDown={handleInputKeyDown}
-                    className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
-                  />
+
+                <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                  <div className="flex border-b border-border bg-muted/30">
+                    <button
+                      onClick={() => setExampleTab("curl")}
+                      className={`px-4 py-2.5 text-xs font-bold transition-all ${
+                        exampleTab === "curl"
+                          ? "border-b-2 border-primary text-primary bg-background/50"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      cURL
+                    </button>
+                    <button
+                      onClick={() => setExampleTab("python")}
+                      className={`px-4 py-2.5 text-xs font-bold transition-all ${
+                        exampleTab === "python"
+                          ? "border-b-2 border-primary text-primary bg-background/50"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Python
+                    </button>
+                    <button
+                      onClick={() => setExampleTab("node")}
+                      className={`px-4 py-2.5 text-xs font-bold transition-all ${
+                        exampleTab === "node"
+                          ? "border-b-2 border-primary text-primary bg-background/50"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Node.js
+                    </button>
+                  </div>
+                  <div className="p-4 bg-muted/20">
+                    <div className="relative group">
+                      <pre className="text-[11px] font-mono leading-relaxed text-foreground overflow-x-auto p-4 rounded-xl bg-background/50 border border-border/50">
+                        {exampleTab === "curl" &&
+                          `curl -X POST ${window.location.origin}/api/v1/jobs/ \\
+  -H "X-API-Key: ${generatedApiKey || user?.api_key_preview || "YOUR_API_KEY"}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "folder_path": "/media/movies/Inception",
+    "log_level": "INFO"
+  }'`}
+                        {exampleTab === "python" &&
+                          `import requests
+
+url = "${window.location.origin}/api/v1/jobs/"
+headers = {
+    "X-API-Key": "${generatedApiKey || user?.api_key_preview || "YOUR_API_KEY"}",
+    "Content-Type": "application/json"
+}
+data = {
+    "folder_path": "/media/movies/Inception",
+    "log_level": "INFO"
+}
+
+response = requests.post(url, headers=headers, json=data)
+print(response.json())`}
+                        {exampleTab === "node" &&
+                          `const axios = require('axios');
+
+const url = '${window.location.origin}/api/v1/jobs/';
+const headers = {
+  'X-API-Key': '${generatedApiKey || user?.api_key_preview || "YOUR_API_KEY"}',
+  'Content-Type': 'application/json'
+};
+const data = {
+  folder_path: '/media/movies/Inception',
+  log_level: 'INFO'
+};
+
+axios.post(url, data, { headers })
+  .then(response => console.log(response.data))
+  .catch(error => console.error(error));`}
+                      </pre>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-2 top-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={async () => {
+                          let code = "";
+                          if (exampleTab === "curl") {
+                            code = `curl -X POST ${window.location.origin}/api/v1/jobs/ \\
+  -H "X-API-Key: ${generatedApiKey || user?.api_key_preview || "YOUR_API_KEY"}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "folder_path": "/media/movies/Inception",
+    "log_level": "INFO"
+  }'`;
+                          } else {
+                            switch (exampleTab) {
+                              case "python":
+                                code = `import requests
+
+url = "${window.location.origin}/api/v1/jobs/"
+headers = {
+    "X-API-Key": "${generatedApiKey || user?.api_key_preview || "YOUR_API_KEY"}",
+    "Content-Type": "application/json"
+}
+data = {
+    "folder_path": "/media/movies/Inception",
+    "log_level": "INFO"
+}
+
+response = requests.post(url, headers=headers, json=data)
+print(response.json())`;
+                                break;
+                              case "node":
+                                code = `const axios = require('axios');
+
+const url = '${window.location.origin}/api/v1/jobs/';
+const headers = {
+  'X-API-Key': '${generatedApiKey || user?.api_key_preview || "YOUR_API_KEY"}',
+  'Content-Type': 'application/json'
+};
+const data = {
+  folder_path: '/media/movies/Inception',
+  log_level: 'INFO'
+};
+
+axios.post(url, data, { headers })
+  .then(response => console.log(response.data))
+  .catch(error => console.error(error));`;
+                                break;
+                            }
+                          }
+                          try {
+                            await navigator.clipboard.writeText(code);
+                            setSuccess("Snippet copied!");
+                            setTimeout(() => setSuccess(null), 2000);
+                          } catch (err) {
+                            console.error(err);
+                          }
+                        }}
+                        aria-label="Copy code snippet"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="qbittorrent-username"
-                    className="text-xs uppercase tracking-wider text-muted-foreground"
-                  >
-                    Username
-                  </Label>
-                  <Input
-                    id="qbittorrent-username"
-                    name="qbittorrent_username"
-                    placeholder={
-                      settings?.qbittorrent_username || "Not configured"
-                    }
-                    value={formData.qbittorrent_username || ""}
-                    onChange={(e) =>
-                      updateField("qbittorrent_username", e.target.value)
-                    }
-                    onKeyDown={handleInputKeyDown}
-                    autoComplete="off"
-                    className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
-                  />
+              </div>
+
+              {/* API Documentation Card */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    API Documentation
+                  </h4>
+                  <HelpIcon tooltip="View rate limits and more endpoints." />
                 </div>
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="qbittorrent-password"
-                    className="text-xs uppercase tracking-wider text-muted-foreground"
-                  >
-                    Password
-                  </Label>
-                  <Input
-                    id="qbittorrent-password"
-                    name="qbittorrent_password"
-                    type="password"
-                    placeholder={
-                      settings?.qbittorrent_password
-                        ? "••••••••"
-                        : "Not configured"
-                    }
-                    value={formData.qbittorrent_password || ""}
-                    onChange={(e) =>
-                      updateField("qbittorrent_password", e.target.value)
-                    }
-                    onKeyDown={handleInputKeyDown}
-                    autoComplete="new-password"
-                    className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full"
-                  />
+                <div className="rounded-xl border border-border p-4 bg-card/30">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <h5 className="text-sm font-bold flex items-center gap-2">
+                        Interactive API Explorer
+                        <HelpIcon tooltip="Explore all available endpoints in the interactive Swagger UI." />
+                      </h5>
+                      <p className="text-xs text-muted-foreground">
+                        Access the full OpenAPI specification and test endpoints
+                        directly.
+                      </p>
+                    </div>
+                    <Button
+                      variant="link"
+                      className="text-primary font-bold flex items-center gap-2 p-0 h-auto"
+                      asChild
+                    >
+                      <a href="/docs" target="_blank" rel="noopener noreferrer">
+                        Open Docs
+                        <div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center">
+                          <ArrowUpRight className="h-3 w-3" />
+                        </div>
+                      </a>
+                    </Button>
+                  </div>
+
+                  <div className="mt-6 pt-6 border-t border-border">
+                    <div className="flex items-center justify-between mb-3 text-xs">
+                      <span className="font-bold flex items-center gap-2 text-muted-foreground uppercase tracking-widest">
+                        Rate Limits
+                        <HelpIcon tooltip="Remaining requests per minute for your specific API key." />
+                      </span>
+                      <span className="font-mono text-primary">100 / min</span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-primary h-full w-[10%]" />
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>
           </>
         )}
-      </Card>
 
-      {/* Security Tab Content */}
-      {currentTab === "security" && (
-        <div className="space-y-6" ref={cardRef}>
-          <PasswordSettings />
-          <MfaSettings />
-        </div>
-      )}
+        {/* Security Tab Content */}
+        {currentTab === "security" && (
+          <div className="space-y-6" ref={cardRef}>
+            <PasswordSettings />
+            <MfaSettings />
+          </div>
+        )}
+      </Card>
 
       {isAdmin && (
         <SavePill
@@ -1530,10 +2017,14 @@ export default function SettingsPage() {
           }
           title={confirmState.title}
           description={confirmState.description}
-          onConfirm={executeDelete}
+          onConfirm={executeConfirm}
           isLoading={isSaving}
-          variant="destructive"
-          confirmLabel="Remove"
+          variant={
+            confirmState.type === "regenerate_api" ? "default" : "destructive"
+          }
+          confirmLabel={
+            confirmState.type === "regenerate_api" ? "Regenerate" : "Remove"
+          }
           targetRect={confirmState.targetRect}
         />
       )}

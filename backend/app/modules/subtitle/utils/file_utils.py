@@ -43,7 +43,7 @@ if rarfile:
 
 
 # --- Helper Functions ---
-def get_preferred_subtitle_path(base_path_no_ext, language_code):
+def get_preferred_subtitle_path(base_path_no_ext: str, language_code: str) -> str:
     """
     Generates the standard path for a subtitle file (using .srt).
     Removes existing language codes before appending the new one.
@@ -59,7 +59,7 @@ def get_preferred_subtitle_path(base_path_no_ext, language_code):
 # --- Encoding Detection ---
 
 
-def detect_encoding(file_path, default="utf-8"):
+def detect_encoding(file_path: str | Path, default: str = "utf-8") -> str:
     """Detects the encoding of a file using chardet."""
     file_path_str = str(file_path)  # Ensure string path
     if not Path(file_path_str).exists():
@@ -200,7 +200,7 @@ def write_srt_file(file_path: str, content: str) -> None:
 # --- Archive Extraction ---
 
 
-def extract_archive(archive_path, target_dir):  # noqa: C901
+def extract_archive(archive_path: str | Path, target_dir: str | Path) -> bool:  # noqa: C901
     """Extracts zip or rar archives to the target directory."""
     archive_path_str = str(archive_path)  # Ensure string path
     target_dir_str = str(target_dir)  # Ensure string path
@@ -284,7 +284,7 @@ def extract_archive(archive_path, target_dir):  # noqa: C901
 # --- Directory/File Manipulation & Cleanup ---
 
 
-def clean_temp_directory(temp_dir_path):
+def clean_temp_directory(temp_dir_path: str | None) -> None:
     """Safely removes a temporary directory and its contents."""
     if temp_dir_path and Path(temp_dir_path).exists() and Path(temp_dir_path).is_dir():
         # Check if path is within expected temp locations (optional safety)
@@ -306,7 +306,9 @@ def clean_temp_directory(temp_dir_path):
         logging.debug(f"Temporary directory does not exist or is invalid: {temp_dir_path}")
 
 
-def find_project_root(start_path, markers=(".git", "src", "config", "requirements.txt")):
+def find_project_root(
+    start_path: str | Path, markers: tuple[str, ...] = (".git", "src", "config", "requirements.txt")
+) -> Path:
     """Finds the project root directory by searching upwards for common markers."""
     current_path = Path(start_path).resolve()
     while True:
@@ -324,7 +326,7 @@ def find_project_root(start_path, markers=(".git", "src", "config", "requirement
         current_path = parent_path
 
 
-def remove_unmatched_subtitles(target_dir, processed_subtitle_paths):
+def remove_unmatched_subtitles(target_dir: str | Path, processed_subtitle_paths: set[str]) -> None:
     """
     Removes subtitle files (.srt, .sub, .ass) from a directory (recursively)
     that were not successfully processed/moved out. Used for cleaning temp dirs.
@@ -374,8 +376,9 @@ def remove_unmatched_subtitles(target_dir, processed_subtitle_paths):
 
 
 def cleanup_target_directory(  # noqa: C901
-    target_dir, video_extensions=(".mkv", ".mp4", ".avi", ".mov", ".wmv")
-):  # TO BE ALLIGNED WITH from app.modules.subtitle.core.constants import VIDEO_EXTENSIONS
+    target_dir: str | Path,
+    video_extensions: tuple[str, ...] = (".mkv", ".mp4", ".avi", ".mov", ".wmv"),
+) -> None:
     """
     Performs final cleanup on the main media directory:
     1. Removes subtitle files (.lang.srt, etc.) without a matching video file.

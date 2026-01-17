@@ -70,7 +70,7 @@ async def create_test_job(db_session, status=JobStatus.PENDING):
 
 
 @pytest.mark.asyncio
-async def test_task_runs_mock_script_success(db_session: AsyncSession, mock_deps):
+async def test_task_runs_mock_script_success(db_session: AsyncSession, mock_deps) -> None:
     """Verifies successful script execution (Exit Code 0)."""
     mock_redis, mock_db_ctx = mock_deps
     job_id = await create_test_job(db_session)
@@ -98,7 +98,7 @@ async def test_task_runs_mock_script_success(db_session: AsyncSession, mock_deps
 
 
 @pytest.mark.asyncio
-async def test_task_runs_mock_script_failure(db_session: AsyncSession, mock_deps):
+async def test_task_runs_mock_script_failure(db_session: AsyncSession, mock_deps) -> None:
     """Verifies script failure (Non-Zero Exit Code)."""
     mock_redis, mock_db_ctx = mock_deps
     job_id = await create_test_job(db_session)
@@ -188,7 +188,7 @@ async def test_task_runs_mock_script_failure(db_session: AsyncSession, mock_deps
 
 
 @pytest.mark.asyncio
-async def test_task_setup_aborted_if_cancelled(db_session: AsyncSession, mock_deps):
+async def test_task_setup_aborted_if_cancelled(db_session: AsyncSession, mock_deps) -> None:
     """Verifies task aborts immediately if Job is CANCELLING before start."""
     mock_redis, mock_db_ctx = mock_deps
     # Create job already in CANCELLING state

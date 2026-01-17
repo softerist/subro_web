@@ -9,7 +9,7 @@ FROM ${BASE_IMAGE} AS base
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Define the Poetry version as a build argument
-ARG POETRY_VERSION=2.1.2
+ARG POETRY_VERSION
 
 # Define APP_HOME early for clarity
 ENV APP_HOME=/app \
@@ -38,6 +38,8 @@ RUN apt-get update && apt-get upgrade -y && \
     gosu \
     ca-certificates \
     curl \
+    postgresql-client \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # Symlink python3 to python for convenience
@@ -167,6 +169,11 @@ RUN chmod +x /usr/local/bin/alass-cli
 COPY --chown=appuser:appuser --from=development /app/nltk_data /app/nltk_data
 ENV NLTK_DATA=/app/nltk_data
 
+# Create APP_STATE_DIR for celery beat schedule and other runtime state
+# This must exist before running as appuser since entrypoint skips chown in production
+RUN mkdir -p /app/.local/state/subro-web /app/logs && \
+    chown -R appuser:appuser /app/.local /app/logs
+
 EXPOSE 8000
 
 # Entrypoint and CMD
@@ -186,4 +193,5 @@ RUN poetry install --with dev --no-root --sync --no-cache && \
 
 # --- Production Stage (Worker) ---
 FROM production-api AS production-worker
+USER appuser
 CMD ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=INFO"]

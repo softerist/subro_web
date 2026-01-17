@@ -89,12 +89,19 @@ docker_compose_pull_with_retry() {
 
 log "--- Staging Deployment Started ---"
 
+# Source .env.staging to get DOCKER_IMAGE_* variables set by CI
+# shellcheck disable=SC1090
+set -a
+source "$ENV_FILE"
+set +a
+
 # Export variables for compose file expansion
 export PROJECT_ENV_FILE="$ENV_FILE"
 export NETWORK_NAME="infra_internal_net"
 export NETWORK_EXTERNAL="true"
 
 # Deploy Staging using a different project name
+# These defaults are only used if .env.staging doesn't define them
 export DOCKER_IMAGE_API=${DOCKER_IMAGE_API:-"subro-api:latest"}
 export DOCKER_IMAGE_WORKER=${DOCKER_IMAGE_WORKER:-"subro-worker:latest"}
 export DOCKER_IMAGE_FRONTEND=${DOCKER_IMAGE_FRONTEND:-"subro-frontend:latest"}
@@ -102,12 +109,36 @@ export DOCKER_IMAGE_BACKUP=${DOCKER_IMAGE_BACKUP:-"subro-backup:latest"}
 export BACKUP_PREFIX="staging_"
 
 section_start "stage_pull" "Pulling and Starting Staging App Stack"
+
+# Login to GitLab Registry if credentials are provided
+if [ -n "${REGISTRY_PASSWORD:-}" ] && [ -n "${REGISTRY_USER:-}" ] && [ -n "${CI_REGISTRY:-}" ]; then
+    log "Logging into GitLab Registry..."
+    LOGIN_SUCCESS=false
+    for attempt in 1 2 3; do
+        if echo "$REGISTRY_PASSWORD" | docker login -u "$REGISTRY_USER" --password-stdin "$CI_REGISTRY" 2>/dev/null; then
+            success "Docker registry login successful"
+            LOGIN_SUCCESS=true
+            break
+        fi
+        if [ $attempt -lt 3 ]; then
+            warn "Docker login attempt $attempt/3 failed, retrying in 1s..."
+            sleep 1
+        fi
+    done
+    if [ "$LOGIN_SUCCESS" = false ]; then
+        error "Docker registry login failed after 3 attempts"
+        exit 1
+    fi
+else
+    warn "Registry credentials not found in .env.staging - proceeding without login"
+fi
+
 # We manage the app + data stack here for staging isolation.
 log "Verifying Images Exist..."
 for img in "$DOCKER_IMAGE_API" "$DOCKER_IMAGE_WORKER" "$DOCKER_IMAGE_FRONTEND" "$DOCKER_IMAGE_BACKUP"; do
     log "Checking for $img..."
     # Add timeout to prevent hanging on slow registry responses
-    if ! timeout 15s docker manifest inspect "$img" > /dev/null 2>&1; then
+    if ! timeout 30s docker manifest inspect "$img" > /dev/null 2>&1; then
         warn "Image $img not found or registry timeout."
     else
         success "Image $img found"
@@ -141,11 +172,12 @@ while [ $COUNT -lt $MAX_RETRIES ]; do
         success "Container $API_CONTAINER is healthy!"
         break
     fi
-    # Print every 5th iteration to reduce SSH output traffic
+    # Print every 5th iteration to reduce SSH/log noise
     if [ $((COUNT % 5)) -eq 0 ]; then
         log "Container $API_CONTAINER status: $STATUS ($COUNT/$MAX_RETRIES)"
     fi
-    sleep 5  # Slower polling to reduce SSH traffic
+    sleep 5
+
     COUNT=$((COUNT+1))
 done
 
@@ -184,17 +216,44 @@ fi
 PROD_CADDYFILE="$PROD_INFRA_DIR/docker/Caddyfile.prod"
 PROD_ENV_FILE="$PROD_INFRA_DIR/.env.prod"
 if [ -d "$PROD_INFRA_DIR/docker" ]; then
-    sed "s/{{UPSTREAM_API}}/$PROD_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$PROD_COLOR-frontend-1/g" "$DOCK_DIR/Caddyfile.template" > "$PROD_CADDYFILE"
-    log "Shared Caddy configuration updated (Prod Color: $PROD_COLOR)"
+    # Read DOMAIN_NAME from staging env (set by CI) or fall back to prod env
+    DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$ENV_FILE" | tail -1 | cut -d'=' -f2- | tr -d "\"" | tr -d "'")
+    if [ -z "$DOMAIN_NAME" ]; then
+        DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$PROD_ENV_FILE" | cut -d'=' -f2- | tr -d "\"" | tr -d "'")
+    fi
+    if [ -z "$DOMAIN_NAME" ]; then
+        log "Warning: DOMAIN_NAME not found in either env file"
+    else
+        # Ensure prod env also has the correct DOMAIN_NAME for Caddy
+        if grep -q "^DOMAIN_NAME=" "$PROD_ENV_FILE"; then
+            sed -i "s/^DOMAIN_NAME=.*/DOMAIN_NAME=$DOMAIN_NAME/" "$PROD_ENV_FILE"
+        else
+            echo "DOMAIN_NAME=$DOMAIN_NAME" >> "$PROD_ENV_FILE"
+        fi
+    fi
+    sed "s/{{UPSTREAM_API}}/$PROD_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$PROD_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$DOCK_DIR/Caddyfile.template" > "$PROD_CADDYFILE"
+    log "Shared Caddy configuration updated (Prod Color: $PROD_COLOR, Domain: $DOMAIN_NAME)"
 fi
 
 log "Recreating Caddy (picks up env changes)..."
-PROJECT_ENV_FILE="$PROD_ENV_FILE" docker compose --progress=plain --env-file "$PROD_ENV_FILE" -p infra -f "$COMPOSE_GATEWAY" -f "$COMPOSE_DATA" up -d --force-recreate caddy
+PROJECT_ENV_FILE="$PROD_ENV_FILE" docker compose --progress=plain --env-file "$PROD_ENV_FILE" -p infra -f "$PROD_INFRA_DIR/docker/compose.gateway.yml" -f "$PROD_INFRA_DIR/docker/compose.data.yml" up -d --force-recreate caddy
 section_end "stage_caddy"
 
 # Cleanup old images to prevent disk buildup (runs in background)
 section_start "stage_cleanup" "Pruning old Docker images (background)"
 (docker image prune -af --filter "until=168h" >/dev/null 2>&1 &)
 section_end "stage_cleanup"
+
+if [ -n "${DEPLOY_COMMIT_SHA:-}" ]; then
+    echo "$DEPLOY_COMMIT_SHA" > "$INFRA_DIR/.deploy_sha"
+    log "Recorded deployed commit: $DEPLOY_COMMIT_SHA"
+else
+    warn "DEPLOY_COMMIT_SHA not set; deploy marker not written."
+fi
+
+# Logout from registry for security
+if [ -n "${CI_REGISTRY:-}" ]; then
+    docker logout "$CI_REGISTRY" \u003e/dev/null 2\u003e\u00261 || true
+fi
 
 success "Staging Deployment Complete"

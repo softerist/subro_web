@@ -12,10 +12,7 @@ import { ExportAuditLogDialog } from "../components/ExportAuditLogDialog";
 import { VerifyIntegrityDialog } from "../components/VerifyIntegrityDialog";
 
 export default function AuditLogPage() {
-  const [filters, setFilters] = useState<Filters>({
-    page: 1,
-    per_page: 50, // Increased from 25 to 50
-  });
+  const [filters, setFilters] = useState<Filters>({});
   const [cursorByPage, setCursorByPage] = useState<
     Record<number, string | null>
   >({
@@ -77,6 +74,7 @@ export default function AuditLogPage() {
               size="sm"
               onClick={() => refetch()}
               disabled={isLoading}
+              aria-label="Refresh audit logs"
             >
               <RefreshCw
                 className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}

@@ -7,8 +7,9 @@ Implements singleton pattern - there is only ever one row in app_settings table.
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -61,9 +62,9 @@ ENCRYPTED_FIELDS = {
     "opensubtitles_api_key",
     "opensubtitles_username",
     "opensubtitles_password",
-    "deepl_api_keys",  # JSON array, entire string is encrypted
+    "deepl_api_keys",
     "qbittorrent_password",
-    "google_cloud_credentials",  # Full service account JSON
+    "google_cloud_credentials",
 }
 
 # Fields stored as JSON arrays
@@ -275,6 +276,7 @@ class CRUDAppSettings:
             env_settings, "GOOGLE_CREDENTIALS_PATH", None
         ):
             cred_path_str = env_settings.GOOGLE_CREDENTIALS_PATH
+            assert cred_path_str is not None
             try:
                 from pathlib import Path
 
@@ -335,19 +337,25 @@ class CRUDAppSettings:
                 # Parse JSON if it's an array field
                 if field in JSON_ARRAY_FIELDS:
                     try:
-                        return json.loads(decrypted)
+                        parsed = json.loads(decrypted)
                     except json.JSONDecodeError:
                         return []
+                    if isinstance(parsed, list):
+                        return [str(item) for item in parsed]
+                    return []
                 return decrypted
 
             # Non-encrypted JSON array
             if field in JSON_ARRAY_FIELDS:
                 try:
-                    return json.loads(raw_value)
+                    parsed = json.loads(raw_value)
                 except json.JSONDecodeError:
                     return []
+                if isinstance(parsed, list):
+                    return [str(item) for item in parsed]
+                return []
 
-            return raw_value
+            return cast(str | list[str] | None, raw_value)
 
         # 2. Fall back to environment variable for known list fields
         from app.core.config import settings as env_settings
@@ -358,9 +366,18 @@ class CRUDAppSettings:
             env_value = getattr(env_settings, env_attr, None)
             if env_value is not None:
                 # For list fields, return the list directly
-                if field in JSON_ARRAY_FIELDS and isinstance(env_value, list):
-                    return env_value
-                return env_value
+                if field in JSON_ARRAY_FIELDS:
+                    if isinstance(env_value, list):
+                        return [str(item) for item in env_value]
+                    if isinstance(env_value, str):
+                        try:
+                            parsed = json.loads(env_value)
+                        except json.JSONDecodeError:
+                            return []
+                        if isinstance(parsed, list):
+                            return [str(item) for item in parsed]
+                        return []
+                return cast(str | list[str], env_value)
 
         return None
 
@@ -487,7 +504,7 @@ class CRUDAppSettings:
                 from app.db.session import FastAPISessionLocal
                 from app.services.api_validation import validate_all_settings
 
-                async def _background_task(factory):
+                async def _background_task(factory: Callable[[], AsyncSession]) -> None:
                     async with factory() as session:
                         await validate_all_settings(session)
 
@@ -575,8 +592,8 @@ class CRUDAppSettings:
         raw = getattr(db_settings, field_name, None)
 
         # If DB value exists (including explicit empty string), use it
-        if raw is not None:
-            return raw
+        if raw is not None and isinstance(raw, str | int):
+            return cast(str | int, raw)
 
         return None
 
@@ -606,7 +623,9 @@ class CRUDAppSettings:
                                 mask_sensitive_value(str(item), visible_chars=8) for item in items
                             ]
                         return [mask_sensitive_value(str(item)) for item in items]
-                    return items  # Return empty list if user cleared all keys
+                    return [
+                        str(item) for item in items
+                    ]  # Return empty list if user cleared all keys
             except (ValueError, json.JSONDecodeError):
                 pass
 
@@ -617,7 +636,7 @@ class CRUDAppSettings:
                 if field_name == "deepl_api_keys":
                     return [mask_sensitive_value(str(item), visible_chars=8) for item in env_value]
                 return [mask_sensitive_value(str(item)) for item in env_value]
-            return env_value
+            return [str(item) for item in env_value]
 
         # Additional fallback for DEEPL_API_KEYS if it's a JSON string
         if env_attr == "DEEPL_API_KEYS" and env_value and isinstance(env_value, str):
@@ -626,7 +645,7 @@ class CRUDAppSettings:
                 if isinstance(items, list):
                     if field_name in ENCRYPTED_FIELDS and do_mask:
                         return [mask_sensitive_value(str(item), visible_chars=8) for item in items]
-                    return items
+                    return [str(item) for item in items]
             except json.JSONDecodeError:
                 pass
 
@@ -649,7 +668,7 @@ class CRUDAppSettings:
         db_paths = [p.path for p in db_paths_objs]
 
         # 3. Combine and Deduplicate
-        combined = list(set(settings_paths + db_paths))
+        combined = set(settings_paths).union(db_paths)
         return sorted(combined)
 
     async def _get_deepl_usage_stats(  # noqa: C901
@@ -819,7 +838,7 @@ class CRUDAppSettings:
                 return {"success": False, "error": f"Invalid service account: {e}"}
 
             # Run in thread pool since the Google client is synchronous
-            def fetch_metrics():  # noqa: C901
+            def fetch_metrics() -> dict[str, Any]:  # noqa: C901
                 from google.api_core import exceptions as google_exceptions
 
                 # --- API CALL Logic ---
@@ -965,12 +984,12 @@ class CRUDAppSettings:
 
             # Run synchronous API call in thread pool
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, fetch_metrics)
+            result = cast(dict[str, Any], await loop.run_in_executor(None, fetch_metrics))
 
             # --- POST-FETCH PERSISTENCE & FALLBACK LOGIC ---
             if result.get("success"):
                 # Persist to DB
-                data = result["data"]
+                data = cast(dict[str, Any], result["data"])
                 total = data.get("total_characters", 0)
                 month = data.get("this_month_characters", 0)
 

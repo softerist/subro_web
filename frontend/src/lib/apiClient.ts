@@ -60,21 +60,39 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
+        console.debug(
+          "[API] 401 detected on %s. Attempting token refresh...",
+          originalRequest.url,
+        );
         const newAccessToken = await refreshAccessToken();
         if (newAccessToken) {
+          console.debug(
+            "[API] Token refresh successful. Retrying original request.",
+          );
           originalRequest.headers = originalRequest.headers ?? {};
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
           return api(originalRequest);
         }
+        console.error("[API] Token refresh returned no token.");
         throw new Error("Refresh did not return a new access token.");
       } catch (refreshError) {
         // Refresh failed (token expired or invalid)
+        console.error(
+          "[API] Refresh failed for %s:",
+          originalRequest.url,
+          refreshError,
+        );
         useAuthStore.getState().logout(); // Clear state
         // Redirect to login page
         if (
           window.location.pathname !== "/login" &&
           window.location.pathname !== "/onboarding"
         ) {
+          console.warn(
+            "[API] Redirecting to login from %s due to auth failure on %s",
+            window.location.pathname,
+            originalRequest.url,
+          );
           window.location.href = "/login";
         }
         return Promise.reject(refreshError);

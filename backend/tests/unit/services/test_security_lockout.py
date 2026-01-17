@@ -8,7 +8,7 @@ from app.services import account_lockout
 
 
 @pytest.mark.asyncio
-async def test_lockout_threshold_15min():
+async def test_lockout_threshold_15min() -> None:
     db = AsyncMock()
     db.add = MagicMock()  # sync
     db.commit = AsyncMock()  # async
@@ -28,7 +28,7 @@ async def test_lockout_threshold_15min():
 
 
 @pytest.mark.asyncio
-async def test_lockout_threshold_suspension():
+async def test_lockout_threshold_suspension() -> None:
     db = AsyncMock()
     db.add = MagicMock()
     db.commit = AsyncMock()
@@ -47,7 +47,7 @@ async def test_lockout_threshold_suspension():
 
 
 @pytest.mark.asyncio
-async def test_reset_on_success():
+async def test_reset_on_success() -> None:
     db = AsyncMock()
     db.add = MagicMock()
     db.commit = AsyncMock()
@@ -71,7 +71,7 @@ async def test_reset_on_success():
 
 
 @pytest.mark.asyncio
-async def test_get_delay_for_locked_user():
+async def test_get_delay_for_locked_user() -> None:
     db = AsyncMock()
     locked_until = datetime.now(UTC) + timedelta(minutes=10)
     user = User(

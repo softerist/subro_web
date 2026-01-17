@@ -8,7 +8,7 @@ from app.tasks.audit_worker import process_outbox_batch
 
 
 @pytest.mark.asyncio
-async def test_audit_data_job_events(db_session):
+async def test_audit_data_job_events(db_session) -> None:
     # Trigger a data event
     await audit_service.log_event(
         db_session,
@@ -32,7 +32,7 @@ async def test_audit_data_job_events(db_session):
 
 @pytest.mark.usefixtures("override_auth_dependencies")
 @pytest.mark.asyncio
-async def test_audit_tamper_detection(db_session):
+async def test_audit_tamper_detection(db_session) -> None:
     # 1. Create a log entry
     await audit_service.log_event(db_session, category="admin", action="admin.audit.view")
     await db_session.commit()
@@ -57,7 +57,7 @@ async def test_audit_tamper_detection(db_session):
 
 @pytest.mark.usefixtures("override_auth_dependencies")
 @pytest.mark.asyncio
-async def test_audit_mfa_instrumentation(db_session):
+async def test_audit_mfa_instrumentation(db_session) -> None:
     import uuid
 
     user_id = uuid.uuid4()
@@ -84,7 +84,7 @@ async def test_audit_mfa_instrumentation(db_session):
 @pytest.mark.asyncio
 async def test_audit_api_key_instrumentation(
     test_client: AsyncClient, audit_admin_headers: dict, db_session
-):
+) -> None:
     # Test key creation via /me/api-key
     response = await test_client.post("/api/v1/users/me/api-key", headers=audit_admin_headers)
     assert response.status_code == 200
@@ -105,7 +105,7 @@ async def test_audit_api_key_instrumentation(
 @pytest.mark.asyncio
 async def test_audit_mfa_disable_instrumentation(
     test_client: AsyncClient, audit_admin_headers: dict, db_session
-):
+) -> None:
     import uuid
 
     from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
@@ -157,7 +157,7 @@ async def test_audit_mfa_disable_instrumentation(
 
 @pytest.mark.usefixtures("override_auth_dependencies")
 @pytest.mark.asyncio
-async def test_audit_rls_enforcement():
+async def test_audit_rls_enforcement() -> None:
     """
     Verify that RLS (or explicit permissions) prevents deletion of audit logs.
     In the test environment, we might be superuser, so we might need to rely on
@@ -186,7 +186,7 @@ async def test_audit_rls_enforcement():
 
 @pytest.mark.usefixtures("override_auth_dependencies")
 @pytest.mark.asyncio
-async def test_audit_account_lockout(test_client: AsyncClient, db_session):
+async def test_audit_account_lockout(test_client: AsyncClient, db_session) -> None:
     import uuid
 
     from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase

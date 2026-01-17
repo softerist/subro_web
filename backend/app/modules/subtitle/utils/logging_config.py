@@ -10,7 +10,7 @@ LOG_FILE_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 LOG_FILE_BACKUP_COUNT = 2  # Keep 2 backup logs
 
 
-def _clear_existing_handlers(logger):
+def _clear_existing_handlers(logger: logging.Logger) -> None:
     """Removes all existing handlers from the logger."""
     existing_handlers = logger.handlers[:]
     if existing_handlers:
@@ -25,7 +25,9 @@ def _clear_existing_handlers(logger):
             logger.removeHandler(handler)
 
 
-def _setup_console_handler(logger, console_log_level, include_timestamp=True):
+def _setup_console_handler(
+    logger: logging.Logger, console_log_level: int, include_timestamp: bool = True
+) -> None:
     """Configures and adds the console handler."""
     try:
         c_handler = logging.StreamHandler(sys.stdout)
@@ -48,7 +50,7 @@ def _setup_console_handler(logger, console_log_level, include_timestamp=True):
         print(f"CRITICAL: Failed to configure console logging: {e}", file=sys.stderr)
 
 
-def _setup_file_handler(logger, log_file_path):
+def _setup_file_handler(logger: logging.Logger, log_file_path: str) -> None:
     """Configures and adds the rotating file handler."""
     try:
         log_dir = Path(log_file_path).parent
@@ -73,7 +75,11 @@ def _setup_file_handler(logger, log_file_path):
         logging.error(f"Failed to configure file logging to {log_file_path}: {e}", exc_info=True)
 
 
-def setup_logging(log_file_path=None, console_level_override=None, include_timestamp=True):
+def setup_logging(
+    log_file_path: str | None = None,
+    console_level_override: str | None = None,
+    include_timestamp: bool = True,
+) -> None:
     """
     Configures the root logger with console and optional rotating file handlers.
 
@@ -118,7 +124,7 @@ def setup_logging(log_file_path=None, console_level_override=None, include_times
 
 
 # --- Get Logger Function ---
-def get_logger(module_name):
+def get_logger(module_name: str) -> logging.Logger:
     """Gets a logger instance specific to a module."""
     # This ensures log messages from different modules can be identified
     # by checking the logger name (`%(name)s` in the file format).
