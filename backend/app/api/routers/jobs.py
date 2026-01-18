@@ -573,8 +573,8 @@ async def _get_qbittorrent_client(db: AsyncSession) -> "qbittorrentapi.Client | 
 
         try:
             effective_password = decrypt_value(app_settings.qbittorrent_password)
-        except Exception as e:
-            logger.warning("Failed to decrypt qBittorrent password: %s", e)
+        except Exception:
+            logger.warning("Failed to decrypt qBittorrent password.")
             return None
 
     return login_to_qbittorrent_with_settings(
