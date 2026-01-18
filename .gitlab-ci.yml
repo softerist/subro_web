@@ -1091,7 +1091,10 @@ cleanup_registry:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: manual
-      allow_failure: true # Don't block pipeline if not triggered
+      allow_failure: true
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: on_success
+      allow_failure: true
   script:
     - apk add --no-cache curl jq
     - |
