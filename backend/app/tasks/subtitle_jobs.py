@@ -1422,9 +1422,14 @@ async def _run_script_and_get_output(
         final_script_exit_code = await _handle_script_timeout(
             process, all_tasks_gather_future, job_timeout_sec, stderr_accumulator, task_log_prefix
         )
-        # Re-raise for _execute_subtitle_script to handle with specific error type
-        # It will use final_script_exit_code (which is -99 from _handle_script_timeout)
-        raise
+        if final_script_exit_code == 0:
+            logger.info(
+                f"{task_log_prefix} Gather timed out after process exit; continuing with exit code 0."
+            )
+        else:
+            # Re-raise for _execute_subtitle_script to handle with specific error type
+            # It will use final_script_exit_code (which is -99 from _handle_script_timeout)
+            raise
 
     except Exception as e_unhandled_gather:  # Other unexpected errors during gather
         # _handle_script_management_error handles logging, process termination, stderr append.

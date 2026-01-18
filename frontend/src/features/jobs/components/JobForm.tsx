@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2, FolderOpen } from "lucide-react";
+import { Loader2, FolderOpen, Download } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -21,13 +22,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-// Removed Input import as it is no longer used
-// import { Input } from "@/components/ui/input";
 
 import { jobsApi } from "../api/jobs";
 import { LANGUAGES } from "../constants/languages";
 import { useAuthStore } from "@/store/authStore";
 import { StorageManagerDialog } from "./StorageManagerDialog";
+import { CompletedTorrent } from "../types";
 
 const formSchema = z.object({
   folder_path: z.string().min(1, "Target folder is required"),
@@ -46,6 +46,8 @@ const LOG_LEVELS = [
 
 export function JobForm() {
   const accessToken = useAuthStore((state) => state.accessToken);
+  const [isSelectOpen, setIsSelectOpen] = useState(false);
+
   const jobErrorMessages: Record<string, string> = {
     PATH_NOT_FOUND: "Folder not found on server. Check the path and try again.",
     PATH_INVALID: "Folder path is invalid or cannot be resolved.",
@@ -71,10 +73,20 @@ export function JobForm() {
   const { data: allowedFolders, isLoading: isLoadingFolders } = useQuery({
     queryKey: ["allowed-folders"],
     queryFn: jobsApi.getAllowedFolders,
-    retry: false, // Don't retry on failure
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    retry: false,
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     enabled: !!accessToken,
+  });
+
+  // Fetch recent torrents when dropdown is opened
+  const { data: recentTorrents, isLoading: isLoadingTorrents } = useQuery({
+    queryKey: ["recent-torrents"],
+    queryFn: jobsApi.getRecentTorrents,
+    retry: false,
+    staleTime: 0, // Always fetch fresh data when enabled
+    refetchOnWindowFocus: false,
+    enabled: !!accessToken && isSelectOpen, // Only fetch when dropdown is open
   });
 
   const form = useForm<FormValues>({
@@ -91,7 +103,6 @@ export function JobForm() {
     onSuccess: () => {
       toast.success("Job started successfully");
       form.reset();
-      // queryClient.invalidateQueries({ queryKey: ["jobs"] });
     },
     onError: (
       error: Error & {
@@ -113,6 +124,15 @@ export function JobForm() {
     mutation.mutate(values);
   };
 
+  // Get unique save paths from torrents (deduplicated)
+  const torrentPaths = recentTorrents
+    ? Array.from(
+        new Map(
+          recentTorrents.map((t: CompletedTorrent) => [t.save_path, t]),
+        ).values(),
+      )
+    : [];
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
@@ -129,6 +149,8 @@ export function JobForm() {
                 onValueChange={field.onChange}
                 value={field.value}
                 name={field.name}
+                onOpenChange={setIsSelectOpen}
+                data-testid="folder_path"
               >
                 <FormControl>
                   <SelectTrigger
@@ -139,19 +161,55 @@ export function JobForm() {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {isLoadingFolders ? (
+                  {isLoadingFolders || isLoadingTorrents ? (
                     <div className="p-2 text-center text-sm text-muted-foreground">
-                      Loading folders...
+                      Loading...
                     </div>
                   ) : (
-                    allowedFolders?.map((folder) => (
-                      <SelectItem key={folder} value={folder}>
-                        <div className="flex items-center gap-2">
-                          <FolderOpen className="h-4 w-4" />
-                          {folder}
+                    <>
+                      {/* Recent Torrents Section */}
+                      {torrentPaths.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                            <Download className="h-3 w-3" />
+                            Recent Torrents
+                          </div>
+                          {torrentPaths.map((torrent: CompletedTorrent) => (
+                            <SelectItem
+                              key={`torrent-${torrent.save_path}`}
+                              value={torrent.save_path}
+                            >
+                              <div className="flex items-center gap-2">
+                                <Download className="h-4 w-4 text-blue-500" />
+                                <span
+                                  className="truncate max-w-[250px]"
+                                  title={torrent.name}
+                                >
+                                  {torrent.name}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                          <div className="my-1 border-t border-border" />
+                        </>
+                      )}
+
+                      {/* Allowed Folders Section */}
+                      {(allowedFolders?.length ?? 0) > 0 && (
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                          <FolderOpen className="h-3 w-3" />
+                          Allowed Folders
                         </div>
-                      </SelectItem>
-                    ))
+                      )}
+                      {allowedFolders?.map((folder) => (
+                        <SelectItem key={folder} value={folder}>
+                          <div className="flex items-center gap-2">
+                            <FolderOpen className="h-4 w-4" />
+                            {folder}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </>
                   )}
                 </SelectContent>
               </Select>
@@ -171,6 +229,7 @@ export function JobForm() {
                   onValueChange={field.onChange}
                   value={field.value}
                   name={field.name}
+                  data-testid="language"
                 >
                   <FormControl>
                     <SelectTrigger
@@ -203,6 +262,7 @@ export function JobForm() {
                   onValueChange={field.onChange}
                   value={field.value}
                   name={field.name}
+                  data-testid="log_level"
                 >
                   <FormControl>
                     <SelectTrigger

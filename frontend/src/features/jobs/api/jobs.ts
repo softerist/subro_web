@@ -1,5 +1,5 @@
 import { api } from "@/lib/apiClient";
-import { Job, JobCreate } from "../types";
+import { Job, JobCreate, CompletedTorrent } from "../types";
 
 export const jobsApi = {
   getAll: async (params?: { limit?: number; skip?: number }) => {
@@ -34,6 +34,13 @@ export const jobsApi = {
 
   getAllowedFolders: async () => {
     const response = await api.get<string[]>("/v1/jobs/allowed-folders");
+    return response.data;
+  },
+
+  getRecentTorrents: async () => {
+    const response = await api.get<CompletedTorrent[]>(
+      "/v1/jobs/recent-torrents",
+    );
     return response.data;
   },
 };

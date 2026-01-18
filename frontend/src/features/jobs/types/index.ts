@@ -51,3 +51,9 @@ export interface StoragePathCreate {
   path: string;
   label?: string;
 }
+
+export interface CompletedTorrent {
+  name: string;
+  save_path: string;
+  completed_on: string | null;
+}

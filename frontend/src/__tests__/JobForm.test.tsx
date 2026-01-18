@@ -19,6 +19,7 @@ import { useAuthStore } from "../store/authStore";
 vi.mock("../features/jobs/api/jobs", () => ({
   jobsApi: {
     getAllowedFolders: vi.fn(),
+    getRecentTorrents: vi.fn().mockResolvedValue([]),
     create: vi.fn(),
   },
 }));
@@ -32,65 +33,73 @@ vi.mock("../features/jobs/components/StorageManagerDialog", () => ({
 
 // Mock UI Select components to be standard select/options for JSDOM the tests
 vi.mock("@/components/ui/select", () => {
-  const SelectItem = ({ children, value }: any) => (
-    <option value={value}>
-      {typeof children === "string" ? children : value}
-    </option>
-  );
+  const SelectItem = ({ children, value }: any) => {
+    const getText = (node: any): string => {
+      if (typeof node === "string") return node;
+      if (typeof node === "number") return String(node);
+      if (Array.isArray(node)) return node.map(getText).join("");
+      if (node && node.props && node.props.children)
+        return getText(node.props.children);
+      return "";
+    };
 
-  const flattenChildren = (value: any): any[] =>
-    Array.isArray(value) ? value.flatMap(flattenChildren) : [value];
+    const text = getText(children) || value;
 
-  const extractText = (node: any): string => {
-    if (typeof node === "string") {
-      return node;
+    return <option value={value}>{text}</option>;
+  };
+
+  // Recursively find all SelectItem components
+  const findSelectItems = (children: any): any[] => {
+    if (!children) return [];
+    if (Array.isArray(children)) {
+      return children.flatMap(findSelectItems);
     }
-    if (Array.isArray(node)) {
-      return node.map(extractText).join("");
+    if (
+      children &&
+      typeof children === "object" &&
+      "type" in children &&
+      children.type === SelectItem
+    ) {
+      return [children];
     }
-    if (node && typeof node === "object" && "props" in node) {
-      return extractText(node.props?.children);
+    if (
+      children &&
+      typeof children === "object" &&
+      "props" in children &&
+      children.props?.children
+    ) {
+      return findSelectItems(children.props.children);
     }
-    return "";
+    return [];
   };
 
   return {
-    Select: ({ children, onValueChange, value, name }: any) => (
-      <select
-        data-testid={name}
-        value={value}
-        onChange={(e) => onValueChange(e.target.value)}
-      >
-        {children}
-      </select>
-    ),
+    Select: ({
+      children,
+      onValueChange,
+      value,
+      onOpenChange,
+      ...props
+    }: any) => {
+      return (
+        <select
+          {...props}
+          value={value}
+          onClick={() => onOpenChange && onOpenChange(true)}
+          onChange={(e) => {
+            onValueChange(e.target.value);
+          }}
+        >
+          {children}
+        </select>
+      );
+    },
     SelectTrigger: () => null,
     SelectValue: () => null,
     SelectContent: ({ children }: any) => {
-      const items = flattenChildren(children);
-      return (
-        <>
-          {items.map((child, index) => {
-            if (
-              child &&
-              typeof child === "object" &&
-              "type" in child &&
-              child.type === SelectItem
-            ) {
-              return child;
-            }
-            const label = extractText(child);
-            if (!label) {
-              return null;
-            }
-            return (
-              <option key={`mock-option-${index}`} disabled value="">
-                {label}
-              </option>
-            );
-          })}
-        </>
-      );
+      // Only render actual SelectItem components, ignoring headers and dividers
+      const items = findSelectItems(children);
+      return <>{items}</>;
     },
     SelectItem,
   };
@@ -162,12 +171,18 @@ describe("JobForm", () => {
 
     // Wait for folders to load
     await waitFor(() =>
-      expect(screen.queryByText(/loading folders/i)).toBeNull(),
+      expect(screen.queryByText(/loading\.\.\./i)).toBeNull(),
+    );
+
+    // Wait for option to render
+    await waitFor(() =>
+      expect(screen.getAllByText("/media/movies")[0]).toBeDefined(),
     );
 
     // Select a folder
     const select = screen.getByTestId("folder_path");
     fireEvent.change(select, { target: { value: "/media/movies" } });
+    await waitFor(() => expect((select as any).value).toBe("/media/movies"));
 
     // Click submit
     const submitButton = screen.getByRole("button", { name: /start job/i });
@@ -179,6 +194,49 @@ describe("JobForm", () => {
           folder_path: "/media/movies",
           language: "ro",
           log_level: "INFO",
+        }),
+        expect.anything(),
+      );
+    });
+  });
+
+  it("renders recent torrents in the dropdown and allows selection", async () => {
+    (jobsApi.getAllowedFolders as any).mockResolvedValue(["/media/movies"]);
+    (jobsApi.getRecentTorrents as any).mockResolvedValue([
+      {
+        name: "Movie 1",
+        save_path: "/downloads/movie1",
+        completed_on: "2023-01-01",
+      },
+    ]);
+    (jobsApi.create as any).mockResolvedValue({
+      id: "job-2",
+      status: "pending",
+    });
+
+    render(<JobForm />, { wrapper });
+
+    await waitFor(() => expect(screen.queryByText(/loading/i)).toBeNull());
+
+    const select = screen.getByTestId("folder_path");
+    // Open the dropdown to trigger the query
+    fireEvent.click(select);
+
+    // Wait for the option to appear
+    await waitFor(() => {
+      expect(screen.getByText("Movie 1")).toBeDefined();
+    });
+
+    // Select it (value is save_path)
+    fireEvent.change(select, { target: { value: "/downloads/movie1" } });
+
+    // Submit
+    fireEvent.click(screen.getByRole("button", { name: /start job/i }));
+
+    await waitFor(() => {
+      expect(jobsApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          folder_path: "/downloads/movie1",
         }),
         expect.anything(),
       );
@@ -197,12 +255,19 @@ describe("JobForm", () => {
 
     // Wait for folders to load
     await waitFor(() =>
-      expect(screen.queryByText(/loading folders/i)).toBeNull(),
+      expect(screen.queryByText(/loading\.\.\./i)).toBeNull(),
+    );
+
+    await waitFor(() =>
+      expect(screen.getAllByText("/media/movies")[0]).toBeDefined(),
     );
 
     // Select folder
     const folderSelect = screen.getByTestId("folder_path");
     fireEvent.change(folderSelect, { target: { value: "/media/movies" } });
+    await waitFor(() =>
+      expect((folderSelect as any).value).toBe("/media/movies"),
+    );
     fireEvent.blur(folderSelect);
 
     // Select language
@@ -236,12 +301,18 @@ describe("JobForm", () => {
 
     render(<JobForm />, { wrapper });
     await waitFor(() =>
-      expect(screen.queryByText(/loading folders/i)).toBeNull(),
+      expect(screen.queryByText(/loading\.\.\./i)).toBeNull(),
     );
 
-    fireEvent.change(screen.getByTestId("folder_path"), {
+    await waitFor(() =>
+      expect(screen.getAllByText("/media/movies")[0]).toBeDefined(),
+    );
+
+    const select = screen.getByTestId("folder_path");
+    fireEvent.change(select, {
       target: { value: "/media/movies" },
     });
+    await waitFor(() => expect((select as any).value).toBe("/media/movies"));
     fireEvent.click(screen.getByRole("button", { name: /start job/i }));
 
     await waitFor(() => {
@@ -259,12 +330,18 @@ describe("JobForm", () => {
 
     render(<JobForm />, { wrapper });
     await waitFor(() =>
-      expect(screen.queryByText(/loading folders/i)).toBeNull(),
+      expect(screen.queryByText(/loading\.\.\./i)).toBeNull(),
     );
 
-    fireEvent.change(screen.getByTestId("folder_path"), {
+    await waitFor(() =>
+      expect(screen.getAllByText("/media/movies")[0]).toBeDefined(),
+    );
+
+    const select = screen.getByTestId("folder_path");
+    fireEvent.change(select, {
       target: { value: "/media/movies" },
     });
+    await waitFor(() => expect((select as any).value).toBe("/media/movies"));
     fireEvent.click(screen.getByRole("button", { name: /start job/i }));
 
     await waitFor(() => {

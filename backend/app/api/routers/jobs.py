@@ -33,6 +33,7 @@ from app.schemas.job import (
     JobReadLite,
 )
 from app.schemas.storage_path import StoragePathCreate
+from app.schemas.torrent import CompletedTorrentInfo
 from app.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -549,6 +550,94 @@ async def get_allowed_folders(
     env_folders = settings.ALLOWED_MEDIA_FOLDERS or []
     combined = list({str(f) for f in env_folders} | {str(p.path) for p in db_paths})
     return sorted(combined)
+
+
+async def _get_qbittorrent_client(db: AsyncSession):
+    """Get a connected qBittorrent client or None if unavailable."""
+    from app.crud.crud_app_settings import crud_app_settings
+    from app.modules.subtitle.services.torrent_client import login_to_qbittorrent_with_settings
+
+    app_settings = await crud_app_settings.get(db)
+
+    if not app_settings.qbittorrent_host:
+        logger.debug("qBittorrent not configured")
+        return None
+
+    # Decrypt password if present
+    effective_password = ""
+    if app_settings.qbittorrent_password:
+        from app.core.security import decrypt_value
+
+        try:
+            effective_password = decrypt_value(app_settings.qbittorrent_password)
+        except Exception as e:
+            logger.warning("Failed to decrypt qBittorrent password: %s", e)
+            return None
+
+    return login_to_qbittorrent_with_settings(
+        host=app_settings.qbittorrent_host,
+        port=app_settings.qbittorrent_port or 8080,
+        username=app_settings.qbittorrent_username or "",
+        password=effective_password,
+    )
+
+
+def _torrent_to_schema(torrent) -> CompletedTorrentInfo | None:
+    """Convert a qBittorrent torrent object to CompletedTorrentInfo schema."""
+    try:
+        completed_on = None
+        if (
+            hasattr(torrent, "completion_on")
+            and torrent.completion_on
+            and torrent.completion_on > 0
+        ):
+            completed_on = datetime.fromtimestamp(torrent.completion_on, tz=UTC)
+
+        return CompletedTorrentInfo(
+            name=torrent.name,
+            save_path=torrent.save_path,
+            completed_on=completed_on,
+        )
+    except Exception as e:
+        logger.warning("Error processing torrent %s: %s", getattr(torrent, "name", "unknown"), e)
+        return None
+
+
+@router.get(
+    "/recent-torrents",
+    response_model=list[CompletedTorrentInfo],
+    summary="Get recent completed torrents",
+    description=(
+        "Returns the last 10 completed torrents from qBittorrent. "
+        "Returns an empty list if qBittorrent is not configured or connection fails."
+    ),
+)
+async def get_recent_torrents(
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[User, Depends(current_active_user)],  # noqa: ARG001
+) -> list[CompletedTorrentInfo]:
+    """Fetch the last 10 completed torrents from qBittorrent."""
+    from app.modules.subtitle.services.torrent_client import get_completed_torrents
+
+    client = await _get_qbittorrent_client(db)
+    if not client:
+        return []
+
+    try:
+        torrents = get_completed_torrents(client)
+    except Exception as e:
+        logger.warning("Error fetching completed torrents: %s", e)
+        return []
+
+    # Sort by completion time (newest first) and take top 10
+    sorted_torrents = sorted(
+        torrents,
+        key=lambda t: getattr(t, "completion_on", 0) or 0,
+        reverse=True,
+    )[:10]
+
+    # Convert to response schema, filtering out None values
+    return [info for t in sorted_torrents if (info := _torrent_to_schema(t)) is not None]
 
 
 @router.get(
