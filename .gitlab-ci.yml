@@ -932,8 +932,6 @@ verify_prod:
   image: alpine:3.20
   needs:
     - job: deploy_prod
-    - job: bump_version
-      artifacts: true
   environment:
     name: production
     url: https://$SSH_HOST/
