@@ -101,7 +101,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     netcat-openbsd \
     ffmpeg \
-    unrar-free \
+    unrar \
     xz-utils \
     git \
     build-essential \
@@ -158,7 +158,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     curl \
     netcat-openbsd \
     ffmpeg \
-    unrar-free \
+    unrar \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy venv from builder
