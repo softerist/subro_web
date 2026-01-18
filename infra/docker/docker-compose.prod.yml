@@ -50,6 +50,8 @@ services:
         reservations:
           cpus: "0.5"
           memory: 256M
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   worker:
     build:
@@ -94,6 +96,8 @@ services:
         reservations:
           cpus: "1"
           memory: 512M
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   frontend:
     build:

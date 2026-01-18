@@ -205,7 +205,8 @@ describe("JobForm", () => {
     (jobsApi.getRecentTorrents as any).mockResolvedValue([
       {
         name: "Movie 1",
-        save_path: "/downloads/movie1",
+        save_path: "/downloads",
+        content_path: "/downloads/movie1",
         completed_on: "2023-01-01",
       },
     ]);
@@ -227,7 +228,7 @@ describe("JobForm", () => {
       expect(screen.getByText("Movie 1")).toBeDefined();
     });
 
-    // Select it (value is save_path)
+    // Select it (value prefers content_path)
     fireEvent.change(select, { target: { value: "/downloads/movie1" } });
 
     // Submit

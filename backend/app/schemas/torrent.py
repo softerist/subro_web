@@ -13,4 +13,5 @@ class CompletedTorrentInfo(BaseModel):
 
     name: str
     save_path: str  # Directory where torrent files are saved
+    content_path: str | None = None  # Resolved content root when available
     completed_on: datetime | None = None

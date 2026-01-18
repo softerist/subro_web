@@ -426,7 +426,8 @@ async def configure_qbittorrent_webhook(
 
     # Get effective settings from database (decrypt password)
     effective_host = app_settings.qbittorrent_host
-    effective_port = app_settings.qbittorrent_port or 8080
+    default_port = 8090 if app_settings.qbittorrent_connection_mode == "docker_host" else 8080
+    effective_port = app_settings.qbittorrent_port or default_port
     effective_username = app_settings.qbittorrent_username or ""
 
     # Decrypt password if present

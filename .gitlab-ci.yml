@@ -16,6 +16,15 @@ stages:
   - release
   - cleanup
 
+default:
+  retry:
+    max: 5
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+      - api_failure
+      - unknown_failure
+
 # -------- Workflow Rules --------
 workflow:
   rules:
