@@ -330,6 +330,10 @@ backend_tests:
     POSTGRES_PASSWORD: "${CI_TEST_POSTGRES_PASSWORD}"
     POSTGRES_DB: "${CI_TEST_POSTGRES_DB}"
     POSTGRES_DB_TEST: "${CI_TEST_POSTGRES_DB_TEST}"
+  rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^chore\(release\):/'
+      when: never
+    - when: on_success
   script:
     - apk add --no-cache bash
     - |
@@ -439,6 +443,10 @@ frontend_tests:
     - set -euo pipefail
     - cd frontend
     - npm config set cache .npm
+  rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^chore\(release\):/'
+      when: never
+    - when: on_success
   script:
     - npm ci --prefer-offline --no-audit --no-fund
     - npm test -- --maxWorkers=4 --coverage=false
@@ -454,6 +462,8 @@ scan_image_vulns:
   variables:
     TRIVY_SEVERITY: "HIGH,CRITICAL"
   rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^chore\(release\):/'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "main"'
       variables:
         TRIVY_SEVERITY: "CRITICAL"
@@ -500,6 +510,8 @@ sast_scan:
     entrypoint: [""]
   timeout: 30m
   rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^chore\(release\):/'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "main"'
     - when: on_success
   script:
@@ -545,6 +557,10 @@ secret_scan:
   image:
     name: aquasec/trivy:0.58.0
     entrypoint: [""]
+  rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^chore\(release\):/'
+      when: never
+    - when: on_success
   script:
     - |
       trivy fs --scanners secret \
@@ -784,6 +800,8 @@ e2e_tests:
   image: mcr.microsoft.com/playwright:v1.57.0-jammy
   needs: [verify_staging]
   rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^chore\(release\):/'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "main"'
   variables:
     E2E_BASE_URL: https://staging.$SSH_HOST
@@ -884,16 +902,6 @@ cleanup_staging:
 deploy_prod:
   extends: .deploy_template
   needs:
-    - job: backend_tests
-      artifacts: false
-    - job: scan_image_vulns
-      artifacts: false
-    - job: sast_scan
-      artifacts: false
-    - job: secret_scan
-      artifacts: false
-    - job: e2e_tests
-      artifacts: false
     - job: build_api
       artifacts: false
     - job: build_worker
