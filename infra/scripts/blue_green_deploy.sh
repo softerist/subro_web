@@ -384,6 +384,48 @@ log "Setting permissions for qbittorrent-nox..."
 chown -R qbittorrent-nox:qbittorrent-nox /opt/subro_web/scripts /opt/subro_web/logs 2>/dev/null || true
 chmod -R 775 /opt/subro_web/logs
 
+# Configure qBittorrent webhook integration
+log "Configuring qBittorrent webhook integration..."
+QBITTORRENT_CONF="/home/nox/.config/qBittorrent/qBittorrent.conf"
+WEBHOOK_SCRIPT_PATH="/opt/subro_web/scripts/qbittorrent-nox-webhook.sh"
+
+# Ensure qBittorrent config directory exists with correct ownership
+mkdir -p "$(dirname "$QBITTORRENT_CONF")"
+chown nox:media-group "$(dirname "$QBITTORRENT_CONF")"
+
+# Check if AutoRun section exists
+if ! grep -q '^\[AutoRun\]' "$QBITTORRENT_CONF" 2>/dev/null; then
+    # Add AutoRun section if missing
+    cat >> "$QBITTORRENT_CONF" << EOF
+
+[AutoRun]
+enabled=true
+program="$WEBHOOK_SCRIPT_PATH \\\\"%F\\\\""
+EOF
+    # Restore ownership to nox:media-group (config file owner)
+    chown nox:media-group "$QBITTORRENT_CONF"
+    chmod 664 "$QBITTORRENT_CONF"
+    success "qBittorrent AutoRun configured"
+
+    # Restart qBittorrent to apply changes
+    if systemctl is-active --quiet qbittorrent-nox; then
+        log "Restarting qBittorrent to apply webhook configuration..."
+        systemctl restart qbittorrent-nox
+    fi
+else
+    # Update existing AutoRun section to ensure correct path
+    sed -i "s|^program=.*|program=\"$WEBHOOK_SCRIPT_PATH \\\\\\\\\"%F\\\\\\\\\"\"| " "$QBITTORRENT_CONF"
+    chown nox:media-group "$QBITTORRENT_CONF"
+    chmod 664 "$QBITTORRENT_CONF"
+    log "qBittorrent AutoRun path updated"
+fi
+
+# Create webhook lock directory
+log "Creating webhook lock directory..."
+mkdir -p /tmp/subro_webhook
+chmod 777 /tmp/subro_webhook
+success "Webhook lock directory created"
+
 section_end "prod_hooks"
 
 success "Deployment Complete ($NEW_COLOR Active)"
