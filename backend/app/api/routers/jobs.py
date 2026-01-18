@@ -1,7 +1,7 @@
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from fastapi import (
@@ -37,6 +37,9 @@ from app.schemas.torrent import CompletedTorrentInfo
 from app.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    import qbittorrentapi
 
 router = APIRouter(
     tags=["Jobs - Subtitle Download Management"],
@@ -552,7 +555,7 @@ async def get_allowed_folders(
     return sorted(combined)
 
 
-async def _get_qbittorrent_client(db: AsyncSession):
+async def _get_qbittorrent_client(db: AsyncSession) -> "qbittorrentapi.Client | None":
     """Get a connected qBittorrent client or None if unavailable."""
     from app.crud.crud_app_settings import crud_app_settings
     from app.modules.subtitle.services.torrent_client import login_to_qbittorrent_with_settings
@@ -582,7 +585,7 @@ async def _get_qbittorrent_client(db: AsyncSession):
     )
 
 
-def _torrent_to_schema(torrent) -> CompletedTorrentInfo | None:
+def _torrent_to_schema(torrent: Any) -> CompletedTorrentInfo | None:
     """Convert a qBittorrent torrent object to CompletedTorrentInfo schema."""
     try:
         completed_on = None
