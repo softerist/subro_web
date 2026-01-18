@@ -459,7 +459,7 @@ scan_image_vulns:
         TRIVY_SEVERITY: "CRITICAL"
     - when: on_success
   cache:
-    key: trivy-cache-v2
+    key: trivy-cache-v2-$CI_PIPELINE_ID
     paths: [.trivycache/]
   script:
     - |
