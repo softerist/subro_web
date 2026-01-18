@@ -44,6 +44,7 @@ import { SavePill } from "@/components/common/SavePill";
 import { PageHeader } from "@/components/common/PageHeader";
 import { MfaSettings } from "@/features/auth/components/MfaSettings";
 import { PasswordSettings } from "@/features/auth/components/PasswordSettings";
+import { PasskeySettings } from "@/features/auth/components/PasskeySettings";
 
 type SettingsTab = "integrations" | "qbittorrent" | "developer" | "security";
 
@@ -2091,6 +2092,8 @@ axios.post(url, data, { headers })
           <div className="space-y-6" ref={cardRef}>
             <PasswordSettings />
             <MfaSettings />
+            {/* Feature flagged: Enable with VITE_ENABLE_PASSKEYS env var */}
+            {import.meta.env.VITE_ENABLE_PASSKEYS !== 'false' && <PasskeySettings />}
           </div>
         )}
       </Card>

@@ -1,0 +1,181 @@
+from datetime import UTC, datetime, timedelta
+from unittest.mock import Mock
+
+import pytest
+from fastapi import HTTPException
+from freezegun import freeze_time
+from httpx import AsyncClient
+
+from app.core.auth_dependencies import MAX_AUTH_AGE_SECONDS, require_recent_auth
+from app.db.models.user import User
+
+
+class TestStepUpAuthentication:
+    """Tests for step-up authentication enforcement."""
+
+    @pytest.mark.asyncio
+    async def test_recent_auth_passes(self, mock_user_with_recent_auth):
+        """User authenticated < 5 minutes ago should pass."""
+        # Create dependency with recent auth_time
+        dependency = require_recent_auth(MAX_AUTH_AGE_SECONDS)
+
+        # Mock request with valid token containing recent auth_time
+        mock_request = Mock()
+        mock_request.headers = {"Authorization": f"Bearer {mock_user_with_recent_auth['token']}"}
+
+        # Should not raise exception
+        result = await dependency(mock_user_with_recent_auth["user"], mock_request)
+        assert result == mock_user_with_recent_auth["user"]
+
+    @pytest.mark.asyncio
+    async def test_stale_auth_fails(self, mock_user_with_stale_auth):
+        """User authenticated > 5 minutes ago should fail with REAUTH_REQUIRED."""
+        dependency = require_recent_auth(MAX_AUTH_AGE_SECONDS)
+
+        mock_request = Mock()
+        mock_request.headers = {"Authorization": f"Bearer {mock_user_with_stale_auth['token']}"}
+
+        # Should raise HTTPException with REAUTH_REQUIRED
+        with pytest.raises(HTTPException) as exc_info:
+            await dependency(mock_user_with_stale_auth["user"], mock_request)
+
+        assert exc_info.value.status_code == 401
+        assert "REAUTH_REQUIRED" in str(exc_info.value.detail)
+
+
+class TestPasskeyBackend:
+    """Backend tests for passkey operations."""
+
+    @pytest.mark.asyncio
+    @freeze_time("2024-01-01 12:00:00")
+    async def test_challenge_expires_after_ttl(self, async_client: AsyncClient, authenticated_user):
+        """Challenge should expire after configured TTL (no real sleep)."""
+        # Get registration options
+        response = await async_client.post(
+            "/api/v1/auth/passkey/register/options",
+            headers={"Authorization": f"Bearer {authenticated_user['access_token']}"},
+        )
+        assert response.status_code == 200
+        challenge_id = response.json()["challenge"]
+
+        # Time travel 6 minutes into future (past TTL of 5 minutes)
+        with freeze_time("2024-01-01 12:06:00"):
+            # Attempt to use expired challenge
+            verify_response = await async_client.post(
+                "/api/v1/auth/passkey/register/verify",
+                headers={"Authorization": f"Bearer {authenticated_user['access_token']}"},
+                json={
+                    "credential": {
+                        "id": "test",
+                        "rawId": "test",
+                        "response": {},
+                        "type": "public-key",
+                    },
+                    "device_name": "Test Device",
+                },
+            )
+
+            assert verify_response.status_code in [400, 401]
+            detail = verify_response.json()["detail"].lower()
+            assert "expired" in detail or "not found" in detail
+
+    @pytest.mark.asyncio
+    async def test_rate_limiting_enforced(self, async_client: AsyncClient, authenticated_user):
+        """Rate limit should block after max attempts."""
+        # Make 5 requests (should all succeed based on 5/minute limit)
+        for _ in range(5):
+            response = await async_client.post(
+                "/api/v1/auth/passkey/register/options",
+                headers={"Authorization": f"Bearer {authenticated_user['access_token']}"},
+            )
+            assert response.status_code == 200
+
+        # 6th request should be rate limited
+        sixth_response = await async_client.post(
+            "/api/v1/auth/passkey/register/options",
+            headers={"Authorization": f"Bearer {authenticated_user['access_token']}"},
+        )
+        assert sixth_response.status_code == 429
+
+
+# Fixtures
+
+
+@pytest.fixture
+def mock_user_with_recent_auth():
+    """Mock user with auth_time < 5 minutes ago."""
+    import jwt
+
+    from app.core.config import settings
+
+    user = Mock(spec=User)
+    user.id = "test-user-id"
+    user.email = "test@example.com"
+
+    # Create token with recent auth_time
+    auth_time = int(datetime.now(UTC).timestamp())
+    token_data = {
+        "sub": str(user.id),
+        "auth_time": auth_time,
+        "exp": datetime.now(UTC) + timedelta(hours=1),
+    }
+    token = jwt.encode(token_data, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+    return {"user": user, "token": token}
+
+
+@pytest.fixture
+def mock_user_with_stale_auth():
+    """Mock user with auth_time > 5 minutes ago."""
+    import jwt
+
+    from app.core.config import settings
+
+    user = Mock(spec=User)
+    user.id = "test-user-id"
+    user.email = "test@example.com"
+
+    # Create token with stale auth_time (10 minutes ago)
+    auth_time = int((datetime.now(UTC) - timedelta(minutes=10)).timestamp())
+    token_data = {
+        "sub": str(user.id),
+        "auth_time": auth_time,
+        "exp": datetime.now(UTC) + timedelta(hours=1),
+    }
+    token = jwt.encode(token_data, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+    return {"user": user, "token": token}
+
+
+@pytest.fixture
+async def async_client(test_app):
+    """Async HTTP client for API testing."""
+    async with AsyncClient(app=test_app, base_url="http://test") as client:
+        yield client
+
+
+@pytest.fixture
+def authenticated_user(test_db):
+    """Fixture for authenticated user with access token."""
+    from app.db.models.user import User
+
+    # Create test user
+    user = User(
+        email="testuser@example.com", hashed_password="hashed", is_active=True, is_verified=True
+    )
+    test_db.add(user)
+    test_db.commit()
+
+    # Generate access token
+    import jwt
+
+    from app.core.config import settings
+
+    token_data = {
+        "sub": str(user.id),
+        "auth_time": int(datetime.now(UTC).timestamp()),
+        "exp": datetime.now(UTC) + timedelta(hours=1),
+    }
+    access_token = jwt.encode(token_data, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+    return {"user": user, "access_token": access_token}

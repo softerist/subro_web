@@ -21,6 +21,7 @@ from webauthn.helpers import (
     parse_registration_credential_json,
 )
 
+from app.core.auth_dependencies import require_recent_auth
 from app.core.log_utils import sanitize_for_log as _sanitize_for_log
 from app.core.rate_limit import get_real_client_ip, limiter
 from app.core.security import current_active_user
@@ -131,6 +132,7 @@ class RenameRequest(BaseModel):
 async def get_registration_options(
     request: Request,  # noqa: ARG001
     current_user: Annotated[User, Depends(current_active_user)],
+    _step_up: Annotated[User, Depends(require_recent_auth(300))],  # Step-up auth required
     db: Annotated[AsyncSession, Depends(get_async_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> dict:
@@ -154,6 +156,7 @@ async def verify_registration(
     request: Request,
     body: RegistrationVerifyRequest,
     current_user: Annotated[User, Depends(current_active_user)],
+    _step_up: Annotated[User, Depends(require_recent_auth(300))],  # Step-up auth required
     db: Annotated[AsyncSession, Depends(get_async_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> dict:
@@ -385,6 +388,7 @@ async def rename_passkey(
 async def delete_passkey(
     passkey_id: str,
     current_user: Annotated[User, Depends(current_active_user)],
+    _step_up: Annotated[User, Depends(require_recent_auth(300))],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> dict:
     """

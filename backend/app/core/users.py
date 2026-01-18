@@ -138,10 +138,16 @@ async def get_user_manager(
 # --- JWT Strategies ---
 def get_access_token_jwt_strategy() -> JWTStrategy:
     """
-    JWT strategy for access tokens.
+    JWT strategy for access tokens with auth_time claim support.
+
+    Uses custom AuthTimeJWTStrategy to track when user last performed
+    interactive authentication (not token refresh).
+
     Note: Bearer transport doesn't validate audience, only cookie transport does.
     """
-    return JWTStrategy(
+    from app.core.custom_jwt_strategy import AuthTimeJWTStrategy
+
+    return AuthTimeJWTStrategy(
         secret=settings.SECRET_KEY,
         lifetime_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         algorithm=settings.ALGORITHM,

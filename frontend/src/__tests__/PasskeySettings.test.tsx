@@ -156,7 +156,7 @@ describe("PasskeySettings", () => {
     await user.click(screen.getByText("Add Passkey"));
 
     expect(screen.getByText("Add a Passkey")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/MacBook Pro Touch ID/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Default:/i)).toBeInTheDocument();
   });
 
   it("successfully registers a new passkey", async () => {
@@ -197,7 +197,7 @@ describe("PasskeySettings", () => {
     await user.click(screen.getByText("Add Passkey"));
 
     // Enter device name
-    const nameInput = screen.getByPlaceholderText(/MacBook Pro Touch ID/i);
+    const nameInput = screen.getByPlaceholderText(/Default:/i);
     await user.type(nameInput, "My Passkey");
 
     // Click Continue
@@ -261,7 +261,7 @@ describe("PasskeySettings", () => {
     expect(screen.getByText("Add a Passkey")).toBeInTheDocument();
 
     // Type something in device name
-    const nameInput = screen.getByPlaceholderText(/MacBook Pro Touch ID/i);
+    const nameInput = screen.getByPlaceholderText(/Default:/i);
     await user.type(nameInput, "My Device");
 
     // Click Cancel button
@@ -596,7 +596,7 @@ describe("PasskeySettings", () => {
     await user.click(screen.getByRole("button", { name: /Continue/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Failed to register passkey")).toBeInTheDocument();
+      expect(screen.getByText("An error occurred. Please try again.")).toBeInTheDocument();
     });
   });
 
@@ -774,5 +774,77 @@ describe("PasskeySettings", () => {
     });
     expect(passkeyApi.passkeyApi.deletePasskey).not.toHaveBeenCalled();
   });
-});
 
+  it("uses fallback passkey name when UAParser fails", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockResolvedValue({
+      passkey_count: 0,
+      passkeys: [],
+    });
+
+    // Mock UAParser to throw an error
+    const originalNavigator = navigator.userAgent;
+    Object.defineProperty(navigator, "userAgent", {
+      get: () => {
+        throw new Error("UAParser error");
+      },
+      configurable: true,
+    });
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Add Passkey")).toBeInTheDocument();
+    });
+
+    // Open dialog - should use fallback name with date
+    await user.click(screen.getByText("Add Passkey"));
+
+    // The placeholder should contain "Passkey" followed by a date
+    expect(screen.getByPlaceholderText(/Default: "Passkey/i)).toBeInTheDocument();
+
+    // Restore original navigator
+    Object.defineProperty(navigator, "userAgent", {
+      get: () => originalNavigator,
+      configurable: true,
+    });
+  });
+
+  it("uses fallback device and browser names when UAParser returns undefined", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockResolvedValue({
+      passkey_count: 0,
+      passkeys: [],
+    });
+
+    // Save original userAgent
+    const originalUserAgent = navigator.userAgent;
+    
+    // Set userAgent to an empty or unknown value that UAParser can't parse well
+    // This should result in undefined os.name and browser.name
+    Object.defineProperty(navigator, "userAgent", {
+      get: () => "",
+      configurable: true,
+    });
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Add Passkey")).toBeInTheDocument();
+    });
+
+    // Open dialog - should use "Device – Browser" as fallback when UAParser can't parse
+    await user.click(screen.getByText("Add Passkey"));
+
+    // The placeholder should contain "Device – Browser" (the fallback values)
+    expect(screen.getByPlaceholderText(/Default: "Device – Browser"/i)).toBeInTheDocument();
+
+    // Restore original userAgent
+    Object.defineProperty(navigator, "userAgent", {
+      get: () => originalUserAgent,
+      configurable: true,
+    });
+  });
+});
