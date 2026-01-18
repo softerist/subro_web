@@ -200,3 +200,4 @@ RUN poetry install --with dev --no-root --sync --no-cache && \
 # --- Production Stage (Worker) ---
 FROM production-api AS production-worker
 CMD ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=INFO"]
+# Cache bust: 202601181225
