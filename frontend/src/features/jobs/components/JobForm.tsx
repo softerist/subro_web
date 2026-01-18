@@ -163,7 +163,7 @@ export function JobForm() {
                     <SelectValue placeholder="Select a folder..." />
                   </SelectTrigger>
                 </FormControl>
-                <SelectContent>
+                <SelectContent className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)]">
                   {isLoadingFolders || isLoadingTorrents ? (
                     <div className="p-2 text-center text-sm text-muted-foreground">
                       Loading...
@@ -184,11 +184,12 @@ export function JobForm() {
                               <SelectItem
                                 key={`torrent-${torrentPath}`}
                                 value={torrentPath}
+                                className="max-w-full"
                               >
-                                <div className="flex items-center gap-2">
-                                  <Download className="h-4 w-4 text-blue-500" />
+                                <div className="flex items-center gap-2 min-w-0 w-full">
+                                  <Download className="h-4 w-4 shrink-0 text-blue-500" />
                                   <span
-                                    className="truncate max-w-[250px]"
+                                    className="truncate flex-1 min-w-0"
                                     title={torrent.name}
                                   >
                                     {torrent.name}
@@ -209,10 +210,12 @@ export function JobForm() {
                         </div>
                       )}
                       {allowedFolders?.map((folder) => (
-                        <SelectItem key={folder} value={folder}>
-                          <div className="flex items-center gap-2">
-                            <FolderOpen className="h-4 w-4" />
-                            {folder}
+                        <SelectItem key={folder} value={folder} className="max-w-full">
+                          <div className="flex items-center gap-2 min-w-0 w-full">
+                            <FolderOpen className="h-4 w-4 shrink-0" />
+                            <span className="truncate flex-1 min-w-0" title={folder}>
+                              {folder}
+                            </span>
                           </div>
                         </SelectItem>
                       ))}
