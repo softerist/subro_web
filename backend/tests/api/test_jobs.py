@@ -231,3 +231,63 @@ async def test_cancel_job_forbidden_for_completed(
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "JOB_NOT_CANCELLABLE" in str(response.json())
+
+
+@pytest.mark.asyncio
+async def test_get_recent_torrents_success(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = UserFactory.create_user(session=db_session, email="torrent_user@example.com")
+    await db_session.flush()
+    headers = await login_user(test_client, user.email, "password123")
+
+    # Mock the internal helper that gets the client
+    with patch("app.api.routers.jobs._get_qbittorrent_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        # Mock the service function that fetches torrents
+        with patch(
+            "app.modules.subtitle.services.torrent_client.get_completed_torrents"
+        ) as mock_get_torrents:
+            # Create mock torrent objects
+            mock_torrent1 = MagicMock()
+            mock_torrent1.name = "Movie 1"
+            mock_torrent1.save_path = "/downloads/movie1"
+            mock_torrent1.completion_on = 1672531200  # 2023-01-01
+
+            mock_torrent2 = MagicMock()
+            mock_torrent2.name = "Movie 2"
+            mock_torrent2.save_path = "/downloads/movie2"
+            mock_torrent2.completion_on = 1672617600  # 2023-01-02
+
+            # Return them in unsorted order to verify sorting
+            mock_get_torrents.return_value = [mock_torrent1, mock_torrent2]
+
+            response = await test_client.get(f"{API_PREFIX}/jobs/recent-torrents", headers=headers)
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            assert len(data) == 2
+            # Should be sorted by completion time descending (newest first)
+            assert data[0]["name"] == "Movie 2"
+            assert data[0]["save_path"] == "/downloads/movie2"
+            assert data[1]["name"] == "Movie 1"
+
+
+@pytest.mark.asyncio
+async def test_get_recent_torrents_no_client(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = UserFactory.create_user(session=db_session, email="no_client_user@example.com")
+    await db_session.flush()
+    headers = await login_user(test_client, user.email, "password123")
+
+    with patch("app.api.routers.jobs._get_qbittorrent_client") as mock_get_client:
+        mock_get_client.return_value = None
+
+        response = await test_client.get(f"{API_PREFIX}/jobs/recent-torrents", headers=headers)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == []
