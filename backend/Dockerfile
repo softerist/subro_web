@@ -86,6 +86,7 @@ RUN echo "Cache bust: ${CACHE_BUST}"
 
 # Install ALL dependencies including main (cache enabled for faster rebuilds)
 RUN poetry install --no-root --sync && \
+    .venv/bin/pip install "jaraco.context>=6.1.0" && \
     .venv/bin/pip show jaraco.context
 
 # --- Development Stage ---
