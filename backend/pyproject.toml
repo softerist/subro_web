@@ -44,6 +44,7 @@ PyJWT = {extras = ["crypto"], version = "^2.9.0"} # For JWTs - replaced python-j
 slowapi = "^0.1.9" # Rate limiting
 pyotp = "^2.9.0"  # TOTP for MFA
 qrcode = {extras = ["pil"], version = "^7.4.2"}  # QR code generation for MFA setup
+webauthn = "^2.2.0"  # WebAuthn/Passkey support
 httpx = "^0.27.0"
 # fastapi-csrf-protect = "^1.0.0" # CSRF Protection
 

@@ -22,6 +22,7 @@ from uuid import UUID
 from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.request_context import get_request_context
 from app.db.models.audit_log import AuditLog, AuditOutbox
 
@@ -341,8 +342,8 @@ async def log_event(
             "error_code": error_code,
             "http_status": http_status,
             "details": sanitize_details(details),
-            "environment": "dev",  # TODO: Get from settings
-            "service_version": "1.0.0",  # TODO: Get from settings
+            "environment": settings.ENVIRONMENT,
+            "service_version": settings.APP_VERSION,
         }
 
         outbox_entry = AuditOutbox(

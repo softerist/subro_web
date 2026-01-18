@@ -1,0 +1,370 @@
+// frontend/src/__tests__/PasskeySettings.test.tsx
+/**
+ * Tests for PasskeySettings component
+ */
+
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
+import { PasskeySettings } from "@/features/auth/components/PasskeySettings";
+import * as passkeyApi from "@/features/auth/api/passkey";
+
+// Mock the passkey API
+vi.mock("@/features/auth/api/passkey");
+
+// Mock auth store
+const mockUser = { id: "user-123", email: "test@example.com", role: "user" as const };
+vi.mock("@/store/authStore", () => ({
+  useAuthStore: vi.fn((selector) => {
+    const state = {
+      user: mockUser,
+      accessToken: "test-token",
+      isAuthenticated: true,
+    };
+    return selector ? selector(state) : state;
+  }),
+}));
+
+// Helper to wrap component with providers
+const renderWithProviders = (component: React.ReactElement) => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>{component}</QueryClientProvider>
+  );
+};
+
+describe("PasskeySettings", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("shows message when WebAuthn is not supported", () => {
+    // Mock WebAuthn not supported
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(false);
+
+    renderWithProviders(<PasskeySettings />);
+
+    expect(
+      screen.getByText(/Your browser doesn't support passkeys/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Add Passkey")).not.toBeInTheDocument();
+  });
+
+  it("shows loading state while fetching passkeys", () => {
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockImplementation(
+      () => new Promise(() => {}) // Never resolves
+    );
+
+    renderWithProviders(<PasskeySettings />);
+
+    expect(screen.getByRole("progressbar", { hidden: true })).toBeInTheDocument();
+  });
+
+  it("shows empty state with info banner when no passkeys exist", async () => {
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockResolvedValue({
+      passkey_count: 0,
+      passkeys: [],
+    });
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Enable passwordless login/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Add Passkey")).toBeInTheDocument();
+  });
+
+  it("displays list of passkeys", async () => {
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockResolvedValue({
+      passkey_count: 2,
+      passkeys: [
+        {
+          id: "passkey-1",
+          device_name: "MacBook Touch ID",
+          created_at: "2026-01-01T00:00:00Z",
+          last_used_at: "2026-01-15T00:00:00Z",
+          backup_eligible: true,
+          backup_state: true,
+        },
+        {
+          id: "passkey-2",
+          device_name: "iPhone Face ID",
+          created_at: "2026-01-10T00:00:00Z",
+          last_used_at: null,
+          backup_eligible: true,
+          backup_state: false,
+        },
+      ],
+    });
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("MacBook Touch ID")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("iPhone Face ID")).toBeInTheDocument();
+    expect(screen.getByText(/Synced/i)).toBeInTheDocument(); // First passkey is synced
+  });
+
+  it("opens registration dialog when Add Passkey clicked", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockResolvedValue({
+      passkey_count: 0,
+      passkeys: [],
+    });
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Add Passkey")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Add Passkey"));
+
+    expect(screen.getByText("Add a Passkey")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/MacBook Pro Touch ID/i)).toBeInTheDocument();
+  });
+
+  it("successfully registers a new passkey", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys")
+      .mockResolvedValueOnce({ passkey_count: 0, passkeys: [] })
+      .mockResolvedValueOnce({
+        passkey_count: 1,
+        passkeys: [
+          {
+            id: "new-passkey",
+            device_name: "My Passkey",
+            created_at: "2026-01-18T00:00:00Z",
+            last_used_at: null,
+            backup_eligible: false,
+            backup_state: false,
+          },
+        ],
+      });
+
+    vi.spyOn(passkeyApi.passkeyApi, "register").mockResolvedValue({
+      id: "new-passkey",
+      device_name: "My Passkey",
+      created_at: "2026-01-18T00:00:00Z",
+      last_used_at: null,
+      backup_eligible: false,
+      backup_state: false,
+    });
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Add Passkey")).toBeInTheDocument();
+    });
+
+    // Open dialog
+    await user.click(screen.getByText("Add Passkey"));
+
+    // Enter device name
+    const nameInput = screen.getByPlaceholderText(/MacBook Pro Touch ID/i);
+    await user.type(nameInput, "My Passkey");
+
+    // Click Continue
+    await user.click(screen.getByRole("button", { name: /Continue/i }));
+
+    // Wait for registration to complete
+    await waitFor(() => {
+      expect(passkeyApi.passkeyApi.register).toHaveBeenCalledWith("My Passkey");
+    });
+
+    // Dialog should close and new passkey appears
+    await waitFor(() => {
+      expect(screen.queryByText("Add a Passkey")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows error when passkey registration fails", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockResolvedValue({
+      passkey_count: 0,
+      passkeys: [],
+    });
+
+    vi.spyOn(passkeyApi.passkeyApi, "register").mockRejectedValue({
+      response: { data: { detail: "Registration failed" } },
+    });
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Add Passkey")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Add Passkey"));
+    await user.click(screen.getByRole("button", { name: /Continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Registration failed")).toBeInTheDocument();
+    });
+  });
+
+  it("allows renaming a passkey", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockResolvedValue({
+      passkey_count: 1,
+      passkeys: [
+        {
+          id: "passkey-1",
+          device_name: "Old Name",
+          created_at: "2026-01-01T00:00:00Z",
+          last_used_at: null,
+          backup_eligible: false,
+          backup_state: false,
+        },
+      ],
+    });
+
+    vi.spyOn(passkeyApi.passkeyApi, "renamePasskey").mockResolvedValue();
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Old Name")).toBeInTheDocument();
+    });
+
+    // Click edit button
+    const editButtons = screen.getAllByRole("button", { name: "" });
+    const editButton = editButtons.find((btn) =>
+      btn.querySelector('svg[class*="lucide-pencil"]')
+    );
+    await user.click(editButton!);
+
+    // Input field should appear
+    const nameInput = screen.getByDisplayValue("Old Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "New Name");
+
+    // Click save (check icon)
+    const saveButton = screen.getAllByRole("button", { name: "" }).find((btn) =>
+      btn.querySelector('svg[class*="lucide-check"]')
+    );
+    await user.click(saveButton!);
+
+    await waitFor(() => {
+      expect(passkeyApi.passkeyApi.renamePasskey).toHaveBeenCalledWith(
+        "passkey-1",
+        "New Name"
+      );
+    });
+  });
+
+  it("allows deleting a passkey", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys")
+      .mockResolvedValueOnce({
+        passkey_count: 1,
+        passkeys: [
+          {
+            id: "passkey-1",
+            device_name: "Test Passkey",
+            created_at: "2026-01-01T00:00:00Z",
+            last_used_at: null,
+            backup_eligible: false,
+            backup_state: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ passkey_count: 0, passkeys: [] });
+
+    vi.spyOn(passkeyApi.passkeyApi, "deletePasskey").mockResolvedValue();
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Passkey")).toBeInTheDocument();
+    });
+
+    // Click delete button
+    const deleteButtons = screen.getAllByRole("button", { name: "" });
+    const deleteButton = deleteButtons.find((btn) =>
+      btn.querySelector('svg[class*="lucide-trash"]')
+    );
+    await user.click(deleteButton!);
+
+    // Confirmation dialog appears
+    await waitFor(() => {
+      expect(screen.getByText("Delete Passkey?")).toBeInTheDocument();
+    });
+
+    // Click delete in dialog
+    const confirmButton = screen.getByRole("button", { name: /Delete/i });
+    await user.click(confirmButton);
+
+    await waitFor(() => {
+      expect(passkeyApi.passkeyApi.deletePasskey).toHaveBeenCalledWith(
+        "passkey-1",
+        expect.anything()
+      );
+    });
+  });
+
+  it("cancels delete when user clicks Cancel", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockResolvedValue({
+      passkey_count: 1,
+      passkeys: [
+        {
+          id: "passkey-1",
+          device_name: "Test Passkey",
+          created_at: "2026-01-01T00:00:00Z",
+          last_used_at: null,
+          backup_eligible: false,
+          backup_state: false,
+        },
+      ],
+    });
+
+    vi.spyOn(passkeyApi.passkeyApi, "deletePasskey").mockResolvedValue();
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Passkey")).toBeInTheDocument();
+    });
+
+    // Click delete button
+    const deleteButtons = screen.getAllByRole("button", { name: "" });
+    const deleteButton = deleteButtons.find((btn) =>
+      btn.querySelector('svg[class*="lucide-trash"]')
+    );
+    await user.click(deleteButton!);
+
+    // Click Cancel
+    const cancelButton = screen.getByRole("button", { name: /Cancel/i });
+    await user.click(cancelButton);
+
+    // Dialog should close, passkey not deleted
+    await waitFor(() => {
+      expect(screen.queryByText("Delete Passkey?")).not.toBeInTheDocument();
+    });
+    expect(passkeyApi.passkeyApi.deletePasskey).not.toHaveBeenCalled();
+  });
+});

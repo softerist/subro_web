@@ -151,6 +151,28 @@ class SecurityLogger:
         """
         self.logger.info(f"MFA_FAILED] ip={sanitize(ip)} user_id={sanitize(user_id)}")
 
+    def passkey_failed(self, ip: str) -> None:
+        """
+        Log a failed passkey authentication attempt.
+
+        Args:
+            ip: Client IP address
+        """
+        self.logger.info(f"PASSKEY_FAILED] ip={sanitize(ip)}")
+
+    def login_success(self, ip: str, user_id: str, method: str = "password") -> None:
+        """
+        Log a successful login (for audit trail).
+
+        Args:
+            ip: Client IP address
+            user_id: User ID
+            method: Authentication method (password, passkey, etc.)
+        """
+        self.logger.info(
+            f"LOGIN_SUCCESS] ip={sanitize(ip)} user_id={sanitize(user_id)} method={sanitize(method)}"
+        )
+
     def rate_limited(self, ip: str, endpoint: str) -> None:
         """
         Log a rate limit violation.

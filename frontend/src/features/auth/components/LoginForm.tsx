@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { Loader2, ShieldCheck, ArrowLeft } from "lucide-react";
+import { Loader2, ShieldCheck, ArrowLeft, Key } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuthStore } from "@/store/authStore";
 import { authApi } from "@/features/auth/api/auth";
+import { passkeyApi, isWebAuthnSupported } from "@/features/auth/api/passkey";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/apiClient";
 
@@ -33,8 +34,36 @@ export function LoginForm({
   const [mfaCode, setMfaCode] = useState("");
   const [trustDevice, setTrustDevice] = useState(false);
 
+  // Passkey state
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [webAuthnSupported, setWebAuthnSupported] = useState(false);
+
+  // Check WebAuthn support on mount
+  useEffect(() => {
+    setWebAuthnSupported(isWebAuthnSupported());
+  }, []);
+
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
+
+  // Handle passkey login
+  const handlePasskeyLogin = async () => {
+    setError(null);
+    setPasskeyLoading(true);
+    try {
+      const result = await passkeyApi.authenticate();
+      await handleLoginSuccess(result.access_token);
+    } catch (err) {
+      const errorMessage =
+        (err as { response?: { data?: { detail?: string } }; message?: string })
+          ?.response?.data?.detail ||
+        (err as Error)?.message ||
+        "Passkey authentication failed.";
+      setError(errorMessage);
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
 
   // Handle successful login (with or without MFA)
   const handleLoginSuccess = async (accessToken: string) => {
@@ -160,7 +189,8 @@ export function LoginForm({
     mfaMutation.mutate({ code: mfaCode, trust_device: trustDevice });
   };
 
-  const isLoading = loginMutation.isPending || mfaMutation.isPending;
+  const isLoading =
+    loginMutation.isPending || mfaMutation.isPending || passkeyLoading;
 
   // MFA verification form
   if (mfaRequired) {
@@ -318,6 +348,35 @@ export function LoginForm({
             >
               <ArrowLeft className="mr-2 h-4 w-4" /> Back
             </Button>
+          )}
+
+          {/* Passkey Login Option */}
+          {step === "email" && webAuthnSupported && (
+            <>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Or continue with
+                  </span>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handlePasskeyLogin}
+                disabled={isLoading || passkeyLoading}
+              >
+                {passkeyLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Key className="mr-2 h-4 w-4" />
+                )}
+                Sign in with Passkey
+              </Button>
+            </>
           )}
         </div>
       </form>

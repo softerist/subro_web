@@ -62,6 +62,7 @@ from app.api.routers.files import router as files_router
 from app.api.routers.jobs import router as jobs_router
 from app.api.routers.mfa import router as mfa_router
 from app.api.routers.onboarding import router as onboarding_router
+from app.api.routers.passkey import router as passkey_router
 from app.api.routers.settings import router as settings_router
 from app.api.routers.storage_paths import router as storage_paths_router
 from app.api.routers.translation_stats import router as translation_stats_router
@@ -416,6 +417,8 @@ api_v1_router.include_router(onboarding_router)  # prefix is already "/onboardin
 api_v1_router.include_router(settings_router)  # prefix is already "/settings" in router
 # MFA - Multi-Factor Authentication endpoints
 api_v1_router.include_router(mfa_router)  # prefix is already "/auth/mfa" in router
+# Passkey - WebAuthn passwordless authentication endpoints
+api_v1_router.include_router(passkey_router)  # prefix is already "/auth/passkey" in router
 # Translation statistics - requires admin auth
 api_v1_router.include_router(
     translation_stats_router

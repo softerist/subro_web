@@ -7,6 +7,7 @@ proper TOML handling, atomic writes, and updates the database.
 """
 
 import argparse
+import json
 import logging
 import re
 import shutil
@@ -215,9 +216,10 @@ class FileUpdater:
 class VersionBumper:
     """Main version bumping orchestrator."""
 
-    def __init__(self, backend_dir: Path, dry_run: bool = False):
+    def __init__(self, backend_dir: Path, dry_run: bool = False, sync_db: bool = True):
         self.backend_dir = backend_dir
         self.dry_run = dry_run
+        self.sync_db = sync_db
         self.pyproject_path = backend_dir / "pyproject.toml"
         self.config_path = backend_dir / "app/core/config.py"
         self.updaters: list[FileUpdater] = []
@@ -310,6 +312,76 @@ class VersionBumper:
             return False
         return False
 
+    def update_root_package_json(self, new_version: Version) -> bool:
+        """Update version in repo-root package.json."""
+        package_json_path = self.backend_dir.parent / "package.json"
+        if not package_json_path.exists():
+            logger.info("package.json not found at repo root, skipping")
+            return True
+
+        try:
+            content = package_json_path.read_text()
+            pattern = r'"version":\s*"[^"]+"'
+            base_version = new_version.base()
+            new_content = re.sub(pattern, f'"version": "{base_version}"', content, count=1)
+
+            if self.dry_run:
+                logger.info(f"[DRY-RUN] Update root package.json to {base_version}")
+                return True
+
+            updater = FileUpdater(package_json_path, self.dry_run)
+            self.updaters.append(updater)
+            with updater:
+                if updater.update(new_content):
+                    logger.info(f"✓ Updated root package.json to {base_version}")
+                    return True
+        except Exception as e:
+            logger.error(f"Failed to update root package.json: {e}")
+            return False
+        return False
+
+    def update_root_package_lock_json(self, new_version: Version) -> bool:
+        """Update version in repo-root package-lock.json."""
+        package_lock_path = self.backend_dir.parent / "package-lock.json"
+        if not package_lock_path.exists():
+            logger.info("package-lock.json not found at repo root, skipping")
+            return True
+
+        base_version = new_version.base()
+        try:
+            content = package_lock_path.read_text(encoding="utf-8")
+            data = json.loads(content)
+        except Exception as e:
+            logger.error(f"Failed to parse root package-lock.json: {e}")
+            return False
+
+        if isinstance(data, dict):
+            data["version"] = base_version
+            packages = data.get("packages")
+            if isinstance(packages, dict) and isinstance(packages.get(""), dict):
+                packages[""]["version"] = base_version
+            else:
+                logger.warning(
+                    "Root package-lock.json missing root package entry; updating top-level only."
+                )
+        else:
+            logger.error("Unexpected root package-lock.json structure; expected object.")
+            return False
+
+        new_content = f"{json.dumps(data, indent=2)}\n"
+
+        if self.dry_run:
+            logger.info(f"[DRY-RUN] Update root package-lock.json to {base_version}")
+            return True
+
+        updater = FileUpdater(package_lock_path, self.dry_run)
+        self.updaters.append(updater)
+        with updater:
+            if updater.update(new_content):
+                logger.info(f"✓ Updated root package-lock.json to {base_version}")
+                return True
+        return False
+
     def update_package_json(self, new_version: Version) -> bool:
         """Update version in frontend/package.json."""
         package_json_path = self.backend_dir.parent / "frontend" / "package.json"
@@ -340,6 +412,63 @@ class VersionBumper:
             return False
         return False
 
+    def update_package_lock_json(self, new_version: Version) -> bool:
+        """Update version in frontend/package-lock.json."""
+        package_lock_path = self.backend_dir.parent / "frontend" / "package-lock.json"
+        if not package_lock_path.exists():
+            logger.info("frontend/package-lock.json not found, skipping")
+            return True
+
+        base_version = new_version.base()
+        try:
+            content = package_lock_path.read_text(encoding="utf-8")
+            data = json.loads(content)
+        except Exception as e:
+            logger.error(f"Failed to parse package-lock.json: {e}")
+            return False
+
+        if isinstance(data, dict):
+            data["version"] = base_version
+            packages = data.get("packages")
+            if isinstance(packages, dict) and isinstance(packages.get(""), dict):
+                packages[""]["version"] = base_version
+            else:
+                logger.warning("package-lock.json missing root package entry; updating top-level only.")
+        else:
+            logger.error("Unexpected package-lock.json structure; expected object.")
+            return False
+
+        new_content = f"{json.dumps(data, indent=2)}\n"
+
+        if self.dry_run:
+            logger.info(f"[DRY-RUN] Update package-lock.json to {base_version}")
+            return True
+
+        updater = FileUpdater(package_lock_path, self.dry_run)
+        self.updaters.append(updater)
+        with updater:
+            if updater.update(new_content):
+                logger.info(f"✓ Updated package-lock.json to {base_version}")
+                return True
+        return False
+
+    def sync_db_version(self) -> bool:
+        """Sync database app_version to match settings.APP_VERSION."""
+        try:
+            import importlib.util
+
+            module_path = self.backend_dir / "scripts" / "sync_db_version.py"
+            spec = importlib.util.spec_from_file_location("sync_db_version", module_path)
+            if not spec or not spec.loader:
+                logger.error("Unable to load sync_db_version module.")
+                return False
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return bool(module.sync_db_version())
+        except Exception as e:
+            logger.warning(f"Database version sync failed: {e}")
+            return False
+
     def bump_version(self) -> bool:
         try:
             with file_lock(self.pyproject_path):
@@ -354,11 +483,18 @@ class VersionBumper:
                 logger.info(f"New version:     {new_version}")
 
                 if self.update_pyproject(new_version) and self.update_config(new_version):
+                    if not self.update_root_package_json(new_version):
+                        logger.warning("Failed to update root package.json, continuing...")
+                    if not self.update_root_package_lock_json(new_version):
+                        logger.warning("Failed to update root package-lock.json, continuing...")
                     # Also update frontend version
                     if not self.update_package_json(new_version):
                         logger.warning("Failed to update package.json, continuing...")
-                    # Note: Database version sync happens during deployment via sync_db_version.py
-                    # We don't update the DB here to keep CI concerns separate
+                    if not self.update_package_lock_json(new_version):
+                        logger.warning("Failed to update package-lock.json, continuing...")
+                    if self.sync_db and not self.dry_run:
+                        if not self.sync_db_version():
+                            logger.warning("Database version sync failed or skipped.")
                     if not self.dry_run:
                         for u in self.updaters:
                             u.cleanup_backup()
@@ -381,6 +517,12 @@ class VersionBumper:
 def main():
     parser = argparse.ArgumentParser(description="Version Bumper")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--sync-db",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Sync database app_version after bumping.",
+    )
     parser.add_argument("--backend-dir", type=Path)
     args = parser.parse_args()
 
@@ -399,7 +541,7 @@ def main():
     elif branch_name == "develop":
         env_suffix = "DEV"
 
-    bumper = VersionBumper(backend_dir, dry_run=args.dry_run)
+    bumper = VersionBumper(backend_dir, dry_run=args.dry_run, sync_db=args.sync_db)
     bumper.env_suffix = env_suffix
 
     success = bumper.bump_version()

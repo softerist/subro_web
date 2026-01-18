@@ -34,6 +34,7 @@ export default defineConfig({
       reportsDirectory: "./coverage",
       clean: false,
     },
+    setupFiles: ["./src/__tests__/setup.ts"],
     // Disable parallel file execution to avoid race conditions in coverage file writing
     fileParallelism: false,
   },

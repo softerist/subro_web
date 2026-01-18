@@ -112,6 +112,28 @@ class Settings(BaseSettings):
     )
     OPEN_SIGNUP: bool = Field(default=False, validation_alias="OPEN_SIGNUP")
 
+    # --- WebAuthn / Passkey Settings ---
+    WEBAUTHN_RP_ID: str | None = Field(
+        default=None,
+        description="Relying Party ID (domain) for WebAuthn. Must match the domain users access.",
+        validation_alias="WEBAUTHN_RP_ID",
+    )
+    WEBAUTHN_RP_NAME: str = Field(
+        default="SubroWeb",
+        description="Relying Party display name shown in authenticator prompts.",
+        validation_alias="WEBAUTHN_RP_NAME",
+    )
+    WEBAUTHN_ORIGIN: str | None = Field(
+        default=None,
+        description="Expected origin for WebAuthn (e.g., https://app.example.com). Defaults to FRONTEND_URL.",
+        validation_alias="WEBAUTHN_ORIGIN",
+    )
+    WEBAUTHN_CHALLENGE_TTL_SECONDS: int = Field(
+        default=300,
+        description="Time in seconds before WebAuthn challenges expire (default 5 minutes).",
+        validation_alias="WEBAUTHN_CHALLENGE_TTL_SECONDS",
+    )
+
     # --- Account Lockout Settings ---
     LOGIN_MAX_ATTEMPTS: int = Field(
         default=5,
