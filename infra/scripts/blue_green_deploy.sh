@@ -91,6 +91,65 @@ docker_compose_pull_with_retry() {
     done
 }
 
+detect_qbittorrent_user() {
+    # 1. Check for running systemd service
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl is-active --quiet qbittorrent-nox.service || systemctl is-enabled --quiet qbittorrent-nox.service 2>/dev/null; then
+            local qb_user
+            qb_user=$(systemctl show -p User --value qbittorrent-nox.service 2>/dev/null)
+            if [ -n "$qb_user" ]; then
+                echo "$qb_user"
+                return
+            fi
+        fi
+    fi
+
+    # 2. Check for running process (if systemd failed or not present)
+    if command -v pgrep >/dev/null 2>&1; then
+        local pid
+        pid=$(pgrep -n qbittorrent-nox)
+        if [ -n "$pid" ]; then
+            local qb_user
+            qb_user=$(ps -o user= -p "$pid")
+            if [ -n "$qb_user" ]; then
+                echo "$qb_user"
+                return
+            fi
+        fi
+    fi
+}
+
+detect_qbittorrent_conf() {
+    # If variable is already set (and not empty), keep it
+    if [ -n "${QBITTORRENT_CONF:-}" ]; then
+        echo "$QBITTORRENT_CONF"
+        return
+    fi
+
+    # Default fallback
+    local default_conf="/home/nox/.config/qBittorrent/qBittorrent.conf"
+    
+    local qb_user
+    qb_user=$(detect_qbittorrent_user)
+
+    if [ -n "$qb_user" ]; then
+        local qb_home
+        qb_home=$(getent passwd "$qb_user" | cut -d: -f6)
+
+        if [ -n "$qb_home" ]; then
+            local candidate="$qb_home/.config/qBittorrent/qBittorrent.conf"
+            # If file exists or directory exists, assume this is the path
+            if [ -f "$candidate" ] || [ -d "$qb_home/.config/qBittorrent" ]; then
+                echo "$candidate"
+                return
+            fi
+        fi
+    fi
+
+    # Fallback
+    echo "$default_conf"
+}
+
 # Ensure Redis and QUIC sysctls are set on host (persistent)
 section_start "prod_sysctl" "Applying Sysctl Tweaks"
 SYSCTL_REDIS_CONF="/etc/sysctl.d/99-redis.conf"
@@ -365,33 +424,54 @@ section_end "prod_cleanup"
 # 7. Post-Deployment Hooks
 section_start "prod_hooks" "Running Post-Deployment Hooks"
 
+# Define variables with defaults
+QBITTORRENT_CONF="$(detect_qbittorrent_conf)"
+WEBHOOK_SCRIPT_PATH="${WEBHOOK_SCRIPT_PATH:-/opt/subro_web/scripts/qbittorrent-nox-webhook.sh}"
+WEBHOOK_DIR="$(dirname "$WEBHOOK_SCRIPT_PATH")"
+
+# Detect User/Group for ownership
+# If we can detect the running user, we align all ownership to them.
+# If not (service stopped), we fall back to the legacy split ownership (nox/qbittorrent-nox).
+DETECTED_USER="$(detect_qbittorrent_user)"
+if [ -n "$DETECTED_USER" ]; then
+    SCRIPT_USER="$DETECTED_USER"
+    SCRIPT_GROUP="$(id -gn "$DETECTED_USER" 2>/dev/null || echo "$DETECTED_USER")"
+    CONFIG_USER="$DETECTED_USER"
+    CONFIG_GROUP="$SCRIPT_GROUP"
+    log "Detected active qBittorrent user: $DETECTED_USER:$SCRIPT_GROUP"
+else
+    SCRIPT_USER="qbittorrent-nox"
+    SCRIPT_GROUP="qbittorrent-nox"
+    CONFIG_USER="nox"
+    CONFIG_GROUP="media-group"
+    log "qBittorrent user detection failed (service stopped?); using legacy defaults ($SCRIPT_USER / $CONFIG_USER)"
+fi
+
 # Create directories on host for qBittorrent integration
-log "Creating /opt/subro_web directories..."
-mkdir -p /opt/subro_web/scripts /opt/subro_web/secrets /opt/subro_web/logs
+log "Creating directories for webhook integration..."
+mkdir -p "$WEBHOOK_DIR" /opt/subro_web/secrets /opt/subro_web/logs
 
 # Copy webhook script from Docker container to host
 # (The script runs on the HOST where qBittorrent is, not inside Docker)
-log "Copying webhook script from container to host..."
-if docker cp "$NEW_COLOR-api-1:/app/scripts/qbittorrent-nox-webhook.sh" /opt/subro_web/scripts/; then
-    chmod +x /opt/subro_web/scripts/qbittorrent-nox-webhook.sh
-    success "Webhook script copied to /opt/subro_web/scripts/"
+log "Copying webhook script from container to host ($WEBHOOK_SCRIPT_PATH)..."
+if docker cp "$NEW_COLOR-api-1:/app/scripts/qbittorrent-nox-webhook.sh" "$WEBHOOK_SCRIPT_PATH"; then
+    chmod +x "$WEBHOOK_SCRIPT_PATH"
+    success "Webhook script installed at $WEBHOOK_SCRIPT_PATH"
 else
     warn "Failed to copy webhook script (container may not have it)"
 fi
 
-# Set ownership for qbittorrent-nox user
-log "Setting permissions for qbittorrent-nox..."
-chown -R qbittorrent-nox:qbittorrent-nox /opt/subro_web/scripts /opt/subro_web/logs 2>/dev/null || true
+# Set ownership for webhook script & logs
+log "Setting permissions for $SCRIPT_USER:$SCRIPT_GROUP..."
+chown -R "$SCRIPT_USER:$SCRIPT_GROUP" "$WEBHOOK_DIR" /opt/subro_web/logs 2>/dev/null || true
 chmod -R 775 /opt/subro_web/logs
 
 # Configure qBittorrent webhook integration
 log "Configuring qBittorrent webhook integration..."
-QBITTORRENT_CONF="/home/nox/.config/qBittorrent/qBittorrent.conf"
-WEBHOOK_SCRIPT_PATH="/opt/subro_web/scripts/qbittorrent-nox-webhook.sh"
 
 # Ensure qBittorrent config directory exists with correct ownership
 mkdir -p "$(dirname "$QBITTORRENT_CONF")"
-chown nox:media-group "$(dirname "$QBITTORRENT_CONF")"
+chown "$CONFIG_USER:$CONFIG_GROUP" "$(dirname "$QBITTORRENT_CONF")"
 
 # Check if AutoRun section exists
 if ! grep -q '^\[AutoRun\]' "$QBITTORRENT_CONF" 2>/dev/null; then
@@ -402,8 +482,8 @@ if ! grep -q '^\[AutoRun\]' "$QBITTORRENT_CONF" 2>/dev/null; then
 enabled=true
 program="$WEBHOOK_SCRIPT_PATH \\\\"%F\\\\""
 EOF
-    # Restore ownership to nox:media-group (config file owner)
-    chown nox:media-group "$QBITTORRENT_CONF"
+    # Restore ownership
+    chown "$CONFIG_USER:$CONFIG_GROUP" "$QBITTORRENT_CONF"
     chmod 664 "$QBITTORRENT_CONF"
     success "qBittorrent AutoRun configured"
 
@@ -415,7 +495,7 @@ EOF
 else
     # Update existing AutoRun section to ensure correct path
     sed -i "s|^program=.*|program=\"$WEBHOOK_SCRIPT_PATH \\\\\\\\\"%F\\\\\\\\\"\"| " "$QBITTORRENT_CONF"
-    chown nox:media-group "$QBITTORRENT_CONF"
+    chown "$CONFIG_USER:$CONFIG_GROUP" "$QBITTORRENT_CONF"
     chmod 664 "$QBITTORRENT_CONF"
     log "qBittorrent AutoRun path updated"
 fi

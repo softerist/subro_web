@@ -320,15 +320,19 @@ fi
 # ============================================
 # Logging Setup (secure perms)
 # ============================================
-mkdir -p "$LOG_DIR" && chmod 775 "$LOG_DIR" 2>/dev/null || {
-  echo "ERROR: Cannot create or set permissions on $LOG_DIR" >&2
+mkdir -p "$LOG_DIR"
+chmod 775 "$LOG_DIR" 2>/dev/null || true
+if [ ! -w "$LOG_DIR" ]; then
+  echo "ERROR: Cannot write to log dir: $LOG_DIR" >&2
   exit 1
-}
+fi
 
-touch "$LOG_FILE" && chmod 640 "$LOG_FILE" 2>/dev/null || {
-  echo "ERROR: Cannot create or set permissions on $LOG_FILE" >&2
+touch "$LOG_FILE"
+chmod 640 "$LOG_FILE" 2>/dev/null || true
+if [ ! -w "$LOG_FILE" ]; then
+  echo "ERROR: Cannot write to log file: $LOG_FILE" >&2
   exit 1
-}
+fi
 
 # Log rotation with timestamp
 if [ -f "$LOG_FILE" ]; then
@@ -372,10 +376,12 @@ fi
 # ============================================
 # Concurrency Handling (per-path lock)
 # ============================================
-mkdir -p "$LOCK_DIR" && chmod 700 "$LOCK_DIR" 2>/dev/null || {
-  log_error "Cannot create or set permissions on lock dir: $LOCK_DIR"
+mkdir -p "$LOCK_DIR"
+chmod 770 "$LOCK_DIR" 2>/dev/null || true
+if [ ! -w "$LOCK_DIR" ] && [ ! -d "$LOCK_DIR" ]; then
+  log_error "Cannot create or write to lock dir: $LOCK_DIR"
   exit 1
-}
+fi
 
 lock_hash="$(hash_string "$TORRENT_PATH")"
 LOCK_FILE_PATH="$LOCK_DIR/${lock_hash}.lock"
