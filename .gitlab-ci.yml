@@ -18,7 +18,7 @@ stages:
 
 default:
   retry:
-    max: 5
+    max: 2
     when:
       - runner_system_failure
       - stuck_or_timeout_failure
