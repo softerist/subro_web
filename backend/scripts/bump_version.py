@@ -433,7 +433,9 @@ class VersionBumper:
             if isinstance(packages, dict) and isinstance(packages.get(""), dict):
                 packages[""]["version"] = base_version
             else:
-                logger.warning("package-lock.json missing root package entry; updating top-level only.")
+                logger.warning(
+                    "package-lock.json missing root package entry; updating top-level only."
+                )
         else:
             logger.error("Unexpected package-lock.json structure; expected object.")
             return False
@@ -469,7 +471,7 @@ class VersionBumper:
             logger.warning(f"Database version sync failed: {e}")
             return False
 
-    def bump_version(self) -> bool:
+    def bump_version(self) -> bool:  # noqa: C901 - Complexity acceptable for orchestrator
         try:
             with file_lock(self.pyproject_path):
                 current = self.read_current_version()

@@ -129,7 +129,7 @@ class RenameRequest(BaseModel):
 )
 @limiter.limit("5/minute")
 async def get_registration_options(
-    request: Request,
+    request: Request,  # noqa: ARG001
     current_user: Annotated[User, Depends(current_active_user)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
     redis: Annotated[Redis, Depends(get_redis)],
@@ -212,7 +212,7 @@ async def verify_registration(
 )
 @limiter.limit("10/minute")
 async def get_authentication_options(
-    request: Request,
+    request: Request,  # noqa: ARG001 - Required by rate limiter
     body: AuthenticationOptionsRequest | None = None,
     db: AsyncSession = Depends(get_async_session),
     redis: Redis = Depends(get_redis),
