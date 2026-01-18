@@ -42,7 +42,9 @@ async def test_get_registration_options_success(
 ) -> None:
     """Test that authenticated user can get registration options."""
     # Create and login user
-    user = UserFactory.create_user(session=db_session, email="passkey_reg@example.com", password="password")
+    user = UserFactory.create_user(
+        session=db_session, email="passkey_reg@example.com", password="password"
+    )
     headers = await login_user(test_client, user.email, "password")
 
     # Mock Redis for challenge storage
@@ -87,7 +89,9 @@ async def test_list_passkeys_requires_auth(test_client: AsyncClient) -> None:
 async def test_list_passkeys_empty(test_client: AsyncClient, db_session: AsyncSession) -> None:
     """Test listing passkeys when user has none."""
     # Create and login user
-    user = UserFactory.create_user(session=db_session, email="no_passkeys@example.com", password="password")
+    user = UserFactory.create_user(
+        session=db_session, email="no_passkeys@example.com", password="password"
+    )
     headers = await login_user(test_client, user.email, "password")
 
     # List passkeys
@@ -117,7 +121,9 @@ async def test_rename_nonexistent_passkey(
 ) -> None:
     """Test renaming a passkey that doesn't exist."""
     # Create and login user
-    user = UserFactory.create_user(session=db_session, email="rename_test@example.com", password="password")
+    user = UserFactory.create_user(
+        session=db_session, email="rename_test@example.com", password="password"
+    )
     headers = await login_user(test_client, user.email, "password")
 
     # Try to rename non-existent passkey
@@ -145,7 +151,9 @@ async def test_delete_nonexistent_passkey(
 ) -> None:
     """Test deleting a passkey that doesn't exist."""
     # Create and login user
-    user = UserFactory.create_user(session=db_session, email="delete_test@example.com", password="password")
+    user = UserFactory.create_user(
+        session=db_session, email="delete_test@example.com", password="password"
+    )
     headers = await login_user(test_client, user.email, "password")
 
     # Try to delete non-existent passkey
@@ -216,7 +224,12 @@ async def test_verify_authentication_public(test_client: AsyncClient) -> None:
                 "credential": {
                     "id": "fake",
                     "rawId": "fake",
-                    "response": {"clientDataJSON": "e30=", "authenticatorData": "AA==", "signature": "AA==", "userHandle": ""},
+                    "response": {
+                        "clientDataJSON": "e30=",
+                        "authenticatorData": "AA==",
+                        "signature": "AA==",
+                        "userHandle": "",
+                    },
                     "type": "public-key",
                 }
             },
@@ -236,7 +249,9 @@ async def test_passkey_registration_flow_mocked(
     from app.db.models.passkey import Passkey
 
     # Create and login user
-    user = UserFactory.create_user(session=db_session, email="reg_flow@example.com", password="password")
+    user = UserFactory.create_user(
+        session=db_session, email="reg_flow@example.com", password="password"
+    )
     headers = await login_user(test_client, user.email, "password")
 
     # Mock Redis and WebAuthn verification
@@ -302,7 +317,9 @@ async def test_rename_and_delete_passkey_flow(
     from app.db.models.passkey import Passkey
 
     # Create user with a passkey
-    user = UserFactory.create_user(session=db_session, email="crud_flow@example.com", password="password")
+    user = UserFactory.create_user(
+        session=db_session, email="crud_flow@example.com", password="password"
+    )
     passkey = Passkey(
         user_id=user.id,
         credential_id=b"test_cred",

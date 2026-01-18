@@ -78,9 +78,7 @@ def test_update_package_lock_json_updates_root_versions(
     assert updated["packages"][""]["version"] == "2.3.4"
 
 
-def test_update_root_package_json_updates_version(
-    tmp_path: Path, bump_version_module
-) -> None:
+def test_update_root_package_json_updates_version(tmp_path: Path, bump_version_module) -> None:
     backend_dir = tmp_path / "backend"
     backend_dir.mkdir()
 
