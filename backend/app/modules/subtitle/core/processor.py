@@ -919,7 +919,7 @@ def determine_content_type_for_path(
 
         # Decide
         result = decide_content_type(signals, config)
-        logger.info(f"Classified '{target_path.name}' as {result.value} (Signals: {signals})")
+        logger.debug(f"Classified '{target_path.name}' as {result.value} (Signals: {signals})")
 
         if result == ContentType.TV:
             return "tvshow"
