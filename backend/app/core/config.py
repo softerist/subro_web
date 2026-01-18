@@ -337,7 +337,7 @@ class Settings(BaseSettings):
     SUBTITLE_SYNC_OFFSET_THRESHOLD: int = Field(
         default=1, validation_alias="SUBTITLE_SYNC_OFFSET_THRESHOLD"
     )
-    FFSUBSYNC_CHECK_TIMEOUT: int = Field(default=90, validation_alias="FFSUBSYNC_CHECK_TIMEOUT")
+    FFSUBSYNC_CHECK_TIMEOUT: int = Field(default=600, validation_alias="FFSUBSYNC_CHECK_TIMEOUT")
     FFSUBSYNC_TIMEOUT: int = Field(default=600, validation_alias="FFSUBSYNC_TIMEOUT")
     ALASS_TIMEOUT: int = Field(default=600, validation_alias="ALASS_TIMEOUT")
 

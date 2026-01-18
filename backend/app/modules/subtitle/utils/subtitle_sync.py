@@ -20,7 +20,7 @@ except ImportError:
         SUBTITLE_SYNC_OFFSET_THRESHOLD = 1.0
         FFSUBSYNC_TIMEOUT = 180
         ALASS_TIMEOUT = 300
-        FFSUBSYNC_CHECK_TIMEOUT = 300
+        FFSUBSYNC_CHECK_TIMEOUT = 600
 
     settings = DummySettings()  # type: ignore[assignment, no-redef]
     logging.warning("Could not import config. Using default sync tool paths/timeouts.")
@@ -54,7 +54,7 @@ OFFSET_THRESHOLD = getattr(settings, "SUBTITLE_SYNC_OFFSET_THRESHOLD", 1.0)
 # Load timeouts from settings with defaults
 FFSUBSYNC_TIMEOUT = getattr(settings, "FFSUBSYNC_TIMEOUT", 300)
 ALASS_TIMEOUT = getattr(settings, "ALASS_TIMEOUT", 300)
-FFSUBSYNC_CHECK_TIMEOUT = getattr(settings, "FFSUBSYNC_CHECK_TIMEOUT", 300)
+FFSUBSYNC_CHECK_TIMEOUT = getattr(settings, "FFSUBSYNC_CHECK_TIMEOUT", 600)
 
 # --- Helper: Check Tool Availability ---
 # Module-level cache dictionary for tool availability (replaces globals() usage)
