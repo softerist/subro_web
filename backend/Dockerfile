@@ -76,7 +76,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency definition files FIRST, ensuring correct ownership
+# Copy dependency definition files FIRST, ensuring correct ownership
 COPY --chown=appuser:appuser pyproject.toml poetry.lock ./
+
+# Force cache invalidation for dependencies
+ARG CACHE_BUST=202601181333
+RUN echo "Cache bust: ${CACHE_BUST}"
 
 # Install ALL dependencies including main (cache enabled for faster rebuilds)
 RUN poetry install --no-root --sync
