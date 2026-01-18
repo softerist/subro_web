@@ -244,6 +244,77 @@ describe("JobForm", () => {
     });
   });
 
+  it("uses save_path when content_path is not available", async () => {
+    (jobsApi.getAllowedFolders as any).mockResolvedValue([]);
+    (jobsApi.getRecentTorrents as any).mockResolvedValue([
+      {
+        name: "Torrent Without Content Path",
+        save_path: "/downloads/torrent-folder",
+        content_path: null,
+        completed_on: "2023-01-01",
+      },
+    ]);
+    (jobsApi.create as any).mockResolvedValue({
+      id: "job-3",
+      status: "pending",
+    });
+
+    render(<JobForm />, { wrapper });
+
+    await waitFor(() => expect(screen.queryByText(/loading/i)).toBeNull());
+
+    const select = screen.getByTestId("folder_path");
+    // Open the dropdown to trigger the query
+    fireEvent.click(select);
+
+    // Wait for the torrent option to appear
+    await waitFor(() => {
+      expect(screen.getByText("Torrent Without Content Path")).toBeDefined();
+    });
+
+    // Select it (value should be save_path since content_path is null)
+    fireEvent.change(select, { target: { value: "/downloads/torrent-folder" } });
+
+    // Submit
+    fireEvent.click(screen.getByRole("button", { name: /start job/i }));
+
+    await waitFor(() => {
+      expect(jobsApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          folder_path: "/downloads/torrent-folder",
+        }),
+        expect.anything(),
+      );
+    });
+  });
+
+  it("handles null allowedFolders gracefully", async () => {
+    (jobsApi.getAllowedFolders as any).mockResolvedValue(null);
+    (jobsApi.getRecentTorrents as any).mockResolvedValue([
+      {
+        name: "Test Torrent",
+        save_path: "/downloads",
+        content_path: "/downloads/test",
+        completed_on: "2023-01-01",
+      },
+    ]);
+
+    render(<JobForm />, { wrapper });
+
+    const select = screen.getByTestId("folder_path");
+    // Open the dropdown to trigger the query
+    fireEvent.click(select);
+
+    // Should show torrent but not crash on null allowedFolders
+    await waitFor(() => {
+      expect(screen.getByText("Test Torrent")).toBeDefined();
+    });
+
+    // "Allowed Folders" header should NOT appear when allowedFolders is null
+    expect(screen.queryByText("Allowed Folders")).toBeNull();
+  });
+
+
   it("shows error toast on submission failure", async () => {
     (jobsApi.getAllowedFolders as any).mockResolvedValue(["/media/movies"]);
     const mockError = new Error("API Error");

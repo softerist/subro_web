@@ -421,6 +421,90 @@ describe("SettingsPage Coverage", () => {
     );
   });
 
+  it("shows docker host port placeholder when in docker_host mode with no configured port", async () => {
+    // Settings with docker_host mode but no port configured
+    const dockerHostSettings = {
+      ...mockSettings,
+      qbittorrent_port: null,
+      qbittorrent_connection_mode: "docker_host",
+    };
+    (getSettings as any).mockResolvedValue(dockerHostSettings);
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("qBittorrent")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByText("qBittorrent"));
+
+    const portInput = await waitFor(() => screen.getByLabelText("Port"));
+    // Should show docker_host default port (8090) not standard port (8080)
+    expect(portInput).toHaveAttribute("placeholder", "8090");
+  });
+
+  it("auto-updates port when switching to docker_host mode with default port", async () => {
+    // Settings with direct mode and standard port
+    const directModeSettings = {
+      ...mockSettings,
+      qbittorrent_port: 8080,
+      qbittorrent_connection_mode: "direct",
+    };
+    (getSettings as any).mockResolvedValue(directModeSettings);
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("qBittorrent")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByText("qBittorrent"));
+
+    // Click the docker host mode button
+    await waitFor(() => {
+      expect(screen.getByText("Docker → Host")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Docker → Host"));
+
+    // Verify port is updated to docker host port and form is dirty
+    await waitFor(() =>
+      expect(screen.getByTestId("save-pill")).toBeInTheDocument(),
+    );
+  });
+
+  it("does not auto-update port when switching to docker_host mode with custom port", async () => {
+    // Settings with direct mode and custom port (not default)
+    const customPortSettings = {
+      ...mockSettings,
+      qbittorrent_port: 9999, // Custom port, not 8080
+      qbittorrent_connection_mode: "direct",
+    };
+    (getSettings as any).mockResolvedValue(customPortSettings);
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("qBittorrent")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByText("qBittorrent"));
+
+    // Click the docker host mode button
+    await waitFor(() => {
+      expect(screen.getByText("Docker → Host")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Docker → Host"));
+
+    // Form should be dirty (connection mode changed), but port stays at 9999
+    await waitFor(() =>
+      expect(screen.getByTestId("save-pill")).toBeInTheDocument(),
+    );
+  });
+
+
+
   it("shows OpenSubtitles download allowance", async () => {
     const settingsWithDownloads = {
       ...mockSettings,

@@ -9,6 +9,7 @@ Provides endpoints for:
 """
 
 import logging
+from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -20,7 +21,6 @@ from webauthn.helpers import (
     parse_registration_credential_json,
 )
 
-from app.core.config import settings
 from app.core.log_utils import sanitize_for_log as _sanitize_for_log
 from app.core.rate_limit import get_real_client_ip, limiter
 from app.core.security import current_active_user
@@ -36,8 +36,10 @@ router = APIRouter(prefix="/auth/passkey", tags=["Passkey - WebAuthn Authenticat
 
 
 # --- Redis Dependency ---
-async def get_redis() -> Redis:
+async def get_redis() -> "AsyncGenerator[Redis, None]":
     """Get Redis client for challenge storage."""
+    from app.core.config import settings
+
     redis = Redis.from_url(
         f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/3",
         decode_responses=False,

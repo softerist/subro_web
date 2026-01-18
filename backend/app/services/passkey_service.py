@@ -113,7 +113,7 @@ async def retrieve_challenge(
     if challenge:
         await redis.delete(key)
         logger.debug("Retrieved and deleted %s challenge for user %s", context, user_id)
-        return challenge
+        return bytes(challenge) if not isinstance(challenge, bytes) else challenge
     logger.warning("No %s challenge found for user %s", context, user_id)
     return None
 
@@ -174,12 +174,17 @@ async def get_registration_options(
             for c in (options.exclude_credentials or [])
         ],
         "authenticatorSelection": {
-            "residentKey": options.authenticator_selection.resident_key.value
-            if options.authenticator_selection
-            else "preferred",
-            "userVerification": options.authenticator_selection.user_verification.value
-            if options.authenticator_selection
-            else "preferred",
+            "residentKey": (
+                options.authenticator_selection.resident_key.value
+                if options.authenticator_selection and options.authenticator_selection.resident_key
+                else "preferred"
+            ),
+            "userVerification": (
+                options.authenticator_selection.user_verification.value
+                if options.authenticator_selection
+                and options.authenticator_selection.user_verification
+                else "preferred"
+            ),
         },
         "attestation": options.attestation.value if options.attestation else "none",
     }
@@ -391,7 +396,7 @@ async def verify_authentication(
     result = await db.execute(select(UserModel).where(UserModel.id == passkey.user_id))
     user = result.scalar_one_or_none()
 
-    if not user or not user.is_active:
+    if not user or not getattr(user, "is_active", True):
         raise ValueError("User not found or inactive.")
 
     # Audit log
@@ -404,7 +409,7 @@ async def verify_authentication(
     )
 
     logger.info("User %s authenticated via passkey %s", user.id, passkey.id)
-    return user
+    return user  # type: ignore[return-value]
 
 
 async def list_user_passkeys(db: AsyncSession, user: User) -> list[dict]:
@@ -440,7 +445,7 @@ async def rename_passkey(
         .values(device_name=new_name)
     )
     await db.commit()
-    return result.rowcount > 0
+    return bool(result.rowcount and result.rowcount > 0)  # type: ignore[attr-defined]
 
 
 async def delete_passkey(
@@ -462,7 +467,7 @@ async def delete_passkey(
     )
     await db.commit()
 
-    if result.rowcount > 0:
+    if result.rowcount and result.rowcount > 0:  # type: ignore[attr-defined]
         await audit_service.log_event(
             db=db,
             category="auth",

@@ -123,7 +123,20 @@ describe("passkeyApi", () => {
 
       await expect(passkeyApi.register("Test")).rejects.toThrow("Unknown error");
     });
+
+    it("throws generic message when registration fails with non-Error value", async () => {
+      const mockOptions = { challenge: "test-challenge" };
+      vi.mocked(api.post).mockResolvedValue({ data: mockOptions });
+
+      // Reject with a string instead of an Error object
+      vi.mocked(simpleWebAuthn.startRegistration).mockRejectedValue(
+        "Some non-error rejection"
+      );
+
+      await expect(passkeyApi.register("Test")).rejects.toThrow("Registration failed.");
+    });
   });
+
 
   describe("getAuthenticationOptions", () => {
     it("calls endpoint without email", async () => {
@@ -190,7 +203,33 @@ describe("passkeyApi", () => {
         "Authentication was cancelled or not allowed."
       );
     });
+
+    it("throws generic message when authentication fails with non-Error value", async () => {
+      const mockOptions = { challenge: "auth-challenge" };
+      vi.mocked(api.post).mockResolvedValue({ data: mockOptions });
+
+      // Reject with a string instead of an Error object
+      vi.mocked(simpleWebAuthn.startAuthentication).mockRejectedValue(
+        "Some non-error rejection"
+      );
+
+      await expect(passkeyApi.authenticate()).rejects.toThrow("Authentication failed.");
+    });
+
+    it("throws the original error when authentication fails with regular Error", async () => {
+      const mockOptions = { challenge: "auth-challenge" };
+      vi.mocked(api.post).mockResolvedValue({ data: mockOptions });
+
+      // Regular Error (not NotAllowedError) should be re-thrown
+      vi.mocked(simpleWebAuthn.startAuthentication).mockRejectedValue(
+        new Error("Some other authentication error")
+      );
+
+      await expect(passkeyApi.authenticate()).rejects.toThrow("Some other authentication error");
+    });
   });
+
+
 
   describe("listPasskeys", () => {
     it("fetches and returns passkey list", async () => {

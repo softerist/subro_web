@@ -136,7 +136,7 @@ export function PasskeySettings() {
         <CardContent>
           <div className="p-4 bg-muted/50 border rounded-lg">
             <p className="text-sm text-muted-foreground">
-              Your browser doesn't support passkeys. Please use a modern browser
+              Your browser doesn&apos;t support passkeys. Please use a modern browser
               like Chrome, Safari, Firefox, or Edge.
             </p>
           </div>
