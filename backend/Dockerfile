@@ -44,7 +44,8 @@ RUN ln -s /usr/bin/python3.12 /usr/local/bin/python && \
     ln -s /usr/bin/python3.12 /usr/local/bin/python3
 
 # Install Poetry using the official installer script to avoid dependency conflicts
-RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/opt/poetry python3 -
+RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/opt/poetry python3 - && \
+    /opt/poetry/venv/bin/pip install --upgrade "jaraco.context>=6.1.0"
 
 # Create a non-root user and group early for consistent permissions
 # Also create media-group with GID 1002 to match host media directory permissions
