@@ -249,6 +249,7 @@ ci_debug_env:
         --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
         -f "$DOCKERFILE" \
         --build-arg POETRY_VERSION="$POETRY_VERSION" \
+        --build-arg CACHE_BUST="$CI_PIPELINE_ID" \
         ${BUILD_ARGS:-} \
         "$CONTEXT"
   rules:
