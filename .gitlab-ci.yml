@@ -216,45 +216,12 @@ ci_debug_env:
   script:
     - 'echo "Pipeline: $CI_PIPELINE_SOURCE | Branch: $CI_COMMIT_BRANCH | SHA: $CI_COMMIT_SHORT_SHA"'
 
-# -------- VERSION BUMP (main branch only) --------
-bump_version:
-  stage: pre
-  image: python:3.12-slim
-  variables:
-    GIT_STRATEGY: clone
-    GIT_DEPTH: "0"
-  rules:
-    # Skip if this is already a version bump commit or if [skip ci] is present
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\): bump version/ && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-      when: on_success
-    - when: never
-  before_script:
-    - apt-get update && apt-get install -y git
-    - pip install tomlkit
-    - git config --global user.email "ci-bot@gitlab.com"
-    - git config --global user.name "CI Bot"
-  script:
-    - echo "Bumping version for main branch deployment..."
-    - python3 backend/scripts/bump_version.py
-    - |
-      if [ -n "$(git status --porcelain)" ]; then
-        NEW_VERSION=$(awk -F '"' '/^version = / { print $2; exit }' backend/pyproject.toml)
-        echo "NEW_APP_VERSION=$NEW_VERSION" >> version.env
-        echo "✅ Version bumped to $NEW_VERSION (will be committed after deploy)"
-      else
-        echo "No version changes needed"
-        # Use current version
-        CURRENT_VERSION=$(awk -F '"' '/^version = / { print $2; exit }' backend/pyproject.toml)
-        echo "NEW_APP_VERSION=$CURRENT_VERSION" >> version.env
-      fi
-  artifacts:
-    reports:
-      dotenv: version.env
-    paths:
-      - backend/pyproject.toml
-      - backend/app/core/config.py
-      - frontend/package.json
-    expire_in: 1 hour
+# -------- VERSION BUMP --------
+# NOTE: Versioning is handled by semantic-release in the release stage.
+# It analyzes conventional commits to determine version bumps:
+#   - fix: -> PATCH
+#   - feat: -> MINOR
+#   - feat!: or BREAKING CHANGE: -> MAJOR
 
 # ============ BUILD STAGE ============
 .build_template:
@@ -291,10 +258,7 @@ bump_version:
 build_api:
   extends: .build_template
   timeout: 30m
-  needs:
-    - job: bump_version
-      artifacts: true
-      optional: true
+  needs: []
   variables:
     SERVICE: api
     DOCKER_IMAGE: $DOCKER_IMAGE_API
@@ -317,10 +281,7 @@ build_api_test:
 build_worker:
   extends: .build_template
   timeout: 30m
-  needs:
-    - job: bump_version
-      artifacts: true
-      optional: true
+  needs: []
   variables:
     SERVICE: worker
     DOCKER_IMAGE: $DOCKER_IMAGE_WORKER
@@ -332,10 +293,7 @@ build_worker:
 build_frontend:
   extends: .build_template
   timeout: 30m
-  needs:
-    - job: bump_version
-      artifacts: true
-      optional: true
+  needs: []
   variables:
     SERVICE: frontend
     DOCKER_IMAGE: $DOCKER_IMAGE_FRONTEND
@@ -1082,26 +1040,25 @@ verify_prod:
       exit 1
 
 # ============ RELEASE STAGE ============
-# Commit version bump (files already bumped in pre stage)
-commit_version_bump:
+# Semantic Release - analyzes conventional commits to determine version bump
+semantic_release:
   retry: 1
-  timeout: 5m
+  timeout: 10m
   stage: release
-  image: alpine:3.20
+  image: node:20-alpine
   needs:
-    - job: bump_version
-      artifacts: true
     - job: verify_prod
       artifacts: false
   variables:
     GIT_STRATEGY: clone
     GIT_DEPTH: "0"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\): bump version/ && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\)/ && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       when: on_success
     - when: never
   before_script:
     - apk add --no-cache git openssh-client bash
+    - npm ci --prefer-offline
     - mkdir -p ~/.ssh && chmod 700 ~/.ssh
     - |-
       if echo "$SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
@@ -1118,31 +1075,11 @@ commit_version_bump:
     - |-
       echo ""
       echo "┌─────────────────────────────────────────────────────────────┐"
-      echo "│  📦 Committing Version Bump                                 │"
+      echo "│  🚀 Running Semantic Release                                │"
       echo "└─────────────────────────────────────────────────────────────┘"
       echo ""
+      npx semantic-release
 
-      # Check if we have version changes from bump_version artifacts
-      if [ -n "$(git status --porcelain backend/pyproject.toml backend/app/core/config.py frontend/package.json 2>/dev/null)" ]; then
-        NEW_VERSION="${NEW_APP_VERSION:-unknown}"
-        echo "Version: $NEW_VERSION"
-        echo ""
-
-        git add backend/pyproject.toml backend/app/core/config.py frontend/package.json
-
-        # Use [skip ci] to prevent triggering another pipeline
-        git commit -m "chore(release): bump version to $NEW_VERSION [skip ci]"
-
-        echo "Pushing version commit..."
-        git push origin HEAD:$CI_COMMIT_BRANCH
-
-        echo ""
-        echo "┌─────────────────────────────────────────────────────────────┐"
-        echo "│  ✅ Version $NEW_VERSION committed successfully            │"
-        echo "└─────────────────────────────────────────────────────────────┘"
-      else
-        echo "No version changes to commit (files unchanged)"
-      fi
 
 # ============ CLEANUP STAGE ============
 cleanup_registry:
