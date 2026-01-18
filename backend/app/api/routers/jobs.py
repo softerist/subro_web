@@ -1,7 +1,7 @@
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, cast
 from uuid import UUID
 
 from fastapi import (
@@ -610,7 +610,7 @@ def _torrent_to_schema(torrent: Any) -> CompletedTorrentInfo | None:
 
 
 def _resolve_torrent_content_path(torrent: Any) -> str | None:
-    content_path = getattr(torrent, "content_path", None)
+    content_path = cast(str | None, getattr(torrent, "content_path", None))
     if content_path:
         try:
             content_path_obj = Path(content_path)
@@ -620,7 +620,7 @@ def _resolve_torrent_content_path(torrent: Any) -> str | None:
             return content_path
         return content_path
 
-    save_path = getattr(torrent, "save_path", None)
+    save_path = cast(str | None, getattr(torrent, "save_path", None))
     name = getattr(torrent, "name", None)
     if save_path and name:
         return str(Path(save_path) / name)
