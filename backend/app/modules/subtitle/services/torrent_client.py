@@ -145,16 +145,27 @@ def get_completed_torrents(client: qbittorrentapi.Client) -> list[Any]:
         logging.error("Cannot get completed torrents: qBittorrent client not logged in.")
         return []
     try:
-        # Fetch torrents by relevant status filters
-        completed = client.torrents_info(status_filter="completed")
-        seeding = client.torrents_info(status_filter="seeding")
+        # Fetch all torrents to include states like stalled/paused uploads.
+        torrents = client.torrents_info()
 
-        # Combine lists, ensuring uniqueness by hash and checking progress
+        # Filter for completed torrents, ensuring uniqueness by hash.
         potentially_complete: dict[str, Any] = {}
-        for t in completed + seeding:
-            if t.progress == 1.0:  # Check if fully downloaded
-                # Use hash as key to automatically handle duplicates from different filters
-                potentially_complete[t.hash] = t
+        for t in torrents:
+            amount_left = getattr(t, "amount_left", None)
+            progress = getattr(t, "progress", None)
+
+            is_complete = False
+            if amount_left is not None:
+                is_complete = amount_left == 0
+            elif progress is not None:
+                is_complete = progress >= 1.0
+
+            if is_complete:
+                torrent_hash = getattr(t, "hash", None)
+                unique_key = (
+                    torrent_hash or f"{getattr(t, 'name', '')}-{getattr(t, 'save_path', '')}"
+                )
+                potentially_complete[unique_key] = t
 
         result_list = list(potentially_complete.values())
 
