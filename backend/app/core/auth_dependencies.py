@@ -40,7 +40,10 @@ def get_auth_time_from_token(request: Request) -> float | None:
             token,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM],
-            options={"verify_exp": False, "verify_aud": False},  # Don't verify expiry or aud, just read claims
+            options={
+                "verify_exp": False,
+                "verify_aud": False,
+            },  # Don't verify expiry or aud, just read claims
         )
         # auth_time is set when user performs interactive login
         auth_time = payload.get("auth_time")
