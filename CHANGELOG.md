@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 
 
+## [1.0.2](https://gitlab.com/softerist/subro_web/compare/v1.0.1...v1.0.2) (2026-01-18)
+
+
+### Bug Fixes
+
+* increase ffsync timeout default to 600 seconds in the core configuration ([794bc1d](https://gitlab.com/softerist/subro_web/commit/794bc1d878e0527225d0a9a1be293c81eca7d851))
+* use unrar instead of unrar-free for RAR extraction ([b564507](https://gitlab.com/softerist/subro_web/commit/b564507e70d5c4838cdae5dbf8007858575b6b51))
+
 # 1.0.0 (2026-01-18)
 
 
