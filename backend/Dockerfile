@@ -45,7 +45,8 @@ RUN ln -s /usr/bin/python3.12 /usr/local/bin/python && \
 
 # Install Poetry using the official installer script to avoid dependency conflicts
 RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/opt/poetry python3 - && \
-    /opt/poetry/venv/bin/pip install --upgrade "jaraco.context>=6.1.0"
+    /opt/poetry/venv/bin/pip install --upgrade --force-reinstall "jaraco.context>=6.1.0" && \
+    /opt/poetry/venv/bin/pip show jaraco.context
 
 # Create a non-root user and group early for consistent permissions
 # Also create media-group with GID 1002 to match host media directory permissions
@@ -84,7 +85,8 @@ ARG CACHE_BUST=1
 RUN echo "Cache bust: ${CACHE_BUST}"
 
 # Install ALL dependencies including main (cache enabled for faster rebuilds)
-RUN poetry install --no-root --sync
+RUN poetry install --no-root --sync && \
+    .venv/bin/pip show jaraco.context
 
 # --- Development Stage ---
 # Optimized for local development with hot-reloading
