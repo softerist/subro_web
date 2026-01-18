@@ -146,6 +146,8 @@ variables:
     # Append CI-specific variables
     {
       echo "DOMAIN_NAME='${SSH_HOST}'"
+      echo "WEBAUTHN_RP_ID='${SSH_HOST}'"
+      echo "WEBAUTHN_ORIGIN='https://${SSH_HOST}'"
       echo "REGISTRY_PASSWORD='${REGISTRY_PASSWORD}'"
       echo "REGISTRY_USER='${REGISTRY_USER}'"
       echo "CI_REGISTRY='${CI_REGISTRY}'"
