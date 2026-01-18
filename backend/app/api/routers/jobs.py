@@ -577,9 +577,10 @@ async def _get_qbittorrent_client(db: AsyncSession) -> "qbittorrentapi.Client | 
             logger.warning("Failed to decrypt qBittorrent password.")
             return None
 
+    default_port = 8090 if app_settings.qbittorrent_connection_mode == "docker_host" else 8080
     return login_to_qbittorrent_with_settings(
         host=app_settings.qbittorrent_host,
-        port=app_settings.qbittorrent_port or 8080,
+        port=app_settings.qbittorrent_port or default_port,
         username=app_settings.qbittorrent_username or "",
         password=effective_password,
     )
@@ -596,14 +597,35 @@ def _torrent_to_schema(torrent: Any) -> CompletedTorrentInfo | None:
         ):
             completed_on = datetime.fromtimestamp(torrent.completion_on, tz=UTC)
 
+        content_path = _resolve_torrent_content_path(torrent)
         return CompletedTorrentInfo(
             name=torrent.name,
             save_path=torrent.save_path,
+            content_path=content_path,
             completed_on=completed_on,
         )
     except Exception as e:
         logger.warning("Error processing torrent %s: %s", getattr(torrent, "name", "unknown"), e)
         return None
+
+
+def _resolve_torrent_content_path(torrent: Any) -> str | None:
+    content_path = getattr(torrent, "content_path", None)
+    if content_path:
+        try:
+            content_path_obj = Path(content_path)
+            if content_path_obj.exists() and content_path_obj.is_file():
+                return str(content_path_obj.parent)
+        except Exception:
+            return content_path
+        return content_path
+
+    save_path = getattr(torrent, "save_path", None)
+    name = getattr(torrent, "name", None)
+    if save_path and name:
+        return str(Path(save_path) / name)
+
+    return save_path
 
 
 @router.get(

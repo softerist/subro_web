@@ -55,5 +55,6 @@ export interface StoragePathCreate {
 export interface CompletedTorrent {
   name: string;
   save_path: string;
+  content_path?: string | null;
   completed_on: string | null;
 }

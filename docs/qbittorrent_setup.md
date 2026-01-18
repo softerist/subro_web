@@ -17,7 +17,7 @@ To see qBittorrent status and quick links in your dashboard, you need to configu
 2. Navigate to **Settings** (⚙️).
 3. Under the **qBittorrent** section, enter:
    - **Host**: The IP or hostname of your qBittorrent server (e.g., `192.168.1.100` or `localhost`).
-   - **Port**: The Web UI port (default is `8080`).
+   - **Port**: The Web UI port (default is `8090` for qBittorrent-nox; some installs use `8080`).
    - **Username**: Your qBittorrent Web UI username.
    - **Password**: Your qBittorrent Web UI password.
 4. Click **Save Settings**.
@@ -28,16 +28,29 @@ Alternatively, you can set these in your `.env.prod` file:
 
 ```bash
 QBITTORRENT_HOST=192.168.1.100
-QBITTORRENT_PORT=8080
+QBITTORRENT_PORT=8090
 QBITTORRENT_USERNAME=admin
 QBITTORRENT_PASSWORD=your_password
 ```
+
+### Docker -> Host (qBittorrent on the same server)
+
+If Subro Web runs in Docker and qBittorrent runs on the host:
+
+1. Bind the qBittorrent WebUI to a reachable interface and port:
+   - Edit `~/.config/qBittorrent/qBittorrent.conf`
+   - Set `WebUI.Address=0.0.0.0`
+   - Set `WebUI.Port=8090`
+   - Restart: `sudo systemctl restart qbittorrent-nox`
+2. In Subro Web settings:
+   - **Host**: `host.docker.internal`
+   - **Port**: `8090`
 
 ---
 
 ## 2. Automated Subtitle Support (Webhook)
 
-You can configure qBittorrent to automatically notify Subro Web when a download is finished. This is done using the provided [qbittorrent-nox-webhook.sh](file:///home/user/subro_web/backend/scripts/qbittorrent-nox-webhook.sh) script.
+You can configure qBittorrent to automatically notify Subro Web when a download is finished. This is done using the provided `backend/scripts/qbittorrent-nox-webhook.sh` script.
 
 ### Prerequisites
 

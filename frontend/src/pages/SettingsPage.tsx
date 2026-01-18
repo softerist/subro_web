@@ -47,6 +47,9 @@ import { PasswordSettings } from "@/features/auth/components/PasswordSettings";
 
 type SettingsTab = "integrations" | "qbittorrent" | "developer" | "security";
 
+const DEFAULT_QBITTORRENT_PORT = 8080;
+const DOCKER_HOST_QBITTORRENT_PORT = 8090;
+
 export default function SettingsPage() {
   const { user, setUser } = useAuthStore();
   const isAdmin = user?.role === "admin" || user?.is_superuser;
@@ -73,6 +76,15 @@ export default function SettingsPage() {
   const [exampleTab, setExampleTab] = useState<"curl" | "python" | "node">(
     "curl",
   );
+  const qbittorrentMode =
+    formData.qbittorrent_connection_mode ||
+    settings?.qbittorrent_connection_mode ||
+    "direct";
+  const qbittorrentPortPlaceholder =
+    settings?.qbittorrent_port?.toString() ||
+    (qbittorrentMode === "docker_host"
+      ? DOCKER_HOST_QBITTORRENT_PORT.toString()
+      : DEFAULT_QBITTORRENT_PORT.toString());
 
   // qBittorrent webhook configuration state
   const [isConfiguringWebhook, setIsConfiguringWebhook] = useState(false);
@@ -1571,6 +1583,18 @@ export default function SettingsPage() {
                           "docker_host",
                         );
                         updateField("qbittorrent_host", "host.docker.internal");
+                        const currentPort =
+                          formData.qbittorrent_port ??
+                          settings?.qbittorrent_port;
+                        if (
+                          !currentPort ||
+                          currentPort === DEFAULT_QBITTORRENT_PORT
+                        ) {
+                          updateField(
+                            "qbittorrent_port",
+                            DOCKER_HOST_QBITTORRENT_PORT,
+                          );
+                        }
                       }}
                       className={`p-4 rounded-xl border text-left transition-all ${
                         (formData.qbittorrent_connection_mode ||
@@ -1627,6 +1651,8 @@ export default function SettingsPage() {
                         host.docker.internal
                       </code>{" "}
                       to reach your server from inside the Docker container.
+                      qBittorrent WebUI often runs on port{" "}
+                      {DOCKER_HOST_QBITTORRENT_PORT}.
                     </p>
                   )}
                 </div>
@@ -1664,9 +1690,7 @@ export default function SettingsPage() {
                       id="qbittorrent-port"
                       name="qbittorrent_port"
                       type="number"
-                      placeholder={
-                        settings?.qbittorrent_port?.toString() || "8080"
-                      }
+                      placeholder={qbittorrentPortPlaceholder}
                       value={formData.qbittorrent_port || ""}
                       onChange={(e) =>
                         updateField(

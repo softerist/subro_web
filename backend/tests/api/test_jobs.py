@@ -254,11 +254,13 @@ async def test_get_recent_torrents_success(
             mock_torrent1 = MagicMock()
             mock_torrent1.name = "Movie 1"
             mock_torrent1.save_path = "/downloads/movie1"
+            mock_torrent1.content_path = "/downloads/movie1/Movie 1"
             mock_torrent1.completion_on = 1672531200  # 2023-01-01
 
             mock_torrent2 = MagicMock()
             mock_torrent2.name = "Movie 2"
             mock_torrent2.save_path = "/downloads/movie2"
+            mock_torrent2.content_path = "/downloads/movie2/Movie 2"
             mock_torrent2.completion_on = 1672617600  # 2023-01-02
 
             # Return them in unsorted order to verify sorting
@@ -273,7 +275,9 @@ async def test_get_recent_torrents_success(
             # Should be sorted by completion time descending (newest first)
             assert data[0]["name"] == "Movie 2"
             assert data[0]["save_path"] == "/downloads/movie2"
+            assert data[0]["content_path"] == "/downloads/movie2/Movie 2"
             assert data[1]["name"] == "Movie 1"
+            assert data[1]["content_path"] == "/downloads/movie1/Movie 1"
 
 
 @pytest.mark.asyncio

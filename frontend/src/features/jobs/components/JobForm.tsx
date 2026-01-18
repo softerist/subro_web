@@ -128,7 +128,10 @@ export function JobForm() {
   const torrentPaths = recentTorrents
     ? Array.from(
         new Map(
-          recentTorrents.map((t: CompletedTorrent) => [t.save_path, t]),
+          recentTorrents.map((t: CompletedTorrent) => [
+            t.content_path || t.save_path,
+            t,
+          ]),
         ).values(),
       )
     : [];
@@ -174,22 +177,26 @@ export function JobForm() {
                             <Download className="h-3 w-3" />
                             Recent Torrents
                           </div>
-                          {torrentPaths.map((torrent: CompletedTorrent) => (
-                            <SelectItem
-                              key={`torrent-${torrent.save_path}`}
-                              value={torrent.save_path}
-                            >
-                              <div className="flex items-center gap-2">
-                                <Download className="h-4 w-4 text-blue-500" />
-                                <span
-                                  className="truncate max-w-[250px]"
-                                  title={torrent.name}
-                                >
-                                  {torrent.name}
-                                </span>
-                              </div>
-                            </SelectItem>
-                          ))}
+                          {torrentPaths.map((torrent: CompletedTorrent) => {
+                            const torrentPath =
+                              torrent.content_path || torrent.save_path;
+                            return (
+                              <SelectItem
+                                key={`torrent-${torrentPath}`}
+                                value={torrentPath}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Download className="h-4 w-4 text-blue-500" />
+                                  <span
+                                    className="truncate max-w-[250px]"
+                                    title={torrent.name}
+                                  >
+                                    {torrent.name}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
                           <div className="my-1 border-t border-border" />
                         </>
                       )}
