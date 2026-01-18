@@ -44,9 +44,12 @@ RUN ln -s /usr/bin/python3.12 /usr/local/bin/python && \
     ln -s /usr/bin/python3.12 /usr/local/bin/python3
 
 # Install Poetry using the official installer script to avoid dependency conflicts
-RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/opt/poetry python3 - && \
-    /opt/poetry/venv/bin/pip install --upgrade --force-reinstall "jaraco.context>=6.1.0" && \
-    /opt/poetry/venv/bin/pip show jaraco.context
+RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/opt/poetry python3 -
+
+# Force upgrade jaraco.context in Poetry's venv to fix GHSA-58pv-8j8x-9vj2 CVE
+RUN /opt/poetry/venv/bin/pip install --upgrade --force-reinstall "jaraco.context>=6.1.0" && \
+    echo "Poetry venv jaraco.context version:" && \
+    /opt/poetry/venv/bin/pip show jaraco.context | grep Version
 
 # Create a non-root user and group early for consistent permissions
 # Also create media-group with GID 1002 to match host media directory permissions
@@ -85,9 +88,14 @@ ARG CACHE_BUST=1
 RUN echo "Cache bust: ${CACHE_BUST}"
 
 # Install ALL dependencies including main (cache enabled for faster rebuilds)
-RUN poetry install --no-root --sync && \
-    .venv/bin/pip install "jaraco.context>=6.1.0" && \
-    .venv/bin/pip show jaraco.context
+RUN poetry install --no-root --sync
+
+# Force upgrade jaraco.context to fix GHSA-58pv-8j8x-9vj2 CVE
+# This must run AFTER poetry install to ensure it's not overwritten
+RUN .venv/bin/pip install --upgrade --force-reinstall "jaraco.context>=6.1.0" && \
+    rm -rf .venv/lib/python3.12/site-packages/setuptools/_vendor/jaraco.context*.dist-info && \
+    echo "Installed jaraco.context version:" && \
+    .venv/bin/pip show jaraco.context | grep Version
 
 # --- Development Stage ---
 # Optimized for local development with hot-reloading
@@ -208,4 +216,4 @@ RUN poetry install --with dev --no-root --sync --no-cache && \
 # --- Production Stage (Worker) ---
 FROM production-api AS production-worker
 CMD ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=INFO"]
-# Cache bust: 202601181225
+# Cache bust: 202601182020-jaraco-fix
