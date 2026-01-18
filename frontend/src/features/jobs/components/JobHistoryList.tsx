@@ -119,19 +119,19 @@ export function JobHistoryList({
   return (
     <>
       <div className="rounded-lg border border-border/60 overflow-hidden bg-card/50">
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
             <TableRow className="hover:bg-transparent border-b border-border/40">
               <TableHead className="h-9 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-muted-foreground">
                 Folder
               </TableHead>
-              <TableHead className="h-9 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-muted-foreground">
+              <TableHead className="h-9 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-muted-foreground w-24 sm:w-28 whitespace-nowrap">
                 Status
               </TableHead>
-              <TableHead className="h-9 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-muted-foreground">
+              <TableHead className="h-9 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-muted-foreground w-20 sm:w-28 whitespace-nowrap">
                 Created
               </TableHead>
-              <TableHead className="text-right h-9 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-muted-foreground w-16 sm:w-20">
+              <TableHead className="text-right h-9 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-muted-foreground w-16 sm:w-20 whitespace-nowrap">
                 Actions
               </TableHead>
             </TableRow>
@@ -153,11 +153,11 @@ export function JobHistoryList({
                     onSelectJob(job);
                   }}
                 >
-                  <TableCell className="py-2 px-1 sm:px-4">
+                  <TableCell className="py-2 px-1 sm:px-4 w-full">
                     <PathCell
                       path={job.folder_path}
-                      className="text-[10px] sm:text-sm"
-                      defaultMaxWidth="max-w-[100px] sm:max-w-[260px]"
+                      className="text-[10px] sm:text-sm w-full"
+                      defaultMaxWidth="max-w-full"
                       isExpanded={expandedJobId === job.id}
                       onToggle={() =>
                         setExpandedJobId(
@@ -166,16 +166,16 @@ export function JobHistoryList({
                       }
                     />
                   </TableCell>
-                  <TableCell className="py-2 px-1 sm:px-4">
+                  <TableCell className="py-2 px-1 sm:px-4 w-24 sm:w-28 whitespace-nowrap">
                     <JobStatusBadge
                       status={job.status}
                       className="text-[10px] sm:text-xs px-1.5 py-0.5"
                     />
                   </TableCell>
-                  <TableCell className="py-2 px-1 sm:px-4 text-[10px] sm:text-sm">
+                  <TableCell className="py-2 px-1 sm:px-4 text-[10px] sm:text-sm w-20 sm:w-28 whitespace-nowrap">
                     {format(new Date(job.submitted_at), "MM/dd HH:mm")}
                   </TableCell>
-                  <TableCell className="py-2 px-1 sm:px-4">
+                  <TableCell className="py-2 px-1 sm:px-4 w-16 sm:w-20">
                     <div className="flex items-center justify-end gap-0.5 sm:gap-1">
                       <Button
                         variant="ghost"
