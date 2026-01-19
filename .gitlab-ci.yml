@@ -617,16 +617,17 @@ secret_scan:
     - when: on_success
   script:
     - |
-      TRIVY_CMD="trivy fs --scanners secret \
-        --skip-dirs .git,__pycache__,.venv,venv,node_modules,.ruff_cache,.pytest_cache \
-        --exit-code 1 --no-progress --timeout 5m"
-
       # Auto-detect Shell executor and run via Docker
       if [ -S /var/run/docker.sock ] && ! command -v trivy &> /dev/null; then
         echo "Shell executor detected - running trivy via Docker"
-        docker run --rm -v "$(pwd):/src" -w /src aquasec/trivy:0.58.0 $TRIVY_CMD .
+        docker run --rm -v "$(pwd):/src" -w /src aquasec/trivy:0.58.0 \
+          fs --scanners secret \
+          --skip-dirs .git,__pycache__,.venv,venv,node_modules,.ruff_cache,.pytest_cache \
+          --exit-code 1 --no-progress --timeout 5m .
       else
-        $TRIVY_CMD .
+        trivy fs --scanners secret \
+          --skip-dirs .git,__pycache__,.venv,venv,node_modules,.ruff_cache,.pytest_cache \
+          --exit-code 1 --no-progress --timeout 5m .
       fi
   allow_failure: false
   retry: 1
