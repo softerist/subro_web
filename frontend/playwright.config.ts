@@ -2,14 +2,20 @@ import { defineConfig, devices } from "@playwright/test";
 
 /**
  * Parse shell-style arguments, respecting quoted strings.
- * e.g., '--flag="value with spaces"' stays as one argument.
+ * e.g., '--flag="value with spaces"' stays as one argument,
+ * but the quotes are stripped so Chromium gets '--flag=value with spaces'.
  */
 function parseArgs(input: string): string[] {
   const args: string[] = [];
   const regex = /(?:[^\s"]+|"[^"]*")+/g;
   let match;
   while ((match = regex.exec(input)) !== null) {
-    args.push(match[0]);
+    // Strip shell-style quotes from values like --flag="value"
+    let arg = match[0];
+    if (arg.includes('="') && arg.endsWith('"')) {
+      arg = arg.replace(/="([^"]*)"$/, "=$1");
+    }
+    args.push(arg);
   }
   return args;
 }
