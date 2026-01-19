@@ -944,7 +944,7 @@ e2e_tests:
       echo "Configured CHROMIUM_FLAGS: $CHROMIUM_FLAGS"
     - cd frontend
     - npm ci --prefer-offline
-    - npx playwright install --with-deps chromium
+    - npx playwright install chromium
     - npx playwright test --reporter=html
   artifacts:
     when: always
