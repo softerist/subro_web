@@ -675,6 +675,7 @@ verify_staging:
   image: alpine:3.20
   allow_failure:
   needs: [deploy_staging]
+  resource_group: staging
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
   variables:
