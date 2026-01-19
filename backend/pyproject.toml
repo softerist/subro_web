@@ -171,7 +171,9 @@ name = "cz_conventional_commits"
 version = "1.1.1"
 version_files = [
     "backend/pyproject.toml:version",
-    "frontend/package.json:version" # If managing frontend version here too
+    "frontend/package.json:version",
+    "package.json:version",
+    "version.env:NEW_APP_VERSION"
 ]
 tag_format = "v$version"
 bump_message = "chore(release): bump version to $new_version"
