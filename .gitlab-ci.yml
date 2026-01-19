@@ -698,6 +698,8 @@ deploy_staging:
     - job: secret_scan
       artifacts: false
   rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^chore\(release\):/'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: on_success
   extends: .ssh_setup
@@ -769,6 +771,8 @@ verify_staging:
   needs: [deploy_staging]
   resource_group: staging
   rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^chore\(release\):/'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "main"'
   variables:
     STAGING_DEPLOY_DIR: /opt/subro_web_staging
@@ -978,6 +982,8 @@ cleanup_staging:
       artifacts: false
       # Required - cleanup only if verification succeeded
   rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^chore\(release\):/'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: on_success
   extends: .ssh_setup
