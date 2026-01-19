@@ -184,8 +184,10 @@ variables:
       command: ["--tls=false"]
   variables:
     DOCKER_HOST: tcp://docker:2375
+    DOCKER_CONFIG: "$CI_PROJECT_DIR/.docker"
   before_script:
     - set -euo pipefail
+    - mkdir -p "$DOCKER_CONFIG"
     # Auto-detect Shell executor and use local Docker socket instead of dind
     - |
       if [ -S /var/run/docker.sock ]; then
@@ -244,15 +246,17 @@ ci_debug_env:
   extends: .default-docker
   variables:
     DOCKER_BUILDKIT: "1"
+    BUILDER_NAME: "builder-$CI_JOB_ID"
   script:
     - |
       set -euo pipefail
       export POETRY_VERSION=$(awk '/poetry/ {print $2}' .tool-versions)
-      echo "Initializing Buildx builder..."
-      docker buildx ls
-      # Force create or use existing
-      docker buildx create --name builder --driver docker-container --use --bootstrap || docker buildx use builder
-      docker buildx inspect --bootstrap
+      echo "Initializing Buildx builder: $BUILDER_NAME"
+      docker buildx create --name "$BUILDER_NAME" --driver docker-container --use --bootstrap
+      
+      # Use tag-based cache in the same repository for better compatibility and auth reliability
+      CACHE_REF="$CI_REGISTRY_IMAGE/$SERVICE:cache"
+      
       docker buildx build \
         --push \
         -t "$DOCKER_IMAGE" \
@@ -260,13 +264,19 @@ ci_debug_env:
         --target "$TARGET" \
         --provenance=false \
         --sbom=false \
-        --cache-to=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE",mode=max \
-        --cache-from=type=registry,ref="$CI_REGISTRY_IMAGE/cache-$SERVICE" \
+        --cache-to=type=registry,ref="$CACHE_REF",mode=max \
+        --cache-from=type=registry,ref="$CACHE_REF" \
         -f "$DOCKERFILE" \
         --build-arg POETRY_VERSION="$POETRY_VERSION" \
         --build-arg CACHE_BUST="$CI_PIPELINE_ID" \
         ${BUILD_ARGS:-} \
         "$CONTEXT"
+  after_script:
+    - |
+      if [ -S /var/run/docker.sock ]; then
+        export DOCKER_HOST="unix:///var/run/docker.sock"
+      fi
+    - docker buildx rm -f "$BUILDER_NAME" || true
   rules:
     - when: on_success
   retry: 1
@@ -438,6 +448,10 @@ backend_tests:
 
     - docker exec api poetry run pytest -p no:cacheprovider tests/
   after_script:
+    - |
+      if [ -S /var/run/docker.sock ]; then
+        export DOCKER_HOST="unix:///var/run/docker.sock"
+      fi
     - docker logs api 2>&1 | tail -50 || true
     - docker rm -f api db db_test redis 2>/dev/null || true
     - docker network rm testnet 2>/dev/null || true
@@ -1195,7 +1209,7 @@ cleanup_registry:
       echo "Keeping last $KEEP_TAGS tags per repository"
 
       # Protected tags that should never be deleted
-      PROTECTED_TAGS="latest main develop stable"
+      PROTECTED_TAGS="latest main develop stable cache"
 
       # Helper: API call with retry
       api_call() {
