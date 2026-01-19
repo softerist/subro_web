@@ -9,14 +9,13 @@
       "changelogTitle": "# Changelog\n\nAll notable changes to this project will be documented in this file.\n"
     }],
     ["@semantic-release/exec", {
-      "prepareCmd": "sed -i 's/\"version\": \"[^\"]*\"/\"version\": \"${nextRelease.version}\"/' frontend/package.json && sed -i 's/^version = \"[^\"]*\"/version = \"${nextRelease.version}\"/' backend/pyproject.toml && sed -i 's/APP_VERSION: str = Field(default=\"[^\"]*\"/APP_VERSION: str = Field(default=\"${nextRelease.version}\"/' backend/app/core/config.py"
+      "prepareCmd": "sed -i 's/\"version\": \"[^\"]*\"/\"version\": \"${nextRelease.version}\"/' frontend/package.json && sed -i 's/^version = \"[^\"]*\"/version = \"${nextRelease.version}\"/' backend/pyproject.toml"
     }],
     ["@semantic-release/git", {
       "assets": [
         "CHANGELOG.md",
         "frontend/package.json",
-        "backend/pyproject.toml",
-        "backend/app/core/config.py"
+        "backend/pyproject.toml"
       ],
       "message": "chore(release): ${nextRelease.version}\n\n${nextRelease.notes}"
     }],

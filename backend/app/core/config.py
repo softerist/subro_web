@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import tempfile
+import tomllib
 from pathlib import Path
 from typing import Literal
 
@@ -18,6 +19,19 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+
+def _get_version_from_pyproject() -> str:
+    """Read version from pyproject.toml for consistent versioning with semantic-release."""
+    try:
+        pyproject_path = Path(__file__).parent.parent.parent / "pyproject.toml"
+        if pyproject_path.exists():
+            with pyproject_path.open("rb") as f:
+                data = tomllib.load(f)
+            return data.get("project", {}).get("version", "0.0.0-dev")
+    except Exception as e:
+        logger.warning(f"Failed to read version from pyproject.toml: {e}")
+    return "0.0.0-dev"
 
 
 def _default_app_state_dir() -> str:
@@ -63,7 +77,9 @@ class Settings(BaseSettings):
 
     # --- Core Application Settings ---
     APP_NAME: str = Field(default="Subtitle Downloader", validation_alias="APP_NAME")
-    APP_VERSION: str = Field(default="1.0.0", validation_alias="APP_VERSION")
+    APP_VERSION: str = Field(
+        default_factory=_get_version_from_pyproject, validation_alias="APP_VERSION"
+    )
     APP_DESCRIPTION: str = Field(
         default="API for managing subtitle download jobs and user authentication.",
         validation_alias="APP_DESCRIPTION",
