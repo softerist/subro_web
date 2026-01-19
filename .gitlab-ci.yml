@@ -919,6 +919,8 @@ e2e_tests:
     E2E_BASE_URL: https://staging.$SSH_HOST
   script:
     - |
+      set -euo pipefail
+
       # Resolve SSH_HOST to IP with validation
       # use getent to respect local /etc/hosts if present on runner
       # Filter out 127.x.x.x addresses to avoid loopback issues in containers
@@ -944,10 +946,12 @@ e2e_tests:
       # Pass host resolution to Chromium via environment variable
       export CHROMIUM_FLAGS="--host-resolver-rules=\"MAP staging.$SSH_HOST $SERVER_IP\""
       echo "Configured CHROMIUM_FLAGS: $CHROMIUM_FLAGS"
-    - cd frontend
-    - npm ci --prefer-offline
-    - npx playwright install chromium
-    - npx playwright test --reporter=html
+
+      # Run E2E tests (in same shell so CHROMIUM_FLAGS is available)
+      cd frontend
+      npm ci --prefer-offline
+      npx playwright install chromium
+      npx playwright test --reporter=html
   artifacts:
     when: always
     paths:
