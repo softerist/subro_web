@@ -1,6 +1,20 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
+ * Parse shell-style arguments, respecting quoted strings.
+ * e.g., '--flag="value with spaces"' stays as one argument.
+ */
+function parseArgs(input: string): string[] {
+  const args: string[] = [];
+  const regex = /(?:[^\s"]+|"[^"]*")+/g;
+  let match;
+  while ((match = regex.exec(input)) !== null) {
+    args.push(match[0]);
+  }
+  return args;
+}
+
+/**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
@@ -25,7 +39,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
     ignoreHTTPSErrors: true,
     launchOptions: {
-      args: process.env.CHROMIUM_FLAGS ? process.env.CHROMIUM_FLAGS.split(" ") : [],
+      args: process.env.CHROMIUM_FLAGS ? parseArgs(process.env.CHROMIUM_FLAGS) : [],
     },
   },
 
