@@ -39,7 +39,10 @@ workflow:
 .ssh_setup:
   before_script:
     - set -euo pipefail
-    - apk add --no-cache bash openssh-client
+    - |
+      if command -v apk &> /dev/null; then
+        apk add --no-cache bash openssh-client
+      fi
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
     - |
@@ -755,7 +758,10 @@ verify_staging:
     STAGING_DEPLOY_DIR: /opt/subro_web_staging
   extends: .ssh_setup
   script:
-    - apk add --no-cache curl bind-tools
+    - |
+      if command -v apk &> /dev/null; then
+        apk add --no-cache curl bind-tools
+      fi
     - |
       # Resolve SSH_HOST to IP and add staging subdomain to /etc/hosts
       SERVER_IP=$(nslookup "$SSH_HOST" | awk '/^Address: / { print $2 }' | tail -1)
