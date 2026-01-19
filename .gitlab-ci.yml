@@ -77,7 +77,8 @@ lint_backend:
   image: python:3.12-slim
   before_script:
     - export POETRY_VERSION=$(awk '/poetry/ {print $2}' .tool-versions)
-    - pip install poetry==$POETRY_VERSION
+    - curl -sSL https://install.python-poetry.org | POETRY_VERSION=$POETRY_VERSION python3 -
+    - export PATH="$HOME/.local/bin:$PATH"
     - cd backend
     - poetry install --no-root --only dev
   script:
