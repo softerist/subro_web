@@ -24,6 +24,9 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     ignoreHTTPSErrors: true,
+    launchOptions: {
+      args: process.env.CHROMIUM_FLAGS ? process.env.CHROMIUM_FLAGS.split(" ") : [],
+    },
   },
 
   /* Configure projects for major browsers */

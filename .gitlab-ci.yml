@@ -777,14 +777,28 @@ verify_staging:
         apk add --no-cache curl bind-tools
       fi
     - |
-      # Resolve SSH_HOST to IP and add staging subdomain to /etc/hosts
-      SERVER_IP=$(nslookup "$SSH_HOST" | awk '/^Address: / { print $2 }' | tail -1)
+      # Resolve SSH_HOST to IP for curl resolution
+      # First try nslookup (provided by bind-tools)
+      # Filter out 127.x.x.x addresses to avoid loopback issues in containers
+      SERVER_IP=$(nslookup "$SSH_HOST" 2>/dev/null | awk '/^Address: / { print $2 }' | grep -v "^127\." | tail -1)
+      
+      # If nslookup fails, check if SSH_HOST is already an IP (and not 127.*)
       if [ -z "$SERVER_IP" ]; then
-        echo "ERROR: Could not resolve IP for $SSH_HOST"
+        if echo "$SSH_HOST" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$' && ! echo "$SSH_HOST" | grep -q "^127\."; then
+          SERVER_IP="$SSH_HOST"
+        fi
+      fi
+      
+      # Final validation
+      if [ -z "$SERVER_IP" ]; then
+        echo "ERROR: Could not resolve public/network IP for $SSH_HOST (ignoring loopback)"
         exit 1
       fi
-      echo "$SERVER_IP staging.$SSH_HOST" >> /etc/hosts
-      echo "Added /etc/hosts entry: $SERVER_IP staging.$SSH_HOST"
+      
+      echo "Resolved $SSH_HOST to $SERVER_IP"
+      # Use curl --resolve instead of modifying /etc/hosts
+      export CURL_RESOLVE="--resolve staging.$SSH_HOST:443:$SERVER_IP"
+      echo "Using curl resolve: $CURL_RESOLVE"
     - |
       echo "Verifying staging deployment..."
       echo ""
@@ -820,8 +834,8 @@ verify_staging:
         fi
 
         # Check API response
-        HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "000")
-        RESPONSE=$(curl -k -s --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "")
+        HTTP_CODE=$(curl $CURL_RESOLVE -k -s -o /dev/null -w "%{http_code}" --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "000")
+        RESPONSE=$(curl $CURL_RESOLVE -k -s --max-time 10 "https://staging.$SSH_HOST/api/v1/" || echo "")
 
         if echo "$RESPONSE" | grep -qE '"(version|message)"'; then
           API_OK=true
@@ -903,14 +917,31 @@ e2e_tests:
     E2E_BASE_URL: https://staging.$SSH_HOST
   script:
     - |
-      # Resolve SSH_HOST to IP with validation (consistent with verify_staging)
-      SERVER_IP=$(getent hosts "$SSH_HOST" | awk '{print $1}' | head -1)
+      # Resolve SSH_HOST to IP with validation
+      # use getent to respect local /etc/hosts if present on runner
+      # Filter out 127.x.x.x addresses to avoid loopback issues in containers
+      SERVER_IP=$(getent hosts "$SSH_HOST" | awk '{print $1}' | grep -v "^127\." | head -1)
+      
+      # Fallback if getent fails (e.g. if SSH_HOST is an IP or external DNS)
       if [ -z "$SERVER_IP" ]; then
-        echo "ERROR: Could not resolve IP for $SSH_HOST"
-        exit 1
+        SERVER_IP=$(getent ahosts "$SSH_HOST" | awk '{print $1}' | grep -v "^127\." | head -1)
       fi
-      echo "$SERVER_IP staging.$SSH_HOST" >> /etc/hosts
-      echo "Added /etc/hosts entry: $SERVER_IP staging.$SSH_HOST"
+      
+      if [ -z "$SERVER_IP" ]; then
+         # Check if SSH_HOST itself is a valid non-loopback IP
+         if echo "$SSH_HOST" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$' && ! echo "$SSH_HOST" | grep -q "^127\."; then
+             SERVER_IP="$SSH_HOST"
+         else
+             echo "ERROR: Could not resolve public/network IP for $SSH_HOST"
+             exit 1
+         fi
+      fi
+
+      echo "Resolved $SSH_HOST to $SERVER_IP"
+
+      # Pass host resolution to Chromium via environment variable
+      export CHROMIUM_FLAGS="--host-resolver-rules=\"MAP staging.$SSH_HOST $SERVER_IP\""
+      echo "Configured CHROMIUM_FLAGS: $CHROMIUM_FLAGS"
     - cd frontend
     - npm ci --prefer-offline
     - npx playwright install --with-deps chromium
