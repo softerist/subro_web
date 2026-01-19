@@ -486,19 +486,50 @@ scan_image_vulns:
   script:
     - |
       set -euo pipefail
-      export TRIVY_USERNAME="$CI_REGISTRY_USER"
-      export TRIVY_PASSWORD="$CI_REGISTRY_PASSWORD"
+
+      # Auto-detect Shell executor
+      USE_DOCKER=false
+      if [ -S /var/run/docker.sock ] && ! command -v trivy &> /dev/null; then
+        echo "Shell executor detected - running trivy via Docker"
+        USE_DOCKER=true
+        # Docker login for registry access
+        echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+      else
+        export TRIVY_USERNAME="$CI_REGISTRY_USER"
+        export TRIVY_PASSWORD="$CI_REGISTRY_PASSWORD"
+      fi
 
       # Scan images (trivy is fast enough that sequential is fine)
       for img in "$DOCKER_IMAGE_API" "$DOCKER_IMAGE_FRONTEND" "$DOCKER_IMAGE_WORKER" "$DOCKER_IMAGE_BACKUP"; do
         echo "Scanning $img..."
         # Retry scan up to 3 times to handle eventual consistency or network flakes
         for attempt in 1 2 3; do
-          if trivy image --cache-dir .trivycache --exit-code 1 \
-            --severity "$TRIVY_SEVERITY" --timeout 5m --no-progress \
-            --skip-files "/app/secrets/google-api-config.json" \
-            --scanners vuln \
-            "$img"; then
+          SCAN_SUCCESS=false
+
+          if [ "$USE_DOCKER" = "true" ]; then
+            # Pull image first, then scan locally
+            docker pull "$img" || true
+            if docker run --rm \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$(pwd)/.trivycache:/root/.cache/trivy" \
+              aquasec/trivy:0.58.0 image --exit-code 1 \
+              --severity "$TRIVY_SEVERITY" --timeout 5m --no-progress \
+              --skip-files "/app/secrets/google-api-config.json" \
+              --scanners vuln \
+              "$img"; then
+              SCAN_SUCCESS=true
+            fi
+          else
+            if trivy image --cache-dir .trivycache --exit-code 1 \
+              --severity "$TRIVY_SEVERITY" --timeout 5m --no-progress \
+              --skip-files "/app/secrets/google-api-config.json" \
+              --scanners vuln \
+              "$img"; then
+              SCAN_SUCCESS=true
+            fi
+          fi
+
+          if [ "$SCAN_SUCCESS" = "true" ]; then
             echo "✓ Scan successful for $img"
             break
           fi
@@ -530,28 +561,39 @@ sast_scan:
     - |
       echo "Running Semgrep SAST scan..."
 
-      # Use 'semgrep scan' with specific configs (auto requires metrics)
-      # p/default: general security rules
-      # p/python: Python-specific rules
-      # p/typescript: TypeScript/JavaScript rules
-      semgrep scan \
+      # Define semgrep command
+      SEMGREP_CMD="semgrep scan \
         --config p/default \
         --config p/python \
         --config p/typescript \
-        --sarif -o semgrep.sarif \
+        --sarif -o /src/semgrep.sarif \
         --error \
-        --exclude="*.lock" \
-        --exclude="**/package-lock.json" \
-        --exclude="**/poetry.lock" \
-        --exclude="**/node_modules" \
-        --exclude="**/.venv" \
-        --exclude="**/dist" \
-        --exclude="**/build" \
-        --exclude="**/alembic/versions" \
+        --exclude='*.lock' \
+        --exclude='**/package-lock.json' \
+        --exclude='**/poetry.lock' \
+        --exclude='**/node_modules' \
+        --exclude='**/.venv' \
+        --exclude='**/dist' \
+        --exclude='**/build' \
+        --exclude='**/alembic/versions' \
         --jobs 4 \
         --max-target-bytes 500000 \
         --timeout 120 \
-        .
+        /src"
+
+      # Auto-detect Shell executor and run via Docker
+      if [ -S /var/run/docker.sock ] && ! command -v semgrep &> /dev/null; then
+        echo "Shell executor detected - running semgrep via Docker"
+        docker run --rm -v "$(pwd):/src" semgrep/semgrep:latest $SEMGREP_CMD
+        # Move artifact to expected location
+        mv semgrep.sarif semgrep.sarif 2>/dev/null || true
+      else
+        # Running in Docker executor with semgrep image
+        SEMGREP_CMD="${SEMGREP_CMD//\/src\//}"
+        SEMGREP_CMD="${SEMGREP_CMD//\/src/.}"
+        SEMGREP_CMD="${SEMGREP_CMD//-o \/src\/semgrep.sarif/-o semgrep.sarif}"
+        eval $SEMGREP_CMD
+      fi
 
       echo "✓ Semgrep scan complete - no findings"
   artifacts:
@@ -575,9 +617,17 @@ secret_scan:
     - when: on_success
   script:
     - |
-      trivy fs --scanners secret \
-        --skip-dirs ".git,__pycache__,.venv,venv,node_modules,.ruff_cache,.pytest_cache" \
-        --exit-code 1 --no-progress --timeout 5m .
+      TRIVY_CMD="trivy fs --scanners secret \
+        --skip-dirs .git,__pycache__,.venv,venv,node_modules,.ruff_cache,.pytest_cache \
+        --exit-code 1 --no-progress --timeout 5m"
+
+      # Auto-detect Shell executor and run via Docker
+      if [ -S /var/run/docker.sock ] && ! command -v trivy &> /dev/null; then
+        echo "Shell executor detected - running trivy via Docker"
+        docker run --rm -v "$(pwd):/src" -w /src aquasec/trivy:0.58.0 $TRIVY_CMD .
+      else
+        $TRIVY_CMD .
+      fi
   allow_failure: false
   retry: 1
 
