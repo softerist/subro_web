@@ -382,6 +382,9 @@ backend_tests:
           sleep 5
         done
       done
+    # Clean up any leftover containers from previous failed runs
+    - docker rm -f api db db_test redis 2>/dev/null || true
+    - docker network rm testnet 2>/dev/null || true
     - docker network create testnet || true
     # Start dependencies (Production-like setup)
     - docker run -d --name db --network testnet -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=$POSTGRES_DB postgres:16-alpine
@@ -512,12 +515,11 @@ scan_image_vulns:
           SCAN_SUCCESS=false
 
           if [ "$USE_DOCKER" = "true" ]; then
-            # Pull image first, then scan locally
-            docker pull "$img" || true
-            # Run as current user to avoid permission issues with cache
+            # Scan directly from registry (no Docker socket needed)
             if docker run --rm \
               --user "$(id -u):$(id -g)" \
-              -v /var/run/docker.sock:/var/run/docker.sock \
+              -e TRIVY_USERNAME="$CI_REGISTRY_USER" \
+              -e TRIVY_PASSWORD="$CI_REGISTRY_PASSWORD" \
               -v "$(pwd)/.trivycache:/.cache/trivy" \
               aquasec/trivy:0.58.0 image --exit-code 1 \
               --cache-dir /.cache/trivy \
