@@ -1232,6 +1232,8 @@ semantic_release:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /chore\(release\)/ && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       when: on_success
+    - if: '$CI_COMMIT_BRANCH == "develop" && $CI_COMMIT_MESSAGE !~ /chore\(release\)/ && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+      when: on_success
     - when: never
   before_script:
     - apk add --no-cache git openssh-client bash
@@ -1244,10 +1246,14 @@ semantic_release:
         echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/id_rsa
       fi
     - chmod 600 ~/.ssh/id_rsa
+    # Add both GitLab and GitHub to known hosts
     - ssh-keyscan $CI_SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null
+    - ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
     - git config --global user.email "ci-bot@gitlab.com"
     - git config --global user.name "CI Bot"
     - git remote set-url origin git@$CI_SERVER_HOST:$CI_PROJECT_PATH.git
+    # Add GitHub as a separate remote for tag mirroring
+    - git remote add github git@github.com:softerist/subro_web.git || git remote set-url github git@github.com:softerist/subro_web.git
   script:
     - |-
       echo ""
@@ -1256,6 +1262,11 @@ semantic_release:
       echo "└─────────────────────────────────────────────────────────────┘"
       echo ""
       npx semantic-release
+    - |-
+      # Push tags to GitHub mirror
+      echo ""
+      echo "📤 Syncing tags to GitHub..."
+      git push github --tags --force || echo "⚠️  GitHub tag push failed (non-fatal)"
 
 
 # ============ CLEANUP STAGE ============
