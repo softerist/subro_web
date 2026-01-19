@@ -80,6 +80,7 @@ lint_backend:
   stage: lint
   image: python:3.12-slim
   before_script:
+    - apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
     - export POETRY_VERSION=$(awk '/poetry/ {print $2}' .tool-versions)
     - curl -sSL https://install.python-poetry.org | POETRY_VERSION=$POETRY_VERSION python3 -
     - export PATH="$HOME/.local/bin:$PATH"
