@@ -264,44 +264,32 @@ async def verify_registration(
 
 
 async def get_authentication_options(
-    db: AsyncSession,
+    db: AsyncSession,  # noqa: ARG001 - kept for interface consistency
     redis: Redis,
-    user_id: str | None = None,
+    user_id: str | None = None,  # noqa: ARG001 - ignored for security hardening
 ) -> dict:
     """
     Generate WebAuthn authentication options.
 
-    If user_id is provided, allows only that user's credentials.
-    If user_id is None, allows discoverable credentials (username-less login).
+    SECURITY HARDENING:
+    - Always returns empty allowCredentials (discoverable credentials flow)
+    - No database lookup for user passkeys (constant-time response)
+    - Prevents timing side-channels and credential ID exposure
+    - Requires passkeys to be registered as resident keys (enforced at registration)
 
     Returns options to be passed to navigator.credentials.get() in the browser.
     """
-    allow_credentials = []
-
-    if user_id:
-        # Get user's passkeys
-        result = await db.execute(select(Passkey).where(Passkey.user_id == UUID(user_id)))
-        passkeys = result.scalars().all()
-
-        allow_credentials = [
-            PublicKeyCredentialDescriptor(
-                id=pk.credential_id,
-                transports=[AuthenticatorTransport(t) for t in (pk.transports or [])],
-            )
-            for pk in passkeys
-        ]
-
     # Generate challenge
     challenge = secrets.token_bytes(32)
 
-    # Store challenge - use "anonymous" for discoverable credentials
-    challenge_user_id = user_id or "anonymous"
-    await store_challenge(redis, challenge_user_id, challenge, "authentication")
+    # Store challenge with anonymous user ID for constant-time behavior
+    # The actual user is identified by the credential's userHandle during verification
+    await store_challenge(redis, "anonymous", challenge, "authentication")
 
     options = generate_authentication_options(
         rp_id=_get_rp_id(),
         challenge=challenge,
-        allow_credentials=allow_credentials if allow_credentials else None,
+        allow_credentials=None,  # SECURITY: Never expose credential IDs
         user_verification=UserVerificationRequirement.PREFERRED,
     )
 
@@ -309,14 +297,7 @@ async def get_authentication_options(
         "challenge": bytes_to_base64url(options.challenge),
         "timeout": options.timeout,
         "rpId": options.rp_id,
-        "allowCredentials": [
-            {
-                "id": bytes_to_base64url(c.id),
-                "type": c.type,
-                "transports": [t.value for t in (c.transports or [])],
-            }
-            for c in (options.allow_credentials or [])
-        ],
+        "allowCredentials": [],  # Always empty for discoverable flow
         "userVerification": options.user_verification.value
         if options.user_verification
         else "preferred",

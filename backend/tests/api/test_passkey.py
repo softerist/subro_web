@@ -181,15 +181,34 @@ async def test_get_authentication_options_public(test_client: AsyncClient) -> No
     assert "challenge" in data
     assert "rpId" in data
     assert data["userVerification"] == "preferred"
+    # SECURITY: Must always use discoverable flow (empty allowCredentials)
+    assert data["allowCredentials"] == []
 
 
 @pytest.mark.asyncio
-async def test_get_authentication_options_with_email(
+async def test_authentication_options_always_empty_allow_credentials(
     test_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """Test getting authentication options for a specific user."""
-    # Create user
-    user = UserFactory.create_user(session=db_session, email="auth_opt@example.com")
+    """
+    SECURITY TEST: Verify that authentication options NEVER expose credential IDs.
+
+    This prevents:
+    - Timing side-channel attacks (no user lookup)
+    - User enumeration (same response for all requests)
+    - Credential ID exposure (empty allowCredentials)
+    """
+    from app.db.models.passkey import Passkey
+
+    # Create user with passkeys
+    user = UserFactory.create_user(session=db_session, email="security_test@example.com")
+    passkey = Passkey(
+        user_id=user.id,
+        credential_id=b"test_credential_12345",
+        public_key=b"test_public_key",
+        sign_count=0,
+        device_name="Test Device",
+    )
+    db_session.add(passkey)
     await db_session.commit()
 
     # Mock Redis
@@ -197,15 +216,22 @@ async def test_get_authentication_options_with_email(
         mock_redis = AsyncMock()
         mock_get_redis.return_value.__aenter__.return_value = mock_redis
 
-        # Get auth options with email
+        # Get auth options - email parameter should be ignored
         response = await test_client.post(
             f"{API_PREFIX}/auth/passkey/login/options", json={"email": user.email}
         )
 
-    # Should succeed
+    # SECURITY VERIFICATION:
+    # 1. Should still succeed
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
+
+    # 2. allowCredentials MUST be empty (no credential IDs exposed)
+    assert data["allowCredentials"] == [], "SECURITY: Credential IDs must not be exposed"
+
+    # 3. Challenge should still be generated
     assert "challenge" in data
+    assert len(data["challenge"]) > 0
 
 
 @pytest.mark.asyncio

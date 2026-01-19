@@ -46,7 +46,7 @@ export function LoginForm({
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
 
-  // Handle passkey login
+  // Handle passkey login with security-hardened error handling
   const handlePasskeyLogin = async () => {
     setError(null);
     setPasskeyLoading(true);
@@ -54,12 +54,20 @@ export function LoginForm({
       const result = await passkeyApi.authenticate();
       await handleLoginSuccess(result.access_token);
     } catch (err) {
-      const errorMessage =
-        (err as { response?: { data?: { detail?: string } }; message?: string })
-          ?.response?.data?.detail ||
-        (err as Error)?.message ||
-        "Passkey authentication failed.";
-      setError(errorMessage);
+      // SECURITY: Generic error message to prevent leaking passkey availability
+      // Don't reveal "no passkeys" vs "cancelled" vs other failures
+      const message = (err as Error)?.message || "";
+      if (
+        message.includes("cancelled") ||
+        message.includes("NotAllowedError") ||
+        message.includes("not allowed")
+      ) {
+        // User cancelled - silently allow password fallback
+        setError(null);
+      } else {
+        // Generic fallback message
+        setError("Passkey sign-in unavailable. Please use your password.");
+      }
     } finally {
       setPasskeyLoading(false);
     }
@@ -303,6 +311,37 @@ export function LoginForm({
                   Edit
                 </Button>
               </div>
+
+              {/* Passkey as primary option (moved from email step) */}
+              {webAuthnSupported && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handlePasskeyLogin}
+                    disabled={isLoading || passkeyLoading}
+                    className="w-full"
+                  >
+                    {passkeyLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Key className="mr-2 h-4 w-4" />
+                    )}
+                    Sign in with Passkey
+                  </Button>
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">
+                        Or enter password
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div className="grid gap-2">
                 <Label htmlFor="password" className="text-foreground">
                   Password
@@ -350,34 +389,7 @@ export function LoginForm({
             </Button>
           )}
 
-          {/* Passkey Login Option */}
-          {step === "email" && webAuthnSupported && (
-            <>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">
-                    Or continue with
-                  </span>
-                </div>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handlePasskeyLogin}
-                disabled={isLoading || passkeyLoading}
-              >
-                {passkeyLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Key className="mr-2 h-4 w-4" />
-                )}
-                Sign in with Passkey
-              </Button>
-            </>
-          )}
+          {/* Passkey moved to password step for email-first flow */}
         </div>
       </form>
     </div>

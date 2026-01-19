@@ -98,13 +98,12 @@ export const passkeyApi = {
   /**
    * Get authentication options from the server.
    * Public endpoint (no auth required).
+   * Uses discoverable credentials flow (no user-specific credentials exposed).
    */
-  getAuthenticationOptions: async (
-    email?: string
-  ): Promise<PublicKeyCredentialRequestOptionsJSON> => {
+  getAuthenticationOptions: async (): Promise<PublicKeyCredentialRequestOptionsJSON> => {
     const response = await api.post<PublicKeyCredentialRequestOptionsJSON>(
       "/v1/auth/passkey/login/options",
-      email ? { email } : {}
+      {}
     );
     return response.data;
   },
@@ -112,10 +111,11 @@ export const passkeyApi = {
   /**
    * Authenticate with a passkey.
    * Returns access token on success.
+   * Uses discoverable credentials - browser finds matching passkeys by RP ID.
    */
-  authenticate: async (email?: string): Promise<AuthenticationResult> => {
-    // Step 1: Get authentication options from server
-    const options = await passkeyApi.getAuthenticationOptions(email);
+  authenticate: async (): Promise<AuthenticationResult> => {
+    // Step 1: Get authentication options from server (discoverable flow)
+    const options = await passkeyApi.getAuthenticationOptions();
 
     // Step 2: Start WebAuthn authentication (browser prompt)
     let credential: AuthenticationResponseJSON;

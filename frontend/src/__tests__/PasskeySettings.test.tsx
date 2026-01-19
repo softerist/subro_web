@@ -600,6 +600,127 @@ describe("PasskeySettings", () => {
     });
   });
 
+  it("maps known error name (NotAllowedError) to user-friendly message", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockResolvedValue({
+      passkey_count: 0,
+      passkeys: [],
+    });
+
+    // Error with known name (covers errorName branch at line 141)
+    const error = new Error("User cancelled");
+    error.name = "NotAllowedError";
+    vi.spyOn(passkeyApi.passkeyApi, "register").mockRejectedValue(error);
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Add Passkey")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Add Passkey"));
+    await user.click(screen.getByRole("button", { name: /Continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Registration cancelled or not permitted by your browser")).toBeInTheDocument();
+    });
+  });
+
+  it("maps error code from response to user-friendly message", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockResolvedValue({
+      passkey_count: 0,
+      passkeys: [],
+    });
+
+    // Error with code in response (covers errorCode branch at line 142)
+    vi.spyOn(passkeyApi.passkeyApi, "register").mockRejectedValue({
+      response: { data: { code: "challenge_expired" } },
+    });
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Add Passkey")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Add Passkey"));
+    await user.click(screen.getByRole("button", { name: /Continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Session expired. Please start again.")).toBeInTheDocument();
+    });
+  });
+
+  it("extracts message from nested detail object", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockResolvedValue({
+      passkey_count: 0,
+      passkeys: [],
+    });
+
+    // Error with nested detail object (covers typeof data?.detail === 'object' branch at line 143)
+    vi.spyOn(passkeyApi.passkeyApi, "register").mockRejectedValue({
+      response: {
+        data: {
+          detail: {
+            code: "unknown_code",
+            message: "Custom nested error message",
+          },
+        },
+      },
+    });
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Add Passkey")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Add Passkey"));
+    await user.click(screen.getByRole("button", { name: /Continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Custom nested error message")).toBeInTheDocument();
+    });
+  });
+
+  it("extracts code from nested detail object for known error codes", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
+    vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockResolvedValue({
+      passkey_count: 0,
+      passkeys: [],
+    });
+
+    // Error with nested detail.code (covers errorCode from nested detail)
+    vi.spyOn(passkeyApi.passkeyApi, "register").mockRejectedValue({
+      response: {
+        data: {
+          detail: {
+            code: "REAUTH_REQUIRED",
+          },
+        },
+      },
+    });
+
+    renderWithProviders(<PasskeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Add Passkey")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Add Passkey"));
+    await user.click(screen.getByRole("button", { name: /Continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Please verify your identity to continue")).toBeInTheDocument();
+    });
+  });
+
   it("handles passkey with null device_name in edit mode", async () => {
     const user = userEvent.setup();
     vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
@@ -821,7 +942,7 @@ describe("PasskeySettings", () => {
 
     // Save original userAgent
     const originalUserAgent = navigator.userAgent;
-    
+
     // Set userAgent to an empty or unknown value that UAParser can't parse well
     // This should result in undefined os.name and browser.name
     Object.defineProperty(navigator, "userAgent", {

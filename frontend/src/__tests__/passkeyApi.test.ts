@@ -139,32 +139,22 @@ describe("passkeyApi", () => {
 
 
   describe("getAuthenticationOptions", () => {
-    it("calls endpoint without email", async () => {
-      const mockOptions = { challenge: "auth-challenge" };
+    it("calls endpoint without parameters (discoverable credentials)", async () => {
+      const mockOptions = { challenge: "auth-challenge", allowCredentials: [] };
       vi.mocked(api.post).mockResolvedValue({ data: mockOptions });
 
       const result = await passkeyApi.getAuthenticationOptions();
 
       expect(api.post).toHaveBeenCalledWith("/v1/auth/passkey/login/options", {});
       expect(result).toEqual(mockOptions);
-    });
-
-    it("calls endpoint with email", async () => {
-      const mockOptions = { challenge: "auth-challenge" };
-      vi.mocked(api.post).mockResolvedValue({ data: mockOptions });
-
-      const result = await passkeyApi.getAuthenticationOptions("test@example.com");
-
-      expect(api.post).toHaveBeenCalledWith("/v1/auth/passkey/login/options", {
-        email: "test@example.com",
-      });
-      expect(result).toEqual(mockOptions);
+      // SECURITY: Verify empty allowCredentials (no credential IDs exposed)
+      expect(result.allowCredentials).toEqual([]);
     });
   });
 
   describe("authenticate", () => {
-    it("completes authentication flow successfully", async () => {
-      const mockOptions = { challenge: "auth-challenge" };
+    it("completes authentication flow successfully (discoverable credentials)", async () => {
+      const mockOptions = { challenge: "auth-challenge", allowCredentials: [] };
       const mockCredential = { id: "cred-123", rawId: "raw-123" };
       const mockResult = {
         access_token: "test-token",
@@ -179,7 +169,7 @@ describe("passkeyApi", () => {
         mockCredential as any
       );
 
-      const result = await passkeyApi.authenticate("test@example.com");
+      const result = await passkeyApi.authenticate();
 
       expect(api.post).toHaveBeenNthCalledWith(
         2,

@@ -216,34 +216,21 @@ async def verify_registration(
 @limiter.limit("10/minute")
 async def get_authentication_options(
     request: Request,  # noqa: ARG001 - Required by rate limiter
-    body: AuthenticationOptionsRequest | None = None,
     db: AsyncSession = Depends(get_async_session),
     redis: Redis = Depends(get_redis),
 ) -> dict:
     """
-    Get WebAuthn authentication options.
+    Get WebAuthn authentication options for discoverable credentials.
 
-    If email is provided, returns options specific to that user's passkeys.
-    If email is omitted, returns options for discoverable credentials (username-less login).
+    SECURITY HARDENING:
+    - No email/user lookup (constant-time response)
+    - Always returns empty allowCredentials
+    - Prevents timing attacks and user enumeration
 
     Returns options to be passed to navigator.credentials.get() in the browser.
+    The browser/authenticator will find matching credentials by RP ID.
     """
-    user_id = None
-
-    if body and body.email:
-        # Look up user by email to get their passkey IDs
-        from sqlalchemy import select
-
-        from app.db.models.user import User as UserModel
-
-        result = await db.execute(select(UserModel).where(UserModel.email == body.email))
-        user = result.scalar_one_or_none()
-        if user:
-            user_id = str(user.id)
-        # If user not found, we still return options for discoverable flow
-        # (don't reveal whether email exists)
-
-    options = await passkey_service.get_authentication_options(db, redis, user_id)
+    options = await passkey_service.get_authentication_options(db, redis)
     return options
 
 
