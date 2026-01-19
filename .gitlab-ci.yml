@@ -483,7 +483,9 @@ scan_image_vulns:
       variables:
         TRIVY_SEVERITY: "CRITICAL"
     - when: on_success
-  # NOTE: Cache disabled - Docker creates .trivycache as root, causing permission errors for gitlab-runner
+  cache:
+    key: trivy-cache-v3
+    paths: [.trivycache/]
   script:
     - |
       set -euo pipefail
@@ -495,8 +497,8 @@ scan_image_vulns:
         USE_DOCKER=true
         # Docker login for registry access
         echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-        # Ensure cache directory exists and is writable
-        mkdir -p .trivycache && chmod 777 .trivycache
+        # Ensure cache directory exists with correct ownership
+        mkdir -p .trivycache
       else
         export TRIVY_USERNAME="$CI_REGISTRY_USER"
         export TRIVY_PASSWORD="$CI_REGISTRY_PASSWORD"
@@ -512,18 +514,19 @@ scan_image_vulns:
           if [ "$USE_DOCKER" = "true" ]; then
             # Pull image first, then scan locally
             docker pull "$img" || true
+            # Run as current user to avoid permission issues with cache
             if docker run --rm \
+              --user "$(id -u):$(id -g)" \
               -v /var/run/docker.sock:/var/run/docker.sock \
-              -v "$(pwd)/.trivycache:/root/.cache/trivy" \
+              -v "$(pwd)/.trivycache:/.cache/trivy" \
               aquasec/trivy:0.58.0 image --exit-code 1 \
+              --cache-dir /.cache/trivy \
               --severity "$TRIVY_SEVERITY" --timeout 5m --no-progress \
               --skip-files "/app/secrets/google-api-config.json" \
               --scanners vuln \
               "$img"; then
               SCAN_SUCCESS=true
             fi
-            # Fix permissions so gitlab-runner can clean up
-            chmod -R 777 .trivycache 2>/dev/null || true
           else
             if trivy image --cache-dir .trivycache --exit-code 1 \
               --severity "$TRIVY_SEVERITY" --timeout 5m --no-progress \
