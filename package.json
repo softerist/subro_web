@@ -2,7 +2,7 @@
   "name": "subro-web",
   "private": true,
   "type": "module",
-  "version": "1.1.1",
+  "version": "0.0.0-see-pyproject",
   "description": "Monorepo development tools for subro_web",
   "scripts": {
     "prepare": "husky"

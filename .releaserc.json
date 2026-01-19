@@ -9,15 +9,12 @@
       "changelogTitle": "# Changelog\n\nAll notable changes to this project will be documented in this file.\n"
     }],
     ["@semantic-release/exec", {
-      "prepareCmd": "sed -i 's/\"version\": \"[^\"]*\"/\"version\": \"${nextRelease.version}\"/' package.json frontend/package.json && sed -i 's/^version = \"[^\"]*\"/version = \"${nextRelease.version}\"/' backend/pyproject.toml && echo 'NEW_APP_VERSION=${nextRelease.version}' > version.env"
+      "prepareCmd": "sed -i 's/^version = \"[^\"]*\"/version = \"${nextRelease.version}\"/' backend/pyproject.toml"
     }],
     ["@semantic-release/git", {
       "assets": [
         "CHANGELOG.md",
-        "package.json",
-        "frontend/package.json",
-        "backend/pyproject.toml",
-        "version.env"
+        "backend/pyproject.toml"
       ],
       "message": "chore(release): ${nextRelease.version}\n\n${nextRelease.notes}"
     }],
