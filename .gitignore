@@ -256,3 +256,4 @@ backend/.local/state*
 infra/docker/Caddyfile.prod
 GEMINI.md
 to_be_implemented.md
+.trivycache/

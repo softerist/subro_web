@@ -483,9 +483,7 @@ scan_image_vulns:
       variables:
         TRIVY_SEVERITY: "CRITICAL"
     - when: on_success
-  cache:
-    key: trivy-cache-v2-$CI_PIPELINE_ID
-    paths: [.trivycache/]
+  # NOTE: Cache disabled - Docker creates .trivycache as root, causing permission errors for gitlab-runner
   script:
     - |
       set -euo pipefail
@@ -497,6 +495,8 @@ scan_image_vulns:
         USE_DOCKER=true
         # Docker login for registry access
         echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+        # Ensure cache directory exists and is writable
+        mkdir -p .trivycache && chmod 777 .trivycache
       else
         export TRIVY_USERNAME="$CI_REGISTRY_USER"
         export TRIVY_PASSWORD="$CI_REGISTRY_PASSWORD"
@@ -522,6 +522,8 @@ scan_image_vulns:
               "$img"; then
               SCAN_SUCCESS=true
             fi
+            # Fix permissions so gitlab-runner can clean up
+            chmod -R 777 .trivycache 2>/dev/null || true
           else
             if trivy image --cache-dir .trivycache --exit-code 1 \
               --severity "$TRIVY_SEVERITY" --timeout 5m --no-progress \
