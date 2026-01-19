@@ -219,7 +219,7 @@ ci_debug_env:
     - 'echo "Pipeline: $CI_PIPELINE_SOURCE | Branch: $CI_COMMIT_BRANCH | SHA: $CI_COMMIT_SHORT_SHA"'
 
 # -------- VERSION BUMP --------
-# NOTE: Versioning is handled by semantic-release in the release stage.
+# NOTE: Versioning is handled by semantic-release in the release stage .
 # It analyzes conventional commits to determine version bumps:
 #   - fix: -> PATCH
 #   - feat: -> MINOR
