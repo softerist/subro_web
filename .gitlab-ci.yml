@@ -521,6 +521,7 @@ scan_image_vulns:
               -v "$(pwd)/.trivycache:/.cache/trivy" \
               aquasec/trivy:0.58.0 image --exit-code 1 \
               --cache-dir /.cache/trivy \
+              --db-repository ghcr.io/aquasecurity/trivy-db:2 \
               --severity "$TRIVY_SEVERITY" --timeout 5m \
               --skip-files "/app/secrets/google-api-config.json" \
               --scanners vuln \
@@ -529,6 +530,7 @@ scan_image_vulns:
             fi
           else
             if trivy image --cache-dir .trivycache --exit-code 1 \
+              --db-repository ghcr.io/aquasecurity/trivy-db:2 \
               --severity "$TRIVY_SEVERITY" --timeout 5m \
               --skip-files "/app/secrets/google-api-config.json" \
               --scanners vuln \
