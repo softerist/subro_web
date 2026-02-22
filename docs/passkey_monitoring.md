@@ -90,16 +90,19 @@ ORDER BY date DESC;
 ## Alert Thresholds
 
 ### Critical Alerts (🚨)
+
 - **Registration Success Rate < 70%** — Indicates serious configuration or compatibility issues
 - **Origin/RP ID Mismatch > 5** in last hour — Configuration regression
 - **Complete Service Outage** — No successful operations in 15 minutes
 
 ### Warning Alerts (⚠️)
+
 - **Registration Success Rate < 85%** — Below target, investigate
 - **Login Success Rate < 90%** — Users having auth trouble
 - **Deletion Spike** — >3x normal daily average without corresponding registrations
 
 ### Info Monitoring (ℹ️)
+
 - **Adoption Rate** — Track percentage of users with at least one passkey
 - **Login Method Preference** — Passkey vs password login ratio
 - **Common Error Types** — Top 5 error types in last 24h
@@ -107,21 +110,25 @@ ORDER BY date DESC;
 ## Grafana Dashboard Panels (Optional)
 
 ### Panel 1: Success Rates
+
 - **Type**: Stat
 - **Query**: Registration & Login Success Rates
 - **Thresholds**: Red <70%, Yellow <85%, Green ≥85%
 
 ### Panel 2: Error Distribution
+
 - **Type**: Pie Chart
 - **Query**: Top Errors
 - **Update**: Every 5 minutes
 
 ### Panel 3: Adoption Trend
+
 - **Type**: Time Series
 - **Query**: Daily new passkey registrations
 - **Time Range**: Last 30 days
 
 ### Panel 4: Login Methods
+
 - **Type**: Bar Gauge
 - **Query**: Passkey vs Password logins
 - **Time Range**: Last 7 days

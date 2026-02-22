@@ -18,7 +18,7 @@ services:
     networks:
       - internal_net
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 5s
       timeout: 3s
       retries: 4
@@ -47,7 +47,11 @@ services:
     networks:
       - internal_net
     healthcheck:
-      test: [ "CMD-SHELL", "PYTHONPATH=/app /app/.venv/bin/python /app/scripts/worker_healthcheck.py" ]
+      test:
+        [
+          "CMD-SHELL",
+          "PYTHONPATH=/app /app/.venv/bin/python /app/scripts/worker_healthcheck.py",
+        ]
       interval: 30s
       timeout: 15s
       retries: 3
@@ -64,7 +68,7 @@ services:
     group_add:
       - "1000"
     entrypoint: []
-    command: [ "celery", "-A", "app.tasks.celery_app", "beat", "--loglevel=INFO" ]
+    command: ["celery", "-A", "app.tasks.celery_app", "beat", "--loglevel=INFO"]
     volumes:
       - ../../logs:/app/logs
       - celery_beat_schedule:/app/.local/state/subro-web
@@ -75,7 +79,7 @@ services:
     networks:
       - internal_net
     healthcheck:
-      test: [ "CMD", "pgrep", "-f", "celery.*beat" ]
+      test: ["CMD", "pgrep", "-f", "celery.*beat"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -98,14 +102,13 @@ services:
     networks:
       - internal_net
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://127.0.0.1:8080" ]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080"]
       interval: 15s
       timeout: 3s
       retries: 3
 
 volumes:
   celery_beat_schedule:
-
 
 networks:
   internal_net:

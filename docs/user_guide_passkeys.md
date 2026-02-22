@@ -69,6 +69,7 @@ Passkeys are a safer and easier way to sign in without remembering passwords. Th
 ### "Browser doesn't support passkeys"
 
 **Solution**: Use a modern browser:
+
 - Chrome 109+
 - Safari 16+
 - Firefox 119+
@@ -79,26 +80,31 @@ Passkeys are a safer and easier way to sign in without remembering passwords. Th
 **Cause**: Factory resets can erase passkeys stored on your device.
 
 **Solution**:
+
 - Check if passkeys synced via iCloud Keychain (iPhone/Mac) or Google Password Manager (Android/Chrome)
 - If not synced, you'll need to create a new passkey
 
 ### "Can't find passkey on new device"
 
 **Synced passkeys** (iPhone/Mac with iCloud, Android/Chrome with Google account):
+
 - Wait a few minutes for sync
 - Make sure you're signed into the same account
 
 **Device-specific passkeys** (security keys, Windows Hello):
+
 - These don't sync – use them on the original device only
 
 ### "Registration always fails"
 
 **Possible causes**:
+
 - Not using HTTPS in production
 - Browser extension conflicts
 - Privacy mode/incognito (some browsers don't support passkeys in private mode)
 
 **Solutions**:
+
 - Try a different browser
 - Disable extensions temporarily
 - Use normal browsing mode (not private/incognito)
@@ -126,6 +132,7 @@ A: If you use synced passkeys (iCloud, Google), yes! Otherwise, you'll need to c
 **Q: What happens if I lose my device?**
 
 A:
+
 - **Synced passkeys**: They'll sync to your new device automatically
 - **Device-specific**: You'll need to sign in with your password and create a new passkey
 
@@ -144,6 +151,7 @@ A: Yes, you need internet to sign in to websites. But the passkey verification h
 ## Need Help?
 
 If you're still having trouble, contact support with:
+
 - Device type (iPhone 15, Windows 11, etc.)
 - Browser and version
 - Error message (if any)

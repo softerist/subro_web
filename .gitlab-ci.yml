@@ -1268,7 +1268,6 @@ semantic_release:
       echo "📤 Syncing tags to GitHub..."
       git push github --tags --force || echo "⚠️  GitHub tag push failed (non-fatal)"
 
-
 # ============ CLEANUP STAGE ============
 cleanup_registry:
   retry: 1

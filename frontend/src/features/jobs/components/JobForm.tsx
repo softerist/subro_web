@@ -210,10 +210,17 @@ export function JobForm() {
                         </div>
                       )}
                       {allowedFolders?.map((folder) => (
-                        <SelectItem key={folder} value={folder} className="max-w-full">
+                        <SelectItem
+                          key={folder}
+                          value={folder}
+                          className="max-w-full"
+                        >
                           <div className="flex items-center gap-2 min-w-0 w-full">
                             <FolderOpen className="h-4 w-4 shrink-0" />
-                            <span className="truncate flex-1 min-w-0" title={folder}>
+                            <span
+                              className="truncate flex-1 min-w-0"
+                              title={folder}
+                            >
                               {folder}
                             </span>
                           </div>

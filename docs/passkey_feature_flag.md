@@ -17,16 +17,20 @@ The `PasskeySettings` component is already integrated. To add feature flag suppo
 
 ```tsx
 // In SettingsPage.tsx
-const isPasskeyEnabled = process.env.NEXT_PUBLIC_ENABLE_PASSKEYS === 'true';
+const isPasskeyEnabled = process.env.NEXT_PUBLIC_ENABLE_PASSKEYS === "true";
 
-{/* Security Tab Content */}
-{currentTab === "security" && (
-  <div className="space-y-6" ref={cardRef}>
-    <PasswordSettings />
-    <MfaSettings />
-    {isPasskeyEnabled && <PasskeySettings />}  {/* ← Conditional render */}
-  </div>
-)}
+{
+  /* Security Tab Content */
+}
+{
+  currentTab === "security" && (
+    <div className="space-y-6" ref={cardRef}>
+      <PasswordSettings />
+      <MfaSettings />
+      {isPasskeyEnabled && <PasskeySettings />} {/* ← Conditional render */}
+    </div>
+  );
+}
 ```
 
 ## Backend Behavior (Current Implementation)
@@ -74,6 +78,7 @@ async def get_registration_options(...):
 ## Gradual Rollout Strategy
 
 ### Phase 1: Internal Testing (Flag OFF)
+
 ```bash
 NEXT_PUBLIC_ENABLE_PASSKEYS=false  # Default OFF
 ```
@@ -83,6 +88,7 @@ NEXT_PUBLIC_ENABLE_PASSKEYS=false  # Default OFF
 - Test full flow in production environment
 
 ### Phase 2: Canary Release (5%)
+
 ```bash
 # Use feature flag service (LaunchDarkly, Split.io, etc.)
 # OR implement simple percentage rollout:
@@ -93,11 +99,13 @@ const isPasskeyEnabled =
 ```
 
 ### Phase 3: Progressive Rollout
+
 - 25% → 50% → 100%
 - Monitor success rates at each stage
 - Halt and investigate if metrics drop
 
 ### Phase 4: Full Release
+
 ```bash
 NEXT_PUBLIC_ENABLE_PASSKEYS=true  # All users
 ```
@@ -116,12 +124,14 @@ If issues arise:
 ## Testing Flag States
 
 ### Flag ON
+
 - [ ] Navigate to Settings → Security
 - [ ] Verify Passkeys section visible
 - [ ] Test full registration flow
 - [ ] Test rename/delete
 
 ### Flag OFF
+
 - [ ] Navigate to Settings → Security
 - [ ] Verify NO Passkeys section
 - [ ] Verify existing passkey login still works (if user has passkeys)
@@ -145,6 +155,7 @@ export function SettingsPage() {
 ```
 
 This allows:
+
 - **Per-user rollout** (A/B testing)
 - **Real-time toggles** (no redeploy needed)
 - **Analytics integration**

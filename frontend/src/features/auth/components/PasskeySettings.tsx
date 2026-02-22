@@ -123,10 +123,12 @@ export function PasskeySettings() {
         response?: {
           data?: {
             code?: string;
-            detail?: string | {
-              code?: string;
-              message?: string;
-            };
+            detail?:
+              | string
+              | {
+                  code?: string;
+                  message?: string;
+                };
           };
         };
       }
@@ -134,13 +136,16 @@ export function PasskeySettings() {
       const error = err as PasskeyErrorResponse;
       const errorName = error.name;
       const data = error.response?.data;
-      const errorCode = (typeof data?.detail === 'object' ? data.detail.code : data?.code);
+      const errorCode =
+        typeof data?.detail === "object" ? data.detail.code : data?.code;
 
       // Try to map to user-friendly message
       const errorMessage =
         (errorName && PASSKEY_ERROR_MESSAGES[errorName]) ||
         (errorCode && PASSKEY_ERROR_MESSAGES[errorCode]) ||
-        (typeof data?.detail === 'object' ? data.detail.message : data?.detail) ||
+        (typeof data?.detail === "object"
+          ? data.detail.message
+          : data?.detail) ||
         error.message ||
         PASSKEY_ERROR_MESSAGES.default;
 
@@ -207,8 +212,8 @@ export function PasskeySettings() {
         <CardContent>
           <div className="p-4 bg-muted/50 border rounded-lg">
             <p className="text-sm text-muted-foreground">
-              Your browser doesn&apos;t support passkeys. Please use a modern browser
-              like Chrome, Safari, Firefox, or Edge.
+              Your browser doesn&apos;t support passkeys. Please use a modern
+              browser like Chrome, Safari, Firefox, or Edge.
             </p>
           </div>
         </CardContent>
@@ -235,7 +240,8 @@ export function PasskeySettings() {
           Passkeys
         </CardTitle>
         <CardDescription>
-          Sign in with your fingerprint, face, or security key — no password needed
+          Sign in with your fingerprint, face, or security key — no password
+          needed
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -307,7 +313,9 @@ export function PasskeySettings() {
                           {passkey.last_used_at && (
                             <>
                               {" • Last used "}
-                              {new Date(passkey.last_used_at).toLocaleDateString()}
+                              {new Date(
+                                passkey.last_used_at,
+                              ).toLocaleDateString()}
                             </>
                           )}
                           {passkey.backup_state && " • Synced"}
@@ -408,11 +416,18 @@ export function PasskeySettings() {
             <DialogHeader>
               <DialogTitle>Delete Passkey?</DialogTitle>
               <DialogDescription>
-                {deleteConfirmId && passkeys.find(p => p.id === deleteConfirmId)?.device_name && (
-                  <span className="block mb-2">
-                    &ldquo;{passkeys.find(p => p.id === deleteConfirmId)?.device_name}&rdquo;
-                  </span>
-                )}
+                {deleteConfirmId &&
+                  passkeys.find((p) => p.id === deleteConfirmId)
+                    ?.device_name && (
+                    <span className="block mb-2">
+                      &ldquo;
+                      {
+                        passkeys.find((p) => p.id === deleteConfirmId)
+                          ?.device_name
+                      }
+                      &rdquo;
+                    </span>
+                  )}
                 This passkey will be removed from your account. You can always
                 add it again later.
               </DialogDescription>
@@ -426,18 +441,24 @@ export function PasskeySettings() {
                     This is your only passkey
                   </p>
                   <p className="text-amber-700 dark:text-amber-300 mt-1">
-                    You can still sign in with your password after deleting this.
+                    You can still sign in with your password after deleting
+                    this.
                   </p>
                 </div>
               </div>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteConfirmId(null)}
+              >
                 Cancel
               </Button>
               <Button
                 variant="destructive"
-                onClick={() => deleteConfirmId && deleteMutation.mutate(deleteConfirmId)}
+                onClick={() =>
+                  deleteConfirmId && deleteMutation.mutate(deleteConfirmId)
+                }
                 disabled={deleteMutation.isPending}
               >
                 {deleteMutation.isPending && (

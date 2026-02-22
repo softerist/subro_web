@@ -1,26 +1,29 @@
 {
-  "branches": [
-    "main",
-    {"name": "develop", "prerelease": "beta"}
-  ],
+  "branches": ["main", { "name": "develop", "prerelease": "beta" }],
   "tagFormat": "v${version}",
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
-    ["@semantic-release/changelog", {
-      "changelogFile": "CHANGELOG.md",
-      "changelogTitle": "# Changelog\n\nAll notable changes to this project will be documented in this file.\n"
-    }],
-    ["@semantic-release/exec", {
-      "prepareCmd": "sed -i 's/^version = \"[^\"]*\"/version = \"${nextRelease.version}\"/' backend/pyproject.toml"
-    }],
-    ["@semantic-release/git", {
-      "assets": [
-        "CHANGELOG.md",
-        "backend/pyproject.toml"
-      ],
-      "message": "chore(release): ${nextRelease.version}\n\n${nextRelease.notes}"
-    }],
+    [
+      "@semantic-release/changelog",
+      {
+        "changelogFile": "CHANGELOG.md",
+        "changelogTitle": "# Changelog\n\nAll notable changes to this project will be documented in this file.\n"
+      }
+    ],
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "sed -i 's/^version = \"[^\"]*\"/version = \"${nextRelease.version}\"/' backend/pyproject.toml"
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["CHANGELOG.md", "backend/pyproject.toml"],
+        "message": "chore(release): ${nextRelease.version}\n\n${nextRelease.notes}"
+      }
+    ],
     "@semantic-release/gitlab"
   ]
 }

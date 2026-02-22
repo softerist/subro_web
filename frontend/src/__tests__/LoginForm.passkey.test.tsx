@@ -55,7 +55,7 @@ const renderLoginForm = () => {
       >
         <LoginForm />
       </MemoryRouter>
-    </QueryClientProvider>
+    </QueryClientProvider>,
   );
 };
 
@@ -81,7 +81,9 @@ describe("LoginForm - Passkey Integration (Email-First Flow)", () => {
       renderLoginForm();
 
       // Email step - passkey button should NOT be visible (email-first flow)
-      expect(screen.queryByText(/Sign in with Passkey/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Sign in with Passkey/i),
+      ).not.toBeInTheDocument();
     });
 
     it("shows passkey button on password step when WebAuthn is supported", async () => {
@@ -112,7 +114,9 @@ describe("LoginForm - Passkey Integration (Email-First Flow)", () => {
       });
 
       // Passkey button should not be visible
-      expect(screen.queryByText(/Sign in with Passkey/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Sign in with Passkey/i),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -151,7 +155,7 @@ describe("LoginForm - Passkey Integration (Email-First Flow)", () => {
 
       // Make authentication hang
       vi.mocked(passkeyApi.authenticate).mockImplementation(
-        () => new Promise(() => {})
+        () => new Promise(() => {}),
       );
 
       renderLoginForm();
@@ -161,7 +165,9 @@ describe("LoginForm - Passkey Integration (Email-First Flow)", () => {
 
       // Button should show loading and be disabled
       await waitFor(() => {
-        const button = screen.getByRole("button", { name: /Sign in with Passkey/i });
+        const button = screen.getByRole("button", {
+          name: /Sign in with Passkey/i,
+        });
         expect(button).toBeDisabled();
       });
     });
@@ -174,7 +180,7 @@ describe("LoginForm - Passkey Integration (Email-First Flow)", () => {
 
       // User cancelled the passkey prompt
       vi.mocked(passkeyApi.authenticate).mockRejectedValue(
-        new Error("Authentication was cancelled or not allowed.")
+        new Error("Authentication was cancelled or not allowed."),
       );
 
       renderLoginForm();
@@ -195,7 +201,7 @@ describe("LoginForm - Passkey Integration (Email-First Flow)", () => {
 
       // Generic failure (could be "no passkeys" but we don't reveal that)
       vi.mocked(passkeyApi.authenticate).mockRejectedValue(
-        new Error("Some internal error")
+        new Error("Some internal error"),
       );
 
       renderLoginForm();
@@ -206,7 +212,9 @@ describe("LoginForm - Passkey Integration (Email-First Flow)", () => {
       // Should show generic message, not specific error
       await waitFor(() => {
         expect(
-          screen.getByText("Passkey sign-in unavailable. Please use your password.")
+          screen.getByText(
+            "Passkey sign-in unavailable. Please use your password.",
+          ),
         ).toBeInTheDocument();
       });
     });
@@ -216,7 +224,7 @@ describe("LoginForm - Passkey Integration (Email-First Flow)", () => {
       vi.mocked(isWebAuthnSupported).mockReturnValue(true);
 
       vi.mocked(passkeyApi.authenticate).mockRejectedValue(
-        new Error("NotAllowedError: User denied")
+        new Error("NotAllowedError: User denied"),
       );
 
       renderLoginForm();
@@ -246,7 +254,9 @@ describe("LoginForm - Passkey Integration (Email-First Flow)", () => {
       // Should show generic message when error has no message
       await waitFor(() => {
         expect(
-          screen.getByText("Passkey sign-in unavailable. Please use your password.")
+          screen.getByText(
+            "Passkey sign-in unavailable. Please use your password.",
+          ),
         ).toBeInTheDocument();
       });
     });
@@ -258,7 +268,7 @@ describe("LoginForm - Passkey Integration (Email-First Flow)", () => {
       vi.mocked(isWebAuthnSupported).mockReturnValue(true);
 
       vi.mocked(passkeyApi.authenticate).mockImplementation(
-        () => new Promise(() => {})
+        () => new Promise(() => {}),
       );
 
       renderLoginForm();

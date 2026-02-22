@@ -2093,7 +2093,9 @@ axios.post(url, data, { headers })
             <PasswordSettings />
             <MfaSettings />
             {/* Feature flagged: Enable with VITE_ENABLE_PASSKEYS env var */}
-            {import.meta.env.VITE_ENABLE_PASSKEYS !== 'false' && <PasskeySettings />}
+            {import.meta.env.VITE_ENABLE_PASSKEYS !== "false" && (
+              <PasskeySettings />
+            )}
           </div>
         )}
       </Card>

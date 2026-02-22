@@ -14,7 +14,11 @@ import * as passkeyApi from "@/features/auth/api/passkey";
 vi.mock("@/features/auth/api/passkey");
 
 // Mock auth store
-const mockUser = { id: "user-123", email: "test@example.com", role: "user" as const };
+const mockUser = {
+  id: "user-123",
+  email: "test@example.com",
+  role: "user" as const,
+};
 vi.mock("@/store/authStore", () => ({
   useAuthStore: vi.fn((selector) => {
     const state = {
@@ -36,7 +40,7 @@ const renderWithProviders = (component: React.ReactElement) => {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>{component}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>{component}</QueryClientProvider>,
   );
 };
 
@@ -56,7 +60,7 @@ describe("PasskeySettings", () => {
     renderWithProviders(<PasskeySettings />);
 
     expect(
-      screen.getByText(/Your browser doesn't support passkeys/i)
+      screen.getByText(/Your browser doesn't support passkeys/i),
     ).toBeInTheDocument();
     expect(screen.queryByText("Add Passkey")).not.toBeInTheDocument();
   });
@@ -64,12 +68,14 @@ describe("PasskeySettings", () => {
   it("shows loading state while fetching passkeys", () => {
     vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
     vi.spyOn(passkeyApi.passkeyApi, "listPasskeys").mockImplementation(
-      () => new Promise(() => {}) // Never resolves
+      () => new Promise(() => {}), // Never resolves
     );
 
     renderWithProviders(<PasskeySettings />);
 
-    expect(screen.getByRole("progressbar", { hidden: true })).toBeInTheDocument();
+    expect(
+      screen.getByRole("progressbar", { hidden: true }),
+    ).toBeInTheDocument();
   });
 
   it("shows empty state with info banner when no passkeys exist", async () => {
@@ -82,7 +88,9 @@ describe("PasskeySettings", () => {
     renderWithProviders(<PasskeySettings />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Enable passwordless login/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Enable passwordless login/i),
+      ).toBeInTheDocument();
     });
 
     expect(screen.getByText("Add Passkey")).toBeInTheDocument();
@@ -98,12 +106,13 @@ describe("PasskeySettings", () => {
     renderWithProviders(<PasskeySettings />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Enable passwordless login/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Enable passwordless login/i),
+      ).toBeInTheDocument();
     });
 
     expect(screen.getByText("Add Passkey")).toBeInTheDocument();
   });
-
 
   it("displays list of passkeys", async () => {
     vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
@@ -273,7 +282,6 @@ describe("PasskeySettings", () => {
     });
   });
 
-
   it("allows renaming a passkey", async () => {
     const user = userEvent.setup();
     vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
@@ -302,7 +310,7 @@ describe("PasskeySettings", () => {
     // Click edit button
     const editButtons = screen.getAllByRole("button", { name: "" });
     const editButton = editButtons.find((btn) =>
-      btn.querySelector('svg[class*="lucide-pencil"]')
+      btn.querySelector('svg[class*="lucide-pencil"]'),
     );
     await user.click(editButton!);
 
@@ -312,15 +320,15 @@ describe("PasskeySettings", () => {
     await user.type(nameInput, "New Name");
 
     // Click save (check icon)
-    const saveButton = screen.getAllByRole("button", { name: "" }).find((btn) =>
-      btn.querySelector('svg[class*="lucide-check"]')
-    );
+    const saveButton = screen
+      .getAllByRole("button", { name: "" })
+      .find((btn) => btn.querySelector('svg[class*="lucide-check"]'));
     await user.click(saveButton!);
 
     await waitFor(() => {
       expect(passkeyApi.passkeyApi.renamePasskey).toHaveBeenCalledWith(
         "passkey-1",
-        "New Name"
+        "New Name",
       );
     });
   });
@@ -351,7 +359,7 @@ describe("PasskeySettings", () => {
     // Click edit button
     const editButtons = screen.getAllByRole("button", { name: "" });
     const editButton = editButtons.find((btn) =>
-      btn.querySelector('svg[class*="lucide-pencil"]')
+      btn.querySelector('svg[class*="lucide-pencil"]'),
     );
     await user.click(editButton!);
 
@@ -359,18 +367,19 @@ describe("PasskeySettings", () => {
     expect(screen.getByDisplayValue("Test Passkey")).toBeInTheDocument();
 
     // Click cancel button (X icon)
-    const cancelButton = screen.getAllByRole("button", { name: "" }).find((btn) =>
-      btn.querySelector('svg[class*="lucide-x"]')
-    );
+    const cancelButton = screen
+      .getAllByRole("button", { name: "" })
+      .find((btn) => btn.querySelector('svg[class*="lucide-x"]'));
     await user.click(cancelButton!);
 
     // Should exit edit mode and show original name
     await waitFor(() => {
-      expect(screen.queryByDisplayValue("Test Passkey")).not.toBeInTheDocument();
+      expect(
+        screen.queryByDisplayValue("Test Passkey"),
+      ).not.toBeInTheDocument();
     });
     expect(screen.getByText("Test Passkey")).toBeInTheDocument();
   });
-
 
   it("displays 'Passkey' when device_name is null", async () => {
     vi.spyOn(passkeyApi, "isWebAuthnSupported").mockReturnValue(true);
@@ -446,7 +455,7 @@ describe("PasskeySettings", () => {
     // Click edit button
     const editButtons = screen.getAllByRole("button", { name: "" });
     const editButton = editButtons.find((btn) =>
-      btn.querySelector('svg[class*="lucide-pencil"]')
+      btn.querySelector('svg[class*="lucide-pencil"]'),
     );
     await user.click(editButton!);
 
@@ -458,7 +467,7 @@ describe("PasskeySettings", () => {
     await waitFor(() => {
       expect(passkeyApi.passkeyApi.renamePasskey).toHaveBeenCalledWith(
         "passkey-1",
-        "New Name"
+        "New Name",
       );
     });
   });
@@ -489,7 +498,7 @@ describe("PasskeySettings", () => {
     // Click edit button
     const editButtons = screen.getAllByRole("button", { name: "" });
     const editButton = editButtons.find((btn) =>
-      btn.querySelector('svg[class*="lucide-pencil"]')
+      btn.querySelector('svg[class*="lucide-pencil"]'),
     );
     await user.click(editButton!);
 
@@ -499,7 +508,9 @@ describe("PasskeySettings", () => {
 
     // Should exit edit mode
     await waitFor(() => {
-      expect(screen.queryByDisplayValue("Test Passkey")).not.toBeInTheDocument();
+      expect(
+        screen.queryByDisplayValue("Test Passkey"),
+      ).not.toBeInTheDocument();
     });
     expect(screen.getByText("Test Passkey")).toBeInTheDocument();
   });
@@ -532,7 +543,7 @@ describe("PasskeySettings", () => {
     // Click edit button
     const editButtons = screen.getAllByRole("button", { name: "" });
     const editButton = editButtons.find((btn) =>
-      btn.querySelector('svg[class*="lucide-pencil"]')
+      btn.querySelector('svg[class*="lucide-pencil"]'),
     );
     await user.click(editButton!);
 
@@ -541,9 +552,9 @@ describe("PasskeySettings", () => {
     await user.clear(nameInput);
 
     // Click save button
-    const saveButton = screen.getAllByRole("button", { name: "" }).find((btn) =>
-      btn.querySelector('svg[class*="lucide-check"]')
-    );
+    const saveButton = screen
+      .getAllByRole("button", { name: "" })
+      .find((btn) => btn.querySelector('svg[class*="lucide-check"]'));
     await user.click(saveButton!);
 
     // Should NOT call rename with empty name
@@ -596,7 +607,9 @@ describe("PasskeySettings", () => {
     await user.click(screen.getByRole("button", { name: /Continue/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("An error occurred. Please try again.")).toBeInTheDocument();
+      expect(
+        screen.getByText("An error occurred. Please try again."),
+      ).toBeInTheDocument();
     });
   });
 
@@ -623,7 +636,11 @@ describe("PasskeySettings", () => {
     await user.click(screen.getByRole("button", { name: /Continue/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Registration cancelled or not permitted by your browser")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Registration cancelled or not permitted by your browser",
+        ),
+      ).toBeInTheDocument();
     });
   });
 
@@ -650,7 +667,9 @@ describe("PasskeySettings", () => {
     await user.click(screen.getByRole("button", { name: /Continue/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Session expired. Please start again.")).toBeInTheDocument();
+      expect(
+        screen.getByText("Session expired. Please start again."),
+      ).toBeInTheDocument();
     });
   });
 
@@ -684,7 +703,9 @@ describe("PasskeySettings", () => {
     await user.click(screen.getByRole("button", { name: /Continue/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Custom nested error message")).toBeInTheDocument();
+      expect(
+        screen.getByText("Custom nested error message"),
+      ).toBeInTheDocument();
     });
   });
 
@@ -717,7 +738,9 @@ describe("PasskeySettings", () => {
     await user.click(screen.getByRole("button", { name: /Continue/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Please verify your identity to continue")).toBeInTheDocument();
+      expect(
+        screen.getByText("Please verify your identity to continue"),
+      ).toBeInTheDocument();
     });
   });
 
@@ -747,7 +770,7 @@ describe("PasskeySettings", () => {
     // Click edit button - device_name is null so input should be empty
     const editButtons = screen.getAllByRole("button", { name: "" });
     const editButton = editButtons.find((btn) =>
-      btn.querySelector('svg[class*="lucide-pencil"]')
+      btn.querySelector('svg[class*="lucide-pencil"]'),
     );
     await user.click(editButton!);
 
@@ -755,7 +778,6 @@ describe("PasskeySettings", () => {
     const nameInput = screen.getByRole("textbox");
     expect(nameInput).toHaveValue("");
   });
-
 
   it("allows deleting a passkey", async () => {
     const user = userEvent.setup();
@@ -787,7 +809,7 @@ describe("PasskeySettings", () => {
     // Click delete button
     const deleteButtons = screen.getAllByRole("button", { name: "" });
     const deleteButton = deleteButtons.find((btn) =>
-      btn.querySelector('svg[class*="lucide-trash"]')
+      btn.querySelector('svg[class*="lucide-trash"]'),
     );
     await user.click(deleteButton!);
 
@@ -803,7 +825,7 @@ describe("PasskeySettings", () => {
     await waitFor(() => {
       expect(passkeyApi.passkeyApi.deletePasskey).toHaveBeenCalledWith(
         "passkey-1",
-        expect.anything()
+        expect.anything(),
       );
     });
   });
@@ -836,7 +858,7 @@ describe("PasskeySettings", () => {
     // Click delete button
     const deleteButtons = screen.getAllByRole("button", { name: "" });
     const deleteButton = deleteButtons.find((btn) =>
-      btn.querySelector('svg[class*="lucide-trash"]')
+      btn.querySelector('svg[class*="lucide-trash"]'),
     );
     await user.click(deleteButton!);
 
@@ -877,7 +899,7 @@ describe("PasskeySettings", () => {
     // Click delete button to open dialog
     const deleteButtons = screen.getAllByRole("button", { name: "" });
     const deleteButton = deleteButtons.find((btn) =>
-      btn.querySelector('svg[class*="lucide-trash"]')
+      btn.querySelector('svg[class*="lucide-trash"]'),
     );
     await user.click(deleteButton!);
 
@@ -923,7 +945,9 @@ describe("PasskeySettings", () => {
     await user.click(screen.getByText("Add Passkey"));
 
     // The placeholder should contain "Passkey" followed by a date
-    expect(screen.getByPlaceholderText(/Default: "Passkey/i)).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(/Default: "Passkey/i),
+    ).toBeInTheDocument();
 
     // Restore original navigator
     Object.defineProperty(navigator, "userAgent", {
@@ -960,7 +984,9 @@ describe("PasskeySettings", () => {
     await user.click(screen.getByText("Add Passkey"));
 
     // The placeholder should contain "Device – Browser" (the fallback values)
-    expect(screen.getByPlaceholderText(/Default: "Device – Browser"/i)).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(/Default: "Device – Browser"/i),
+    ).toBeInTheDocument();
 
     // Restore original userAgent
     Object.defineProperty(navigator, "userAgent", {

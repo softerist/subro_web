@@ -273,7 +273,9 @@ describe("JobForm", () => {
     });
 
     // Select it (value should be save_path since content_path is null)
-    fireEvent.change(select, { target: { value: "/downloads/torrent-folder" } });
+    fireEvent.change(select, {
+      target: { value: "/downloads/torrent-folder" },
+    });
 
     // Submit
     fireEvent.click(screen.getByRole("button", { name: /start job/i }));
@@ -313,7 +315,6 @@ describe("JobForm", () => {
     // "Allowed Folders" header should NOT appear when allowedFolders is null
     expect(screen.queryByText("Allowed Folders")).toBeNull();
   });
-
 
   it("shows error toast on submission failure", async () => {
     (jobsApi.getAllowedFolders as any).mockResolvedValue(["/media/movies"]);

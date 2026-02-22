@@ -28,7 +28,12 @@ interface ReauthModalProps {
   message?: string;
 }
 
-export function ReauthModal({ open, onClose, onSuccess, message }: ReauthModalProps) {
+export function ReauthModal({
+  open,
+  onClose,
+  onSuccess,
+  message,
+}: ReauthModalProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -96,7 +101,8 @@ export function ReauthModal({ open, onClose, onSuccess, message }: ReauthModalPr
             Verify Your Identity
           </DialogTitle>
           <DialogDescription>
-            {message || "For security, please verify your identity to continue."}
+            {message ||
+              "For security, please verify your identity to continue."}
           </DialogDescription>
         </DialogHeader>
 
@@ -118,14 +124,13 @@ export function ReauthModal({ open, onClose, onSuccess, message }: ReauthModalPr
             ) : (
               <div className="p-4 bg-muted/50 border rounded-lg text-center">
                 <p className="text-sm text-muted-foreground">
-                  Click &quot;Verify with Passkey&quot; to authenticate with biometrics
+                  Click &quot;Verify with Passkey&quot; to authenticate with
+                  biometrics
                 </p>
               </div>
             )}
 
-            {error && (
-              <p className="text-sm text-red-500">{error}</p>
-            )}
+            {error && <p className="text-sm text-red-500">{error}</p>}
 
             <Button
               type="button"

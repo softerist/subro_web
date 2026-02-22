@@ -128,7 +128,7 @@ detect_qbittorrent_conf() {
 
     # Default fallback
     local default_conf="/home/nox/.config/qBittorrent/qBittorrent.conf"
-    
+
     local qb_user
     qb_user=$(detect_qbittorrent_user)
 

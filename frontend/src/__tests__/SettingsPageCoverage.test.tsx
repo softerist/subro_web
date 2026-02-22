@@ -503,8 +503,6 @@ describe("SettingsPage Coverage", () => {
     );
   });
 
-
-
   it("shows OpenSubtitles download allowance", async () => {
     const settingsWithDownloads = {
       ...mockSettings,

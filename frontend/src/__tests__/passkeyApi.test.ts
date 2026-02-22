@@ -48,7 +48,11 @@ describe("passkeyApi", () => {
       const mockOptions = {
         challenge: "test-challenge",
         rp: { name: "Test", id: "example.com" },
-        user: { id: "user-123", name: "test@example.com", displayName: "Test User" },
+        user: {
+          id: "user-123",
+          name: "test@example.com",
+          displayName: "Test User",
+        },
         pubKeyCredParams: [],
         timeout: 60000,
         attestation: "none" as const,
@@ -58,7 +62,9 @@ describe("passkeyApi", () => {
 
       const result = await passkeyApi.getRegistrationOptions();
 
-      expect(api.post).toHaveBeenCalledWith("/v1/auth/passkey/register/options");
+      expect(api.post).toHaveBeenCalledWith(
+        "/v1/auth/passkey/register/options",
+      );
       expect(result).toEqual(mockOptions);
     });
   });
@@ -81,7 +87,7 @@ describe("passkeyApi", () => {
         .mockResolvedValueOnce({ data: mockPasskey });
 
       vi.mocked(simpleWebAuthn.startRegistration).mockResolvedValue(
-        mockCredential as any
+        mockCredential as any,
       );
 
       const result = await passkeyApi.register("Test Device");
@@ -93,7 +99,7 @@ describe("passkeyApi", () => {
         {
           credential: mockCredential,
           device_name: "Test Device",
-        }
+        },
       );
       expect(result).toEqual(mockPasskey);
     });
@@ -105,11 +111,11 @@ describe("passkeyApi", () => {
       const notAllowedError = new Error("User cancelled");
       notAllowedError.name = "NotAllowedError";
       vi.mocked(simpleWebAuthn.startRegistration).mockRejectedValue(
-        notAllowedError
+        notAllowedError,
       );
 
       await expect(passkeyApi.register("Test")).rejects.toThrow(
-        "Registration was cancelled or not allowed."
+        "Registration was cancelled or not allowed.",
       );
     });
 
@@ -118,10 +124,12 @@ describe("passkeyApi", () => {
       vi.mocked(api.post).mockResolvedValue({ data: mockOptions });
 
       vi.mocked(simpleWebAuthn.startRegistration).mockRejectedValue(
-        new Error("Unknown error")
+        new Error("Unknown error"),
       );
 
-      await expect(passkeyApi.register("Test")).rejects.toThrow("Unknown error");
+      await expect(passkeyApi.register("Test")).rejects.toThrow(
+        "Unknown error",
+      );
     });
 
     it("throws generic message when registration fails with non-Error value", async () => {
@@ -130,13 +138,14 @@ describe("passkeyApi", () => {
 
       // Reject with a string instead of an Error object
       vi.mocked(simpleWebAuthn.startRegistration).mockRejectedValue(
-        "Some non-error rejection"
+        "Some non-error rejection",
       );
 
-      await expect(passkeyApi.register("Test")).rejects.toThrow("Registration failed.");
+      await expect(passkeyApi.register("Test")).rejects.toThrow(
+        "Registration failed.",
+      );
     });
   });
-
 
   describe("getAuthenticationOptions", () => {
     it("calls endpoint without parameters (discoverable credentials)", async () => {
@@ -145,7 +154,10 @@ describe("passkeyApi", () => {
 
       const result = await passkeyApi.getAuthenticationOptions();
 
-      expect(api.post).toHaveBeenCalledWith("/v1/auth/passkey/login/options", {});
+      expect(api.post).toHaveBeenCalledWith(
+        "/v1/auth/passkey/login/options",
+        {},
+      );
       expect(result).toEqual(mockOptions);
       // SECURITY: Verify empty allowCredentials (no credential IDs exposed)
       expect(result.allowCredentials).toEqual([]);
@@ -166,7 +178,7 @@ describe("passkeyApi", () => {
         .mockResolvedValueOnce({ data: mockResult });
 
       vi.mocked(simpleWebAuthn.startAuthentication).mockResolvedValue(
-        mockCredential as any
+        mockCredential as any,
       );
 
       const result = await passkeyApi.authenticate();
@@ -174,7 +186,7 @@ describe("passkeyApi", () => {
       expect(api.post).toHaveBeenNthCalledWith(
         2,
         "/v1/auth/passkey/login/verify",
-        { credential: mockCredential }
+        { credential: mockCredential },
       );
       expect(result).toEqual(mockResult);
     });
@@ -186,11 +198,11 @@ describe("passkeyApi", () => {
       const notAllowedError = new Error("User cancelled");
       notAllowedError.name = "NotAllowedError";
       vi.mocked(simpleWebAuthn.startAuthentication).mockRejectedValue(
-        notAllowedError
+        notAllowedError,
       );
 
       await expect(passkeyApi.authenticate()).rejects.toThrow(
-        "Authentication was cancelled or not allowed."
+        "Authentication was cancelled or not allowed.",
       );
     });
 
@@ -200,10 +212,12 @@ describe("passkeyApi", () => {
 
       // Reject with a string instead of an Error object
       vi.mocked(simpleWebAuthn.startAuthentication).mockRejectedValue(
-        "Some non-error rejection"
+        "Some non-error rejection",
       );
 
-      await expect(passkeyApi.authenticate()).rejects.toThrow("Authentication failed.");
+      await expect(passkeyApi.authenticate()).rejects.toThrow(
+        "Authentication failed.",
+      );
     });
 
     it("throws the original error when authentication fails with regular Error", async () => {
@@ -212,14 +226,14 @@ describe("passkeyApi", () => {
 
       // Regular Error (not NotAllowedError) should be re-thrown
       vi.mocked(simpleWebAuthn.startAuthentication).mockRejectedValue(
-        new Error("Some other authentication error")
+        new Error("Some other authentication error"),
       );
 
-      await expect(passkeyApi.authenticate()).rejects.toThrow("Some other authentication error");
+      await expect(passkeyApi.authenticate()).rejects.toThrow(
+        "Some other authentication error",
+      );
     });
   });
-
-
 
   describe("listPasskeys", () => {
     it("fetches and returns passkey list", async () => {
@@ -246,9 +260,12 @@ describe("passkeyApi", () => {
 
       await passkeyApi.renamePasskey("passkey-123", "New Name");
 
-      expect(api.put).toHaveBeenCalledWith("/v1/auth/passkey/passkey-123/name", {
-        name: "New Name",
-      });
+      expect(api.put).toHaveBeenCalledWith(
+        "/v1/auth/passkey/passkey-123/name",
+        {
+          name: "New Name",
+        },
+      );
     });
   });
 

@@ -45,7 +45,9 @@ export default defineConfig({
     screenshot: "only-on-failure",
     ignoreHTTPSErrors: true,
     launchOptions: {
-      args: process.env.CHROMIUM_FLAGS ? parseArgs(process.env.CHROMIUM_FLAGS) : [],
+      args: process.env.CHROMIUM_FLAGS
+        ? parseArgs(process.env.CHROMIUM_FLAGS)
+        : [],
     },
   },
 

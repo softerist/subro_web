@@ -56,12 +56,13 @@ export const passkeyApi = {
    * Get registration options from the server.
    * Requires authentication.
    */
-  getRegistrationOptions: async (): Promise<PublicKeyCredentialCreationOptionsJSON> => {
-    const response = await api.post<PublicKeyCredentialCreationOptionsJSON>(
-      "/v1/auth/passkey/register/options"
-    );
-    return response.data;
-  },
+  getRegistrationOptions:
+    async (): Promise<PublicKeyCredentialCreationOptionsJSON> => {
+      const response = await api.post<PublicKeyCredentialCreationOptionsJSON>(
+        "/v1/auth/passkey/register/options",
+      );
+      return response.data;
+    },
 
   /**
    * Complete passkey registration with the browser.
@@ -87,10 +88,13 @@ export const passkeyApi = {
     }
 
     // Step 3: Send credential to server for verification
-    const response = await api.post<PasskeyInfo>("/v1/auth/passkey/register/verify", {
-      credential,
-      device_name: deviceName,
-    });
+    const response = await api.post<PasskeyInfo>(
+      "/v1/auth/passkey/register/verify",
+      {
+        credential,
+        device_name: deviceName,
+      },
+    );
 
     return response.data;
   },
@@ -100,13 +104,14 @@ export const passkeyApi = {
    * Public endpoint (no auth required).
    * Uses discoverable credentials flow (no user-specific credentials exposed).
    */
-  getAuthenticationOptions: async (): Promise<PublicKeyCredentialRequestOptionsJSON> => {
-    const response = await api.post<PublicKeyCredentialRequestOptionsJSON>(
-      "/v1/auth/passkey/login/options",
-      {}
-    );
-    return response.data;
-  },
+  getAuthenticationOptions:
+    async (): Promise<PublicKeyCredentialRequestOptionsJSON> => {
+      const response = await api.post<PublicKeyCredentialRequestOptionsJSON>(
+        "/v1/auth/passkey/login/options",
+        {},
+      );
+      return response.data;
+    },
 
   /**
    * Authenticate with a passkey.
@@ -134,7 +139,7 @@ export const passkeyApi = {
     // Step 3: Send credential to server for verification
     const response = await api.post<AuthenticationResult>(
       "/v1/auth/passkey/login/verify",
-      { credential }
+      { credential },
     );
 
     return response.data;
@@ -145,7 +150,9 @@ export const passkeyApi = {
    * Requires authentication.
    */
   listPasskeys: async (): Promise<PasskeyStatusResponse> => {
-    const response = await api.get<PasskeyStatusResponse>("/v1/auth/passkey/list");
+    const response = await api.get<PasskeyStatusResponse>(
+      "/v1/auth/passkey/list",
+    );
     return response.data;
   },
 
