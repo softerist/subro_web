@@ -569,9 +569,11 @@ scan_image_vulns:
               -e TRIVY_USERNAME="$CI_REGISTRY_USER" \
               -e TRIVY_PASSWORD="$CI_REGISTRY_PASSWORD" \
               -v "$(pwd)/.trivycache:/.cache/trivy" \
+              -v "$(pwd)/.trivyignore:/.trivyignore:ro" \
               aquasec/trivy:0.58.0 image --exit-code 1 \
               --cache-dir /.cache/trivy \
               --db-repository ghcr.io/aquasecurity/trivy-db:2 \
+              --ignorefile /.trivyignore \
               --severity "$TRIVY_SEVERITY" --timeout 5m \
               --skip-files "/app/secrets/google-api-config.json" \
               --scanners vuln \
@@ -581,6 +583,7 @@ scan_image_vulns:
           else
             if trivy image --cache-dir .trivycache --exit-code 1 \
               --db-repository ghcr.io/aquasecurity/trivy-db:2 \
+              --ignorefile .trivyignore \
               --severity "$TRIVY_SEVERITY" --timeout 5m \
               --skip-files "/app/secrets/google-api-config.json" \
               --scanners vuln \
