@@ -1,6 +1,8 @@
 # backend/tests/api/test_storage_paths.py
 """Tests for storage path management and subdirectory restrictions."""
 
+from pathlib import Path
+
 import pytest
 from fastapi import status
 from httpx import AsyncClient
@@ -50,6 +52,64 @@ async def test_superuser_can_add_any_path(
     # Assert
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json()["path"] == "/tmp"
+
+
+@pytest.mark.asyncio
+async def test_superuser_cannot_add_nonexistent_path(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Test that invalid filesystem paths are rejected before persistence."""
+    superuser = UserFactory.create_user(
+        session=db_session,
+        email="superuser_invalid_path@example.com",
+        role="admin",
+        is_superuser=True,
+    )
+    await db_session.flush()
+
+    headers = await login_user(test_client, superuser.email, "password123")
+
+    response = await test_client.post(
+        f"{API_PREFIX}/storage-paths/",
+        json={"path": "/tmp/definitely-missing-storage-path"},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "does not exist or is not a directory" in response.json()["detail"]
+    assert (
+        await crud.storage_path.get_by_path(
+            db_session, path="/tmp/definitely-missing-storage-path"
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_superuser_cannot_add_file_path(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Test that existing files are rejected because only directories are valid."""
+    superuser = UserFactory.create_user(
+        session=db_session,
+        email="superuser_file_path@example.com",
+        role="admin",
+        is_superuser=True,
+    )
+    await db_session.flush()
+
+    headers = await login_user(test_client, superuser.email, "password123")
+    file_path = str(Path(__file__).resolve())
+
+    response = await test_client.post(
+        f"{API_PREFIX}/storage-paths/",
+        json={"path": file_path},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "does not exist or is not a directory" in response.json()["detail"]
+    assert await crud.storage_path.get_by_path(db_session, path=file_path) is None
 
 
 @pytest.mark.asyncio
@@ -238,3 +298,242 @@ async def test_user_can_update_path_label(
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["label"] == "New Label"
     assert response.json()["path"] == "/tmp"  # Should remain unchanged
+
+
+@pytest.mark.asyncio
+async def test_user_can_update_path_label_without_sending_path(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    path = await crud.storage_path.create(
+        db_session, obj_in=StoragePathCreate(path="/tmp", label="Old Label")
+    )
+    await db_session.flush()
+
+    user = UserFactory.create_user(
+        session=db_session,
+        email="update_label_only_user@example.com",
+        role="standard",
+    )
+    await db_session.flush()
+
+    headers = await login_user(test_client, user.email, "password123")
+
+    response = await test_client.patch(
+        f"{API_PREFIX}/storage-paths/{path.id}",
+        json={"label": "Label Only Update"},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["label"] == "Label Only Update"
+    assert response.json()["path"] == "/tmp"
+
+
+@pytest.mark.asyncio
+async def test_update_storage_path_rejects_empty_payload(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    path = await crud.storage_path.create(
+        db_session, obj_in=StoragePathCreate(path="/tmp", label="Old Label")
+    )
+    await db_session.flush()
+
+    user = UserFactory.create_user(
+        session=db_session,
+        email="update_empty_payload_user@example.com",
+        role="standard",
+    )
+    await db_session.flush()
+
+    headers = await login_user(test_client, user.email, "password123")
+
+    response = await test_client.patch(
+        f"{API_PREFIX}/storage-paths/{path.id}",
+        json={},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "updatable field" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_update_storage_path_rejects_path_only_payload(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    path = await crud.storage_path.create(
+        db_session, obj_in=StoragePathCreate(path="/tmp", label="Old Label")
+    )
+    await db_session.flush()
+
+    user = UserFactory.create_user(
+        session=db_session,
+        email="update_path_only_user@example.com",
+        role="standard",
+    )
+    await db_session.flush()
+
+    headers = await login_user(test_client, user.email, "password123")
+
+    response = await test_client.patch(
+        f"{API_PREFIX}/storage-paths/{path.id}",
+        json={"path": "/var"},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "updatable field" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_browse_storage_roots_returns_allowed_paths(
+    test_client: AsyncClient, db_session: AsyncSession, tmp_path: Path
+) -> None:
+    allowed_root = tmp_path / "media"
+    allowed_root.mkdir()
+    await crud.storage_path.create(db_session, obj_in=StoragePathCreate(path=str(allowed_root)))
+    await db_session.flush()
+
+    user = UserFactory.create_user(
+        session=db_session,
+        email="browse_roots_user@example.com",
+        role="standard",
+    )
+    await db_session.flush()
+    headers = await login_user(test_client, user.email, "password123")
+
+    response = await test_client.get(f"{API_PREFIX}/storage-paths/browse", headers=headers)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert any(entry["path"] == str(allowed_root.resolve()) for entry in response.json())
+
+
+@pytest.mark.asyncio
+async def test_browse_storage_path_returns_direct_child_directories(
+    test_client: AsyncClient, db_session: AsyncSession, tmp_path: Path
+) -> None:
+    allowed_root = tmp_path / "library"
+    allowed_root.mkdir()
+    movie_dir = allowed_root / "Movies"
+    movie_dir.mkdir()
+    (movie_dir / "Nested").mkdir()
+    (allowed_root / "readme.txt").write_text("ignore me", encoding="utf-8")
+
+    await crud.storage_path.create(db_session, obj_in=StoragePathCreate(path=str(allowed_root)))
+    await db_session.flush()
+
+    user = UserFactory.create_user(
+        session=db_session,
+        email="browse_children_user@example.com",
+        role="standard",
+    )
+    await db_session.flush()
+    headers = await login_user(test_client, user.email, "password123")
+
+    response = await test_client.get(
+        f"{API_PREFIX}/storage-paths/browse",
+        params={"path": str(allowed_root)},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == [
+        {
+            "name": "Movies",
+            "path": str(movie_dir.resolve()),
+            "has_children": True,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_browse_storage_path_rejects_paths_outside_allowed_roots(
+    test_client: AsyncClient, db_session: AsyncSession, tmp_path: Path
+) -> None:
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    forbidden_root = tmp_path / "forbidden"
+    forbidden_root.mkdir()
+
+    await crud.storage_path.create(db_session, obj_in=StoragePathCreate(path=str(allowed_root)))
+    await db_session.flush()
+
+    user = UserFactory.create_user(
+        session=db_session,
+        email="browse_forbidden_user@example.com",
+        role="standard",
+    )
+    await db_session.flush()
+    headers = await login_user(test_client, user.email, "password123")
+
+    response = await test_client.get(
+        f"{API_PREFIX}/storage-paths/browse",
+        params={"path": str(forbidden_root)},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_browse_storage_path_returns_not_found_for_missing_path(
+    test_client: AsyncClient, db_session: AsyncSession, tmp_path: Path
+) -> None:
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    missing_path = allowed_root / "missing"
+
+    await crud.storage_path.create(db_session, obj_in=StoragePathCreate(path=str(allowed_root)))
+    await db_session.flush()
+
+    user = UserFactory.create_user(
+        session=db_session,
+        email="browse_missing_user@example.com",
+        role="standard",
+    )
+    await db_session.flush()
+    headers = await login_user(test_client, user.email, "password123")
+
+    response = await test_client.get(
+        f"{API_PREFIX}/storage-paths/browse",
+        params={"path": str(missing_path)},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_browse_storage_path_excludes_symlinks_outside_allowed_roots(
+    test_client: AsyncClient, db_session: AsyncSession, tmp_path: Path
+) -> None:
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    outside_root = tmp_path / "outside"
+    outside_root.mkdir()
+
+    linked_dir = allowed_root / "escape"
+    try:
+        linked_dir.symlink_to(outside_root, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"Symlinks are not supported in this environment: {exc}")
+
+    await crud.storage_path.create(db_session, obj_in=StoragePathCreate(path=str(allowed_root)))
+    await db_session.flush()
+
+    user = UserFactory.create_user(
+        session=db_session,
+        email="browse_symlink_user@example.com",
+        role="standard",
+    )
+    await db_session.flush()
+    headers = await login_user(test_client, user.email, "password123")
+
+    response = await test_client.get(
+        f"{API_PREFIX}/storage-paths/browse",
+        params={"path": str(allowed_root)},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == []

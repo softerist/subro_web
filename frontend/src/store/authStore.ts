@@ -22,6 +22,50 @@ export interface AuthState {
   logout: () => void;
 }
 
+const createMemoryStorage = (): StateStorage => {
+  const storageData: Record<string, string> = {};
+
+  return {
+    getItem: (name) => storageData[name] ?? null,
+    setItem: (name, value) => {
+      storageData[name] = value;
+    },
+    removeItem: (name) => {
+      delete storageData[name];
+    },
+  };
+};
+
+const hasStorageApi = (storage: unknown): storage is Storage =>
+  !!storage &&
+  typeof storage === "object" &&
+  typeof (storage as Storage).getItem === "function" &&
+  typeof (storage as Storage).setItem === "function" &&
+  typeof (storage as Storage).removeItem === "function";
+
+const shouldUseMemoryStorage = () =>
+  (typeof process !== "undefined" && process.env.VITEST === "true") ||
+  (typeof navigator !== "undefined" && /jsdom/i.test(navigator.userAgent));
+
+const getPersistStorage = (): StateStorage => {
+  if (shouldUseMemoryStorage()) {
+    return createMemoryStorage();
+  }
+
+  try {
+    if (
+      typeof window !== "undefined" &&
+      hasStorageApi(window.localStorage)
+    ) {
+      return window.localStorage;
+    }
+  } catch {
+    // Access to localStorage can throw in non-browser or restricted contexts.
+  }
+
+  return createMemoryStorage();
+};
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -37,22 +81,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "auth-storage", // unique name
-      storage: createJSONStorage(() => {
-        if (typeof window !== "undefined" && window.localStorage) {
-          return window.localStorage;
-        }
-        const storageData: Record<string, string> = {};
-        const memoryStorage: StateStorage = {
-          getItem: (name) => storageData[name] ?? null,
-          setItem: (name, value) => {
-            storageData[name] = value;
-          },
-          removeItem: (name) => {
-            delete storageData[name];
-          },
-        };
-        return memoryStorage;
-      }),
+      storage: createJSONStorage(getPersistStorage),
       // We only persist the user info maybe? Or token too?
       // Security: Storing access token in localStorage is vulnerable to XSS.
       // Ideally we only store it in memory.

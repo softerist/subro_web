@@ -257,3 +257,8 @@ infra/docker/Caddyfile.prod
 GEMINI.md
 to_be_implemented.md
 .trivycache/
+
+.vscode/
+.husky/
+backend/.venv-linux/
+backend/test_storage_paths.db

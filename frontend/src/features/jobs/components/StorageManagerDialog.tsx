@@ -86,6 +86,7 @@ export function StorageManagerDialog() {
       form.reset();
       queryClient.invalidateQueries({ queryKey: ["storage-paths"] });
       queryClient.invalidateQueries({ queryKey: ["allowed-folders"] }); // Refresh dropdown
+      queryClient.invalidateQueries({ queryKey: ["folder-browser"] });
     },
     onError: (error: ApiError) => {
       const detail = error.response?.data?.detail;
@@ -105,6 +106,7 @@ export function StorageManagerDialog() {
       toast.success("Path removed successfully");
       queryClient.invalidateQueries({ queryKey: ["storage-paths"] });
       queryClient.invalidateQueries({ queryKey: ["allowed-folders"] });
+      queryClient.invalidateQueries({ queryKey: ["folder-browser"] });
     },
     onError: (error: ApiError) => {
       const detail = error.response?.data?.detail;
@@ -123,6 +125,7 @@ export function StorageManagerDialog() {
       toast.success("Path updated successfully");
       setEditingId(null);
       queryClient.invalidateQueries({ queryKey: ["storage-paths"] });
+      queryClient.invalidateQueries({ queryKey: ["folder-browser"] });
     },
     onError: (error: ApiError) => {
       const detail = error.response?.data?.detail;
@@ -163,6 +166,7 @@ export function StorageManagerDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
+          type="button"
           variant="outline"
           size="sm"
           className="ml-2 h-9 px-3 border-dashed"

@@ -1,5 +1,5 @@
 import { api } from "@/lib/apiClient";
-import { StoragePath, StoragePathCreate } from "../types";
+import { StoragePath, StoragePathCreate, FolderBrowserEntry } from "../types";
 
 export const storagePathsApi = {
   getAll: async () => {
@@ -20,6 +20,15 @@ export const storagePathsApi = {
     const response = await api.patch<StoragePath>(
       `/v1/storage-paths/${id}`,
       data,
+    );
+    return response.data;
+  },
+
+  browseFolders: async (path?: string) => {
+    const params = path ? { path } : {};
+    const response = await api.get<FolderBrowserEntry[]>(
+      "/v1/storage-paths/browse",
+      { params },
     );
     return response.data;
   },

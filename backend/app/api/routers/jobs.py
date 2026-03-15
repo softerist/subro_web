@@ -1,3 +1,5 @@
+"""Job management endpoints (create, list, cancel, retry, webhook)."""
+
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +23,7 @@ from app import crud
 from app.core.api_key_auth import get_current_user_with_api_key_or_jwt
 from app.core.config import settings
 from app.core.log_utils import sanitize_for_log as _sanitize_for_log
+from app.core.path_utils import is_path_allowed, resolve_allowed_bases
 from app.core.rate_limit import get_api_key_or_ip, limiter
 from app.core.security import current_active_user
 from app.db.models.job import Job, JobStatus
@@ -53,36 +56,15 @@ router = APIRouter(
 
 def _is_path_allowed(resolved_path_to_check: Path, allowed_paths_list: list[str]) -> bool:
     """Checks if the resolved_path_to_check is within any of the allowed_paths_list."""
-    for allowed_base_path_str in allowed_paths_list:
-        try:
-            resolved_allowed_base = Path(allowed_base_path_str).resolve(strict=True)
-        except FileNotFoundError:
-            logger.error(
-                f"Configured allowed base path '{allowed_base_path_str}' does not exist or is a broken symlink. Skipping."
-            )
-            continue
-        except RuntimeError as e:  # e.g. symlink loop
-            logger.error(
-                f"Resolution of configured allowed base path '{allowed_base_path_str}' failed (e.g. symlink loop). Skipping: {e}"
-            )
-            continue
-        except Exception as e:  # NOSONAR
-            logger.error(
-                f"Unexpected error during resolution of configured allowed base path '{allowed_base_path_str}'. Skipping: {e}"
-            )
-            continue
-
-        # Check if the path_to_check is the allowed base path itself or a subdirectory
-        if (
-            resolved_path_to_check == resolved_allowed_base
-            or resolved_allowed_base in resolved_path_to_check.parents
-        ):
-            return True
-    return False
+    allowed_bases = resolve_allowed_bases(allowed_paths_list)
+    return is_path_allowed(resolved_path_to_check, allowed_bases)
 
 
 async def _validate_and_resolve_job_path(
-    db: AsyncSession, folder_path_str: str, allowed_folders: list[str], current_user: User
+    db: AsyncSession,
+    folder_path_str: str,
+    allowed_folders: list[str],
+    current_user: User,
 ) -> Path:
     """
     Validates the job folder path against allowed directories.
@@ -92,19 +74,27 @@ async def _validate_and_resolve_job_path(
         resolved_input_path = Path(folder_path_str).resolve(strict=True)
     except FileNotFoundError as e:
         logger.warning(
-            f"User {current_user.email} submitted job for non-existent or inaccessible path: '{folder_path_str}'."
+            "User %s submitted job for non-existent or inaccessible path: '%s'.",
+            current_user.email,
+            folder_path_str,
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
                 "code": "PATH_NOT_FOUND",
                 "field": "folder_path",
-                "message": f"The provided folder path '{folder_path_str}' does not exist or is not accessible.",
+                "message": (
+                    f"The provided folder path '{folder_path_str}'"
+                    " does not exist or is not accessible."
+                ),
             },
         ) from e
     except RuntimeError as e:  # e.g. symlink loop
         logger.warning(
-            f"Path resolution failed for input '{folder_path_str}' by user {current_user.email}: {e}"
+            "Path resolution failed for input '%s' by user %s: %s",
+            folder_path_str,
+            current_user.email,
+            e,
         )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -112,14 +102,18 @@ async def _validate_and_resolve_job_path(
                 "code": "PATH_INVALID",
                 "field": "folder_path",
                 "message": (
-                    f"The provided folder path '{folder_path_str}' is invalid or could not be resolved "
+                    f"The provided folder path '{folder_path_str}' is invalid"
+                    " or could not be resolved "
                     "(e.g., symlink loop)."
                 ),
             },
         ) from e
     except Exception as e:  # NOSONAR - Catch any other FS related errors
         logger.warning(
-            f"Unexpected error during path resolution for input '{folder_path_str}' by user {current_user.email}: {e}"
+            "Unexpected error during path resolution for input '%s' by user %s: %s",
+            folder_path_str,
+            current_user.email,
+            e,
         )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -134,19 +128,26 @@ async def _validate_and_resolve_job_path(
         is_admin = current_user.is_superuser or current_user.role == "admin"
         if not is_admin:
             logger.warning(
-                f"User {current_user.email} attempted job path outside allowed folders: '{resolved_input_path}'."
+                "User %s attempted job path outside allowed folders: '%s'.",
+                current_user.email,
+                resolved_input_path,
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={
                     "code": "PATH_NOT_ALLOWED",
                     "field": "folder_path",
-                    "message": "Folder path is not in allowed media folders. Contact an admin to allow it.",
+                    "message": (
+                        "Folder path is not in allowed media folders."
+                        " Contact an admin to allow it."
+                    ),
                 },
             )
         # Auto-Add Logic for valid but unconfigured paths
         logger.info(
-            f"Path '{resolved_input_path}' is valid but not in allowed folders. Auto-adding it for admin {current_user.email}."
+            "Path '%s' is valid but not in allowed folders. Auto-adding it for admin %s.",
+            resolved_input_path,
+            current_user.email,
         )
         try:
             new_path_str = str(resolved_input_path)
@@ -178,7 +179,9 @@ async def _validate_and_resolve_job_path(
 async def _create_db_job_and_set_celery_id(
     db: AsyncSession, job_create_schema: JobCreateInternal, user_email: str
 ) -> Job:
-    """Creates a job record in the database and updates it with a Celery task ID (which is job.id as string)."""
+    """Create a job record in the database and update it with
+    a Celery task ID (which is job.id as string).
+    """
     try:
         db_job = await crud.job.create(db, obj_in=job_create_schema)
         logger.info(
@@ -212,7 +215,10 @@ async def _create_db_job_and_set_celery_id(
     except SQLAlchemyError as e:
         await db.rollback()
         logger.error(
-            f"Database error while updating celery_task_id for job {db_job.id}: {e}", exc_info=True
+            "Database error while updating celery_task_id for job %s: %s",
+            db_job.id,
+            e,
+            exc_info=True,
         )
         try:
             # Mark job as FAILED directly on the model instance
@@ -227,7 +233,9 @@ async def _create_db_job_and_set_celery_id(
             await db.commit()
         except Exception as final_fail_exc:
             logger.critical(
-                f"Failed to mark job {db_job.id} as FAILED after celery_id update error: {final_fail_exc}"
+                "Failed to mark job %s as FAILED after celery_id update error: %s",
+                db_job.id,
+                final_fail_exc,
             )
             await db.rollback()  # Rollback the attempt to mark as FAILED
         raise HTTPException(
@@ -242,7 +250,8 @@ async def _enqueue_celery_task_and_handle_errors(
     """Enqueues the Celery task and updates job status to FAILED if enqueueing fails."""
     if not job_to_enqueue.celery_task_id:
         logger.error(
-            f"Job {job_to_enqueue.id} has no celery_task_id, cannot enqueue. This should not happen."
+            "Job %s has no celery_task_id, cannot enqueue. This should not happen.",
+            job_to_enqueue.id,
         )
         # This case indicates a logic error in _create_db_job_and_set_celery_id
         # Mark job as FAILED if it reaches here without a celery_task_id
@@ -270,12 +279,18 @@ async def _enqueue_celery_task_and_handle_errors(
             task_id=job_to_enqueue.celery_task_id,  # Use the pre-set celery_task_id
         )
         logger.info(
-            f"Successfully enqueued Celery task '{task_name}' with ID {job_to_enqueue.celery_task_id} "
-            f"for job {job_to_enqueue.id} (user: {user_email})."
+            "Successfully enqueued Celery task '%s' with ID %s for job %s (user: %s).",
+            task_name,
+            job_to_enqueue.celery_task_id,
+            job_to_enqueue.id,
+            user_email,
         )
     except Exception as e:  # Broad exception for Celery communication issues (e.g., broker down)
         logger.error(
-            f"Failed to enqueue Celery task for job {job_to_enqueue.id} (user: {user_email}): {e}",
+            "Failed to enqueue Celery task for job %s (user: %s): %s",
+            job_to_enqueue.id,
+            user_email,
+            e,
             exc_info=True,
         )
         try:
@@ -297,7 +312,8 @@ async def _enqueue_celery_task_and_handle_errors(
                 db_exc,
                 exc_info=True,
             )
-            # Original exception 'e' (Celery error) is more relevant to client if one must be chosen.
+            # Original exception 'e' (Celery error) is more relevant to client
+            # if one must be chosen.
             # But this is an internal server error cascade.
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -316,7 +332,8 @@ async def _enqueue_celery_task_and_handle_errors(
     status_code=status.HTTP_201_CREATED,
     summary="Submit a new subtitle download job",
     description=(
-        "Allows authenticated users (via Cookie, Bearer Token, or X-API-Key) to submit a new subtitle download job. "
+        "Allows authenticated users (via Cookie, Bearer Token, or X-API-Key) "
+        "to submit a new subtitle download job. "
         "The path is validated against allowed media directories. "
         "A job record is created, and a task is enqueued for asynchronous processing."
     ),
@@ -372,6 +389,7 @@ async def create_job(
     current_user: Annotated[User, Depends(get_current_user_with_api_key_or_jwt)],
     request: Request,  # noqa: ARG001
 ) -> Job:
+    """Submit a new subtitle download job."""
     # Fetch dynamic allowed paths from DB
     db_paths = await crud.storage_path.get_multi(db)
     env_folders = settings.ALLOWED_MEDIA_FOLDERS or []
@@ -406,7 +424,8 @@ async def create_job(
     summary="Submit a job via webhook (qBittorrent integration)",
     description=(
         "Allows external scripts (like qBittorrent webhook) to submit subtitle download jobs "
-        "using a pre-shared webhook secret. No user authentication required - uses X-Webhook-Secret header. "
+        "using a pre-shared webhook secret. No user authentication required "
+        "- uses X-Webhook-Secret header. "
         "Jobs are attributed to the first admin user."
     ),
     responses={
@@ -515,7 +534,8 @@ async def list_jobs(
     limit: Annotated[
         int, Query(ge=1, le=200, description="Maximum number of jobs to return")
     ] = 100,
-) -> list[Job]:  # Use List for Python < 3.9
+) -> list[Job]:
+    """List subtitle download jobs for the current user."""
     logger.info(
         "User '%s' (ID: %s, Superuser: %s) listing jobs. Skip: %d, Limit: %d",
         _sanitize_for_log(current_user.email),
@@ -531,9 +551,7 @@ async def list_jobs(
             db, user_id=current_user.id, skip=skip, limit=limit
         )
 
-    if (
-        jobs is None
-    ):  # crud.job.get_multi might return None on error or if not found (though usually empty list)
+    if jobs is None:
         jobs = []
     logger.info("Found %d jobs for user '%s'.", len(jobs), _sanitize_for_log(current_user.email))
     return jobs
@@ -549,6 +567,7 @@ async def get_allowed_folders(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(current_active_user)],  # noqa: ARG001
 ) -> list[str]:
+    """Return the list of directories allowed for subtitle download jobs."""
     db_paths = await crud.storage_path.get_multi(db)
     env_folders = settings.ALLOWED_MEDIA_FOLDERS or []
     combined = list({str(f) for f in env_folders} | {str(p.path) for p in db_paths})
@@ -679,6 +698,7 @@ async def get_job_details(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ) -> Job:
+    """Retrieve details for a specific job."""
     logger.info(
         "User '%s' (ID: %s) requesting details for job ID: %s",
         _sanitize_for_log(current_user.email),
@@ -716,9 +736,8 @@ async def get_job_details(
 
 @router.delete(
     "/{job_id}",
-    response_model=JobRead,  # Note: if deleted, this might need to be Optional or specific response. But for 200 OK, we can return the deleted object state or empty.
-    # Actually, if deleted, returning the object is fine as "last known state". Or 204.
-    # But for backward compatibility with "Cancel" returning the updated job, let's keep it responding with JobRead.
+    response_model=JobRead,
+    # Returns the job object as last-known state before deletion.
     # But if deleted, we can't refresh it.
     # Let's return the job object *before* deletion if deleted?
     # Or just return detailed message?
@@ -739,6 +758,7 @@ async def delete_or_cancel_job(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ) -> Job:
+    """Cancel a running job or delete a terminated one."""
     logger.info(
         "User '%s' attempting to cancel/delete job '%s'.",
         _sanitize_for_log(current_user.email),
@@ -822,6 +842,7 @@ async def retry_job(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ) -> Job:
+    """Retry a failed or cancelled job."""
     logger.info(
         "User '%s' attempting to retry job '%s'.",
         _sanitize_for_log(current_user.email),
@@ -888,6 +909,7 @@ async def cancel_job(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ) -> Job:
+    """Cancel a currently running job."""
     logger.info(
         "User '%s' attempting to cancel job '%s'.",
         _sanitize_for_log(current_user.email),

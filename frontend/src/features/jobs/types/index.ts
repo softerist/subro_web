@@ -58,3 +58,9 @@ export interface CompletedTorrent {
   content_path?: string | null;
   completed_on: string | null;
 }
+
+export interface FolderBrowserEntry {
+  name: string;
+  path: string;
+  has_children: boolean;
+}

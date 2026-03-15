@@ -105,6 +105,29 @@ describe("StorageManagerDialog", () => {
     });
   });
 
+  it("invalidates folder browser queries after adding a path", async () => {
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    (storagePathsApi.getAll as any).mockResolvedValue([]);
+    (storagePathsApi.create as any).mockResolvedValue({
+      id: "3",
+      path: "/downloads",
+      label: "Custom: downloads",
+    });
+
+    render(<StorageManagerDialog />, { wrapper });
+    fireEvent.click(screen.getByTestId("storage-manager-trigger"));
+
+    const input = await screen.findByPlaceholderText("/path/to/media");
+    fireEvent.change(input, { target: { value: "/downloads" } });
+    fireEvent.click(screen.getByRole("button", { name: /add/i }));
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["folder-browser"],
+      });
+    });
+  });
+
   it("shows create errors when API fails", async () => {
     (storagePathsApi.getAll as any).mockResolvedValue([]);
     (storagePathsApi.create as any).mockRejectedValue({

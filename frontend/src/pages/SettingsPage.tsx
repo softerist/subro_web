@@ -50,6 +50,8 @@ type SettingsTab = "integrations" | "qbittorrent" | "developer" | "security";
 
 const DEFAULT_QBITTORRENT_PORT = 8080;
 const DOCKER_HOST_QBITTORRENT_PORT = 8090;
+const formatNumber = (value: number) =>
+  new Intl.NumberFormat("en-US").format(value);
 
 export default function SettingsPage() {
   const { user, setUser } = useAuthStore();
@@ -1073,10 +1075,9 @@ export default function SettingsPage() {
                                 <div className="flex justify-between items-center text-[10px] text-muted-foreground">
                                   <span>Character Usage</span>
                                   <span>
-                                    {usage.character_count.toLocaleString()} /{" "}
                                     {usage.valid
-                                      ? usage.character_limit.toLocaleString()
-                                      : "0"}
+                                      ? `${formatNumber(usage.character_count)} / ${formatNumber(usage.character_limit)}`
+                                      : `${formatNumber(usage.character_count)} / 0`}
                                   </span>
                                 </div>
                                 {(() => {
@@ -1243,10 +1244,7 @@ export default function SettingsPage() {
                                   This Month
                                 </span>
                                 <div className="text-sm font-mono text-foreground">
-                                  {settings.google_usage.this_month_characters.toLocaleString()}{" "}
-                                  <span className="text-muted-foreground">
-                                    chars
-                                  </span>
+                                  {`${formatNumber(settings.google_usage.this_month_characters)} chars`}
                                 </div>
                               </div>
                               <div className="space-y-1">
@@ -1254,10 +1252,7 @@ export default function SettingsPage() {
                                   All Time
                                 </span>
                                 <div className="text-sm font-mono text-foreground">
-                                  {settings.google_usage.total_characters.toLocaleString()}{" "}
-                                  <span className="text-muted-foreground">
-                                    chars
-                                  </span>
+                                  {`${formatNumber(settings.google_usage.total_characters)} chars`}
                                 </div>
                               </div>
                             </div>

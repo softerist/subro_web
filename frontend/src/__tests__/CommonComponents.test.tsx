@@ -16,15 +16,6 @@ vi.mock("framer-motion", () => ({
   },
 }));
 
-// Mock HelpIcon inside FlowDiagram to simplify finding nodes
-vi.mock("../components/common/HelpIcon", () => ({
-  HelpIcon: ({ tooltip }: { tooltip: string }) => (
-    <span data-testid="help-icon" title={tooltip}>
-      ?
-    </span>
-  ),
-}));
-
 describe("FlowDiagram", () => {
   it("renders correctly when isActive is true", () => {
     render(<FlowDiagram isActive={true} />);
@@ -41,8 +32,6 @@ describe("FlowDiagram", () => {
 
 describe("HelpIcon", () => {
   it("toggles tooltip on click", async () => {
-    // Unmock HelpIcon for this suite since we want to test the real one
-    vi.unmock("../components/common/HelpIcon");
     const { HelpIcon: RealHelpIcon } =
       await import("../components/common/HelpIcon");
 
