@@ -169,6 +169,68 @@ describe("FolderBrowser", () => {
     );
   });
 
+  it("browses into an allowed folder without selecting it and can pick a subfolder", async () => {
+    (
+      storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>
+    ).mockImplementation(async (path?: string) => {
+      if (!path) {
+        return [
+          {
+            name: "movies",
+            path: "/media/movies",
+            has_children: true,
+          },
+        ];
+      }
+
+      return [
+        {
+          name: "SomeMovie",
+          path: "/media/movies/SomeMovie",
+          has_children: true,
+        },
+        {
+          name: "AnotherMovie",
+          path: "/media/movies/AnotherMovie",
+          has_children: false,
+        },
+      ];
+    });
+
+    render(<ControlledFolderBrowser />, { wrapper });
+
+    fireEvent.click(screen.getByTestId("folder-browser-trigger"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("browse-movies")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId("browse-movies"));
+
+    await waitFor(() => {
+      expect(storagePathsApi.browseFolders).toHaveBeenCalledWith(
+        "/media/movies",
+      );
+    });
+
+    expect(screen.getByTestId("selected-path").textContent).toBe("");
+    expect(await screen.findByTestId("select-current-folder")).toHaveTextContent(
+      "movies",
+    );
+
+    fireEvent.click(await screen.findByTitle("Select /media/movies/SomeMovie"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selected-path").textContent).toBe(
+        "/media/movies/SomeMovie",
+      );
+    });
+
+    expect(screen.getByTestId("folder-browser-trigger")).toHaveTextContent(
+      "/media/movies/SomeMovie",
+    );
+  });
+
   it("drills into subfolders and can select the current folder", async () => {
     (
       storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>

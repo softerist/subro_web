@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { MouseEvent, useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   FolderOpen,
@@ -119,6 +119,15 @@ export function FolderBrowser({ value, onChange }: FolderBrowserProps) {
       setCurrentPath(entry.path);
     },
     [currentPath],
+  );
+
+  const handleBrowseClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>, entry: FolderBrowserEntry) => {
+      event.preventDefault();
+      event.stopPropagation();
+      handleDrillDown(entry);
+    },
+    [handleDrillDown],
   );
 
   const handleSelectFolder = useCallback(
@@ -287,9 +296,15 @@ export function FolderBrowser({ value, onChange }: FolderBrowserProps) {
 
                 {/* Folder entries */}
                 {currentPath === null && (folderEntries?.length ?? 0) > 0 && (
-                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                    <FolderOpen className="h-3 w-3" />
-                    Allowed Folders
+                  <div className="px-2 py-1.5 space-y-1">
+                    <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                      <FolderOpen className="h-3 w-3" />
+                      Allowed Folders
+                    </div>
+                    <p className="text-[11px] text-muted-foreground/80">
+                      Select a folder directly, or use Browse to navigate into a
+                      subfolder before selecting it.
+                    </p>
                   </div>
                 )}
 
@@ -324,15 +339,18 @@ export function FolderBrowser({ value, onChange }: FolderBrowserProps) {
                       </span>
                     </button>
                     {entry.has_children && (
-                      <button
+                      <Button
                         type="button"
-                        onClick={() => handleDrillDown(entry)}
-                        className="px-2 py-2 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                        variant="ghost"
+                        size="sm"
+                        onClick={(event) => handleBrowseClick(event, entry)}
+                        className="mr-1 h-8 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
                         title={`Browse into ${entry.name}`}
                         data-testid={`browse-${entry.name}`}
                       >
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
+                        Browse
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </Button>
                     )}
                   </div>
                 ))}
