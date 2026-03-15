@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1](https://gitlab.com/softerist/subro_web/compare/v1.2.0...v1.2.1) (2026-03-15)
+
+### Bug Fixes
+
+- update Dockerfile to upgrade zlib and ensure curl installation for production stage ([69b62e7](https://gitlab.com/softerist/subro_web/commit/69b62e765df9b0acf8162aec07aec5359d320e29))
+
 # [1.2.0](https://gitlab.com/softerist/subro_web/compare/v1.1.1...v1.2.0) (2026-02-22)
 
 ### Bug Fixes
