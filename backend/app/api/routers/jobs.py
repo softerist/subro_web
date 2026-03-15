@@ -138,8 +138,7 @@ async def _validate_and_resolve_job_path(
                     "code": "PATH_NOT_ALLOWED",
                     "field": "folder_path",
                     "message": (
-                        "Folder path is not in allowed media folders."
-                        " Contact an admin to allow it."
+                        "Folder path is not in allowed media folders. Contact an admin to allow it."
                     ),
                 },
             )

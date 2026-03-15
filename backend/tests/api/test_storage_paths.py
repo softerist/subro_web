@@ -78,9 +78,7 @@ async def test_superuser_cannot_add_nonexistent_path(
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "does not exist or is not a directory" in response.json()["detail"]
     assert (
-        await crud.storage_path.get_by_path(
-            db_session, path="/tmp/definitely-missing-storage-path"
-        )
+        await crud.storage_path.get_by_path(db_session, path="/tmp/definitely-missing-storage-path")
         is None
     )
 

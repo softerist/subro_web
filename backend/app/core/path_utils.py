@@ -27,8 +27,7 @@ def resolve_allowed_bases(allowed_paths_list: list[str]) -> list[Path]:
             )
         except RuntimeError as exc:
             logger.error(
-                "Resolution of allowed base path '%s' failed"
-                " (e.g. symlink loop): %s",
+                "Resolution of allowed base path '%s' failed (e.g. symlink loop): %s",
                 raw,
                 exc,
             )

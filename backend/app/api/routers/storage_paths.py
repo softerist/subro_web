@@ -52,9 +52,7 @@ async def browse_folders(
     # Build the combined allowed-folders list (DB + env)
     db_paths = await crud.storage_path.get_multi(db)
     env_folders = settings.ALLOWED_MEDIA_FOLDERS or []
-    all_allowed_strings = list(
-        {str(f) for f in env_folders} | {str(p.path) for p in db_paths}
-    )
+    all_allowed_strings = list({str(f) for f in env_folders} | {str(p.path) for p in db_paths})
     allowed_bases = resolve_allowed_bases(all_allowed_strings)
 
     if path is None:
@@ -65,9 +63,7 @@ async def browse_folders(
     if not is_path_allowed(resolved, allowed_bases):
         logger.warning(
             "User %s attempted to browse outside allowed paths: %s",
-            _sanitize_for_log(
-                getattr(_current_user, "email", "unknown")
-            ),
+            _sanitize_for_log(getattr(_current_user, "email", "unknown")),
             _sanitize_for_log(path),
         )
         raise HTTPException(
@@ -90,10 +86,7 @@ def _resolve_browse_path(path: str) -> Path:
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                f"Path '{path}' could not be resolved"
-                " (e.g. symlink loop)."
-            ),
+            detail=(f"Path '{path}' could not be resolved (e.g. symlink loop)."),
         ) from exc
     except OSError as exc:
         raise HTTPException(
@@ -221,8 +214,7 @@ async def create_storage_path(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
-                    "Standard users can only add subdirectories"
-                    " of existing allowed storage paths."
+                    "Standard users can only add subdirectories of existing allowed storage paths."
                 ),
             )
 
