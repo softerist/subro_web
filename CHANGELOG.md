@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2](https://gitlab.com/softerist/subro_web/compare/v1.2.1...v1.2.2) (2026-03-15)
+
+### Bug Fixes
+
+- **ci:** serialize production deploy and harden rollback ([f14a066](https://gitlab.com/softerist/subro_web/commit/f14a066284cf29bc6736999db11ec1f0082f38f1))
+- enhance GitHub SSH key handling and improve semantic-release pipeline checks ([48ef45b](https://gitlab.com/softerist/subro_web/commit/48ef45b6304270752c7ece76a06186286d87a72c))
+
 ## [1.2.1](https://gitlab.com/softerist/subro_web/compare/v1.2.0...v1.2.1) (2026-03-15)
 
 ### Bug Fixes
