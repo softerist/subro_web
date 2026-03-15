@@ -651,7 +651,7 @@ def _resolve_torrent_content_path(torrent: Any) -> str | None:
     response_model=list[CompletedTorrentInfo],
     summary="Get recent completed torrents",
     description=(
-        "Returns the last 10 completed torrents from qBittorrent. "
+        "Returns completed torrents from qBittorrent sorted newest-first. "
         "Returns an empty list if qBittorrent is not configured or connection fails."
     ),
 )
@@ -659,7 +659,7 @@ async def get_recent_torrents(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(current_active_user)],  # noqa: ARG001
 ) -> list[CompletedTorrentInfo]:
-    """Fetch the last 10 completed torrents from qBittorrent."""
+    """Fetch completed torrents from qBittorrent sorted newest-first."""
     from app.modules.subtitle.services.torrent_client import get_completed_torrents
 
     client = await _get_qbittorrent_client(db)
@@ -672,12 +672,12 @@ async def get_recent_torrents(
         logger.warning("Error fetching completed torrents: %s", e)
         return []
 
-    # Sort by completion time (newest first) and take top 10
+    # Sort by completion time (newest first)
     sorted_torrents = sorted(
         torrents,
         key=lambda t: getattr(t, "completion_on", 0) or 0,
         reverse=True,
-    )[:10]
+    )
 
     # Convert to response schema, filtering out None values
     return [info for t in sorted_torrents if (info := _torrent_to_schema(t)) is not None]

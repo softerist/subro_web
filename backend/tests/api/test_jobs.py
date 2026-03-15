@@ -281,6 +281,45 @@ async def test_get_recent_torrents_success(
 
 
 @pytest.mark.asyncio
+async def test_get_recent_torrents_returns_all_sorted_results(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = UserFactory.create_user(session=db_session, email="torrent_many_user@example.com")
+    await db_session.flush()
+    headers = await login_user(test_client, user.email, "password123")
+
+    with patch("app.api.routers.jobs._get_qbittorrent_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        with patch(
+            "app.modules.subtitle.services.torrent_client.get_completed_torrents"
+        ) as mock_get_torrents:
+            torrents = []
+            for index in range(12):
+                torrent = MagicMock()
+                torrent.name = f"Movie {index}"
+                torrent.save_path = f"/downloads/movie{index}"
+                torrent.content_path = f"/downloads/movie{index}/Movie {index}"
+                torrent.completion_on = 1672531200 + index
+                torrents.append(torrent)
+
+            mock_get_torrents.return_value = list(reversed(torrents))
+
+            response = await test_client.get(
+                f"{API_PREFIX}/jobs/recent-torrents",
+                headers=headers,
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            assert len(data) == 12
+            assert data[0]["name"] == "Movie 11"
+            assert data[-1]["name"] == "Movie 0"
+
+
+@pytest.mark.asyncio
 async def test_get_recent_torrents_no_client(
     test_client: AsyncClient, db_session: AsyncSession
 ) -> None:

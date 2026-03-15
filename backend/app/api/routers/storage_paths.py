@@ -1,6 +1,7 @@
 """Storage-path management endpoints (CRUD + folder browsing)."""
 
 import logging
+import os
 from pathlib import Path
 from uuid import UUID
 
@@ -74,6 +75,33 @@ async def browse_folders(
     return _build_child_entries(resolved, path, allowed_bases)
 
 
+@router.get("/browse-system", response_model=list[StoragePathBrowseEntry])
+async def browse_system_folders(
+    path: str | None = Query(
+        None,
+        description="Absolute path to browse. Omit to get filesystem roots.",
+    ),
+    current_user: User = Depends(current_active_superuser),
+) -> list[StoragePathBrowseEntry]:
+    """Browse filesystem roots or child directories as a superuser."""
+    if path is None:
+        entries = _build_system_root_entries()
+    else:
+        resolved = _resolve_browse_path(path)
+        entries = _build_system_child_entries(
+            resolved=resolved,
+            raw_path=path,
+        )
+
+    logger.info(
+        "System browse by %s path=%s status=success entries=%s",
+        _sanitize_for_log(getattr(current_user, "email", "unknown")),
+        _sanitize_for_log(path) if path else "<roots>",
+        len(entries),
+    )
+    return entries
+
+
 def _resolve_browse_path(path: str) -> Path:
     """Resolve and validate a user-supplied browse path."""
     try:
@@ -116,6 +144,31 @@ def _build_root_entries(
     ]
 
 
+def _normalized_sort_key(path: str) -> str:
+    """Return a stable sort key for cross-platform path ordering."""
+    return path.lower()
+
+
+def _build_system_root_entries() -> list[StoragePathBrowseEntry]:
+    """Return browse entries for filesystem roots."""
+    roots: list[Path]
+    if os.name == "nt":
+        root_strings = os.listdrives() if hasattr(os, "listdrives") else []
+        roots = [Path(root) for root in root_strings if Path(root).exists()]
+    else:
+        roots = [Path("/")]
+
+    entries = [
+        StoragePathBrowseEntry(
+            name=str(root),
+            path=str(root.resolve()),
+            has_children=_dir_has_subdirs(root),
+        )
+        for root in roots
+    ]
+    return sorted(entries, key=lambda entry: _normalized_sort_key(entry.path))
+
+
 def _build_child_entries(
     resolved: Path,
     raw_path: str,
@@ -146,7 +199,47 @@ def _build_child_entries(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Permission denied reading directory '{raw_path}'.",
         ) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Path '{raw_path}' does not exist or is not accessible.",
+        ) from exc
     return entries
+
+
+def _build_system_child_entries(
+    resolved: Path,
+    raw_path: str,
+) -> list[StoragePathBrowseEntry]:
+    """Return direct child directories for unrestricted system browsing."""
+    entries: list[StoragePathBrowseEntry] = []
+    try:
+        for child in resolved.iterdir():
+            try:
+                child_resolved = child.resolve(strict=True)
+            except (FileNotFoundError, RuntimeError, OSError):
+                continue
+            if not child_resolved.is_dir():
+                continue
+            entries.append(
+                StoragePathBrowseEntry(
+                    name=child_resolved.name or str(child_resolved),
+                    path=str(child_resolved),
+                    has_children=_dir_has_subdirs(child_resolved),
+                )
+            )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permission denied reading directory '{raw_path}'.",
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Path '{raw_path}' does not exist or is not accessible.",
+        ) from exc
+
+    return sorted(entries, key=lambda entry: _normalized_sort_key(entry.path))
 
 
 def _dir_has_subdirs(directory: Path) -> bool:
@@ -224,7 +317,10 @@ async def create_storage_path(
         logger.error("Error creating storage path: %s", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Storage path already exists.",
+            detail={
+                "code": "PATH_ALREADY_EXISTS",
+                "message": "Storage path already exists.",
+            },
         ) from e
     except Exception as e:
         logger.error("Error creating storage path: %s", e)

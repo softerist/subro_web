@@ -1,6 +1,7 @@
 # backend/tests/api/test_storage_paths.py
 """Tests for storage path management and subdirectory restrictions."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -535,3 +536,153 @@ async def test_browse_storage_path_excludes_symlinks_outside_allowed_roots(
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_browse_system_roots_requires_superuser(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = UserFactory.create_user(
+        session=db_session,
+        email="browse_system_admin@example.com",
+        role="admin",
+        is_superuser=False,
+    )
+    await db_session.flush()
+    headers = await login_user(test_client, admin.email, "password123")
+
+    response = await test_client.get(
+        f"{API_PREFIX}/storage-paths/browse-system",
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_browse_system_roots_returns_filesystem_roots_for_superuser(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    superuser = UserFactory.create_user(
+        session=db_session,
+        email="browse_system_superuser@example.com",
+        role="admin",
+        is_superuser=True,
+    )
+    await db_session.flush()
+    headers = await login_user(test_client, superuser.email, "password123")
+
+    response = await test_client.get(
+        f"{API_PREFIX}/storage-paths/browse-system",
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    payload = response.json()
+    assert payload
+    if os.name != "nt":
+        assert any(entry["path"] == str(Path("/").resolve()) for entry in payload)
+
+
+@pytest.mark.asyncio
+async def test_browse_system_path_returns_sorted_directories_only(
+    test_client: AsyncClient, db_session: AsyncSession, tmp_path: Path
+) -> None:
+    browse_root = tmp_path / "system-browse"
+    browse_root.mkdir()
+    (browse_root / "Zulu").mkdir()
+    (browse_root / "alpha").mkdir()
+    (browse_root / "Beta").mkdir()
+    (browse_root / "ignored.txt").write_text("ignore", encoding="utf-8")
+
+    superuser = UserFactory.create_user(
+        session=db_session,
+        email="browse_system_sorted@example.com",
+        role="admin",
+        is_superuser=True,
+    )
+    await db_session.flush()
+    headers = await login_user(test_client, superuser.email, "password123")
+
+    response = await test_client.get(
+        f"{API_PREFIX}/storage-paths/browse-system",
+        params={"path": str(browse_root)},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert [entry["name"] for entry in response.json()] == ["alpha", "Beta", "Zulu"]
+
+
+@pytest.mark.asyncio
+async def test_browse_system_path_skips_broken_symlinks(
+    test_client: AsyncClient, db_session: AsyncSession, tmp_path: Path
+) -> None:
+    browse_root = tmp_path / "broken-link-root"
+    browse_root.mkdir()
+    valid_dir = browse_root / "valid"
+    valid_dir.mkdir()
+    broken_link = browse_root / "broken"
+
+    try:
+        broken_link.symlink_to(browse_root / "missing", target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"Symlinks are not supported in this environment: {exc}")
+
+    superuser = UserFactory.create_user(
+        session=db_session,
+        email="browse_system_broken@example.com",
+        role="admin",
+        is_superuser=True,
+    )
+    await db_session.flush()
+    headers = await login_user(test_client, superuser.email, "password123")
+
+    response = await test_client.get(
+        f"{API_PREFIX}/storage-paths/browse-system",
+        params={"path": str(browse_root)},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == [
+        {
+            "name": "valid",
+            "path": str(valid_dir.resolve()),
+            "has_children": False,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_create_storage_path_duplicate_returns_structured_detail(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    superuser = UserFactory.create_user(
+        session=db_session,
+        email="duplicate_storage_path@example.com",
+        role="admin",
+        is_superuser=True,
+    )
+    await db_session.flush()
+    headers = await login_user(test_client, superuser.email, "password123")
+
+    first_response = await test_client.post(
+        f"{API_PREFIX}/storage-paths/",
+        json={"path": "/tmp"},
+        headers=headers,
+    )
+    assert first_response.status_code == status.HTTP_201_CREATED
+
+    duplicate_response = await test_client.post(
+        f"{API_PREFIX}/storage-paths/",
+        json={"path": "/tmp"},
+        headers=headers,
+    )
+
+    assert duplicate_response.status_code == status.HTTP_400_BAD_REQUEST
+    assert duplicate_response.json()["detail"] == {
+        "code": "PATH_ALREADY_EXISTS",
+        "message": "Storage path already exists.",
+    }

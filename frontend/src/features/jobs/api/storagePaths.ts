@@ -32,4 +32,13 @@ export const storagePathsApi = {
     );
     return response.data;
   },
+
+  browseSystemFolders: async (path?: string) => {
+    const params = path ? { path } : {};
+    const response = await api.get<FolderBrowserEntry[]>(
+      "/v1/storage-paths/browse-system",
+      { params },
+    );
+    return response.data;
+  },
 };
