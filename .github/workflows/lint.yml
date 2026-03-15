@@ -7,6 +7,9 @@ on:
   push:
     branches: [main] # Optional: run on pushes to main too
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 # Cancel any previous workflow runs for the same branch/PR
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

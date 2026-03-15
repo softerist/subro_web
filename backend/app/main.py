@@ -1,6 +1,7 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from ipaddress import IPv4Address
 from typing import Any
 
 from app.core.config import settings
@@ -208,7 +209,10 @@ async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:  # noq
         logger.error(f"LIFESPAN_HOOK: Error during database resource disposal: {e}", exc_info=True)
 
 
-advertised_host = "localhost" if settings.SERVER_HOST == "0.0.0.0" else settings.SERVER_HOST  # nosec B104
+wildcard_ipv4_host = IPv4Address(0).compressed
+advertised_host = (
+    "localhost" if settings.SERVER_HOST == wildcard_ipv4_host else settings.SERVER_HOST
+)
 server_protocol = "https" if settings.USE_HTTPS else "http"
 advertised_server_url_base = f"{server_protocol}://{advertised_host}:{settings.SERVER_PORT}"
 

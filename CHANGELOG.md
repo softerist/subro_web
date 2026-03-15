@@ -2,22 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-
 # [1.2.0](https://gitlab.com/softerist/subro_web/compare/v1.1.1...v1.2.0) (2026-02-22)
-
 
 ### Bug Fixes
 
-* **version:** add version.env for CI verification ([f379993](https://gitlab.com/softerist/subro_web/commit/f3799939827a8504aa4bb3655dd1593933eaa16b))
-* **version:** read APP_VERSION dynamically from pyproject.toml ([a8ef010](https://gitlab.com/softerist/subro_web/commit/a8ef010900488bc0c23d109d9f7c662ebdd97a13))
-* **version:** sync all package versions to 1.1.1 ([b7d5c5b](https://gitlab.com/softerist/subro_web/commit/b7d5c5bf7c152abf98810ecaa7a9f1f0fb826a53))
-
+- **version:** add version.env for CI verification ([f379993](https://gitlab.com/softerist/subro_web/commit/f3799939827a8504aa4bb3655dd1593933eaa16b))
+- **version:** read APP_VERSION dynamically from pyproject.toml ([a8ef010](https://gitlab.com/softerist/subro_web/commit/a8ef010900488bc0c23d109d9f7c662ebdd97a13))
+- **version:** sync all package versions to 1.1.1 ([b7d5c5b](https://gitlab.com/softerist/subro_web/commit/b7d5c5bf7c152abf98810ecaa7a9f1f0fb826a53))
 
 ### Features
 
-* Add Dockerfile and Poetry configuration for the backend service, integrating Trivy ignore into CI scans. ([8c07003](https://gitlab.com/softerist/subro_web/commit/8c07003ce5e9ca8ecf26224e183ac8cc823d91e4))
-* initialize frontend project with core dependencies and build configuration ([1a27746](https://gitlab.com/softerist/subro_web/commit/1a27746147099db75013a44c9500a0d16bfb63e7))
-* **release:** add GitHub tag sync and develop pre-releases ([e604285](https://gitlab.com/softerist/subro_web/commit/e6042852d6f84726db31f7cfc94f3eb7797e77f0))
+- Add Dockerfile and Poetry configuration for the backend service, integrating Trivy ignore into CI scans. ([8c07003](https://gitlab.com/softerist/subro_web/commit/8c07003ce5e9ca8ecf26224e183ac8cc823d91e4))
+- initialize frontend project with core dependencies and build configuration ([1a27746](https://gitlab.com/softerist/subro_web/commit/1a27746147099db75013a44c9500a0d16bfb63e7))
+- **release:** add GitHub tag sync and develop pre-releases ([e604285](https://gitlab.com/softerist/subro_web/commit/e6042852d6f84726db31f7cfc94f3eb7797e77f0))
 
 # 1.0.0 (2026-01-18)
 

@@ -73,8 +73,9 @@ class Settings(  # pylint: disable=too-many-instance-attributes,invalid-name
     )
 
     # --- Server Configuration ---
-    SERVER_HOST: str = Field(  # nosec B104 - intentional for Docker
-        default="0.0.0.0",
+    # Intentional for containerized deployments where the reverse proxy publishes the service.
+    SERVER_HOST: str = Field(
+        default="0.0.0.0",  # nosec B104
         validation_alias="SERVER_HOST",
     )
     SERVER_PORT: int = Field(default=8000, validation_alias="SERVER_PORT")

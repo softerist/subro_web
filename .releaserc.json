@@ -14,7 +14,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "sed -i 's/^version = \"[^\"]*\"/version = \"${nextRelease.version}\"/' backend/pyproject.toml"
+        "prepareCmd": "sed -i 's/^version = \"[^\"]*\"/version = \"${nextRelease.version}\"/' backend/pyproject.toml && npx prettier --write CHANGELOG.md"
       }
     ],
     [
