@@ -1,3 +1,5 @@
+"""Application settings and environment-derived configuration."""
+
 import json
 import logging
 import os
@@ -28,9 +30,13 @@ def _get_version_from_pyproject() -> str:
         if pyproject_path.exists():
             with pyproject_path.open("rb") as f:
                 data = tomllib.load(f)
-            return data.get("project", {}).get("version", "0.0.0-dev")
-    except Exception as e:
-        logger.warning(f"Failed to read version from pyproject.toml: {e}")
+            project = data.get("project")
+            if isinstance(project, dict):
+                version = project.get("version")
+                if isinstance(version, str):
+                    return version
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        logger.warning("Failed to read version from pyproject.toml: %s", e)
     return "0.0.0-dev"
 
 
@@ -47,7 +53,11 @@ def _default_app_state_dir() -> str:
     return str(base_dir / "subro-web")
 
 
-class Settings(BaseSettings):
+class Settings(  # pylint: disable=too-many-instance-attributes,invalid-name
+    BaseSettings
+):
+    """Typed application configuration loaded from environment variables."""
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore", case_sensitive=False
     )
@@ -63,7 +73,10 @@ class Settings(BaseSettings):
     )
 
     # --- Server Configuration ---
-    SERVER_HOST: str = Field(default="0.0.0.0", validation_alias="SERVER_HOST")  # nosec B104 - intentional for Docker
+    SERVER_HOST: str = Field(  # nosec B104 - intentional for Docker
+        default="0.0.0.0",
+        validation_alias="SERVER_HOST",
+    )
     SERVER_PORT: int = Field(default=8000, validation_alias="SERVER_PORT")
     ROOT_PATH: str = Field(
         default="", description="Root path for the application if served under a subpath."
@@ -141,7 +154,10 @@ class Settings(BaseSettings):
     )
     WEBAUTHN_ORIGIN: str | None = Field(
         default=None,
-        description="Expected origin for WebAuthn (e.g., https://app.example.com). Defaults to FRONTEND_URL.",
+        description=(
+            "Expected origin for WebAuthn (e.g., https://app.example.com). "
+            "Defaults to FRONTEND_URL."
+        ),
         validation_alias="WEBAUTHN_ORIGIN",
     )
     WEBAUTHN_CHALLENGE_TTL_SECONDS: int = Field(
@@ -375,10 +391,12 @@ class Settings(BaseSettings):
 
     @property
     def DATA_ENCRYPTION_KEYS(self) -> list[str]:
+        """Return the parsed data-encryption keys."""
         return self._parsed_data_encryption_keys
 
     @property
     def DEEPL_API_KEYS(self) -> list[str]:
+        """Return the parsed DeepL API keys."""
         return self._parsed_deepl_api_keys
 
     def _parse_string_list_input_helper(
@@ -396,12 +414,17 @@ class Settings(BaseSettings):
                 parsed_list = [item.strip() for item in loaded_items.split(",") if item.strip()]
             else:  # Not a list or a parsable string, try comma separation as last resort
                 logger.debug(
-                    f"Input for {field_name_for_log} ('{input_str}') was valid JSON but not list/string. Trying comma separation."
+                    "Input for %s ('%s') was valid JSON but not list/string. "
+                    "Trying comma separation.",
+                    field_name_for_log,
+                    input_str,
                 )
                 parsed_list = [item.strip() for item in input_str.split(",") if item.strip()]
         except json.JSONDecodeError:
             logger.debug(
-                f"JSONDecodeError for {field_name_for_log}. Falling back to comma separation for: '{input_str}'"
+                "JSONDecodeError for %s. Falling back to comma separation for: '%s'",
+                field_name_for_log,
+                input_str,
             )
             parsed_list = [item.strip() for item in input_str.split(",") if item.strip()]
 
@@ -409,7 +432,9 @@ class Settings(BaseSettings):
             not parsed_list and input_str and input_str.strip()
         ):  # Log if input was non-empty but parsing yielded empty
             logger.warning(
-                f"Env var {field_name_for_log} (value: '{input_str}') resulted in an empty parsed list."
+                "Env var %s (value: '%s') resulted in an empty parsed list.",
+                field_name_for_log,
+                input_str,
             )
         return parsed_list
 
@@ -430,6 +455,7 @@ class Settings(BaseSettings):
         return self
 
     def _normalize_state_dir(self) -> None:
+        """Normalize the configured application state directory path."""
         raw_state_dir = str(self.APP_STATE_DIR).strip()
         if not raw_state_dir:
             raw_state_dir = _default_app_state_dir()
@@ -457,7 +483,7 @@ class Settings(BaseSettings):
             # Handle non-development environment security defaults
             if self.ENVIRONMENT != "development" and not self.COOKIE_SECURE and self.USE_HTTPS:
                 self.COOKIE_SECURE = True
-            elif self.ENVIRONMENT != "development" and not self.COOKIE_SECURE:
+            if self.ENVIRONMENT != "development" and not self.COOKIE_SECURE:
                 logger.warning(
                     "Non-development environment with USE_HTTPS=False, COOKIE_SECURE remains False."
                 )
@@ -493,10 +519,12 @@ class Settings(BaseSettings):
 
     @property
     def ALLOWED_MEDIA_FOLDERS(self) -> list[str]:
+        """Return the parsed list of allowed media folders."""
         return self._parsed_allowed_media_folders
 
     @property
     def BACKEND_CORS_ORIGINS(self) -> list[str]:
+        """Return the parsed list of allowed backend CORS origins."""
         return self._parsed_backend_cors_origins
 
     def _build_postgres_dsn(self, base_dsn: PostgresDsn | None, use_async: bool) -> PostgresDsn:
@@ -511,29 +539,31 @@ class Settings(BaseSettings):
             if db_url_str.startswith(driver_prefix):
                 return base_dsn
             # If base_dsn has the alternate driver, swap it
-            elif db_url_str.startswith(alt_driver_prefix):
+            if db_url_str.startswith(alt_driver_prefix):
                 return PostgresDsn(db_url_str.replace(alt_driver_prefix, driver_prefix, 1))
             # If base_dsn has a scheme but not the one we want (e.g. just 'postgres://')
-            elif "://" in db_url_str:
+            if "://" in db_url_str:
                 # Rebuild with correct prefix and rest of URL
                 return PostgresDsn(driver_prefix + db_url_str.split("://", 1)[1])
-            else:
-                # This case implies a malformed DSN without a scheme.
-                # It's unlikely Pydantic would allow this for PostgresDsn, but defensive.
-                raise ValueError(f"Malformed base DSN for DB (missing scheme?): {db_url_str}")
+            # This case implies a malformed DSN without a scheme.
+            # It's unlikely Pydantic would allow this for PostgresDsn, but defensive.
+            raise ValueError(f"Malformed base DSN for DB (missing scheme?): {db_url_str}")
         # If no base_dsn, construct from components
         return PostgresDsn(
-            f"{driver_prefix}{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+            f"{driver_prefix}{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
     @computed_field(repr=False)  # type: ignore[prop-decorator]
     @property
     def ASYNC_SQLALCHEMY_DATABASE_URL(self) -> str:
+        """Return the async SQLAlchemy DSN used by the API."""
         return str(self._build_postgres_dsn(self.PRIMARY_DATABASE_URL_ENV, use_async=True))
 
     @computed_field(repr=False)  # type: ignore[prop-decorator]
     @property
     def ASYNC_SQLALCHEMY_DATABASE_URL_WORKER(self) -> str:
+        """Return the async SQLAlchemy DSN used by Celery workers."""
         base_for_worker = (
             self.ASYNC_SQLALCHEMY_DATABASE_URL_WORKER_ENV or self.PRIMARY_DATABASE_URL_ENV
         )
@@ -542,34 +572,30 @@ class Settings(BaseSettings):
     @computed_field(repr=False)  # type: ignore[prop-decorator]
     @property
     def SYNC_SQLALCHEMY_DATABASE_URL(self) -> str:
+        """Return the sync SQLAlchemy DSN used by Alembic and sync code."""
         return str(self._build_postgres_dsn(self.PRIMARY_DATABASE_URL_ENV, use_async=False))
 
     @property
     def CELERY_BROKER_URL(self) -> str | None:
+        """Return the broker URL, preferring the explicit environment override."""
         if self.CELERY_BROKER_URL_ENV:
             return str(self.CELERY_BROKER_URL_ENV)
         if self.REDIS_HOST:  # Construct if not provided explicitly
-            try:
-                return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
-            except Exception as e:  # Catch Pydantic validation error or others
-                logger.error(f"Failed to build CELERY_BROKER_URL from components: {e}")
-                return None
+            return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
         return None  # No explicit URL and no components to build from
 
     @property
     def CELERY_RESULT_BACKEND(self) -> str | None:
+        """Return the Celery result backend URL."""
         if self.CELERY_RESULT_BACKEND_ENV:
             return str(self.CELERY_RESULT_BACKEND_ENV)
         if self.REDIS_HOST:
-            try:
-                return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/1"  # Different DB for results
-            except Exception as e:
-                logger.error(f"Failed to build CELERY_RESULT_BACKEND from components: {e}")
-                return None
+            return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/1"  # Different DB for results
         return None
 
     @property
     def CELERY_BEAT_SCHEDULE_FILENAME(self) -> str:
+        """Return the Celery beat schedule filename on disk."""
         if self.CELERY_BEAT_SCHEDULE_FILENAME_ENV:
             return str(
                 Path(os.path.expandvars(str(self.CELERY_BEAT_SCHEDULE_FILENAME_ENV))).expanduser()
@@ -578,36 +604,38 @@ class Settings(BaseSettings):
 
     @property
     def REDIS_PUBSUB_URL(self) -> str | None:
+        """Return the Redis Pub/Sub URL."""
         if self.REDIS_PUBSUB_URL_ENV:
             return str(self.REDIS_PUBSUB_URL_ENV)
         if self.REDIS_HOST:
-            try:
-                return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/2"  # Different DB for pubsub
-            except Exception as e:
-                logger.error(f"Failed to build REDIS_PUBSUB_URL from components: {e}")
-                return None
+            return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/2"  # Different DB for pubsub
         return None
 
 
-settings = Settings()
+settings = Settings()  # pyright: ignore[reportCallIssue]
 
 if __name__ == "__main__":
     print("--- Loaded Settings (Debug from config.py) ---")
     print(
-        f"ENVIRONMENT: {settings.ENVIRONMENT}, DEBUG: {settings.DEBUG}, LOG_LEVEL: {settings.LOG_LEVEL}"
+        "ENVIRONMENT: "
+        f"{settings.ENVIRONMENT}, DEBUG: {settings.DEBUG}, LOG_LEVEL: {settings.LOG_LEVEL}"
     )
     print(
-        f"DB_ECHO: {settings.DB_ECHO}, DB_ECHO_WORKER: {settings.DB_ECHO_WORKER}, COOKIE_SECURE: {settings.COOKIE_SECURE}"
+        "DB_ECHO: "
+        f"{settings.DB_ECHO}, DB_ECHO_WORKER: {settings.DB_ECHO_WORKER}, "
+        f"COOKIE_SECURE: {settings.COOKIE_SECURE}"
     )
 
     print("\n--- Database ---")
     print(f"PRIMARY_DATABASE_URL_ENV: {settings.PRIMARY_DATABASE_URL_ENV}")
     print(
-        f"ASYNC_SQLALCHEMY_DATABASE_URL_WORKER_ENV: {settings.ASYNC_SQLALCHEMY_DATABASE_URL_WORKER_ENV}"
+        "ASYNC_SQLALCHEMY_DATABASE_URL_WORKER_ENV: "
+        f"{settings.ASYNC_SQLALCHEMY_DATABASE_URL_WORKER_ENV}"
     )
     print(f"ASYNC_SQLALCHEMY_DATABASE_URL (for FastAPI): {settings.ASYNC_SQLALCHEMY_DATABASE_URL}")
     print(
-        f"ASYNC_SQLALCHEMY_DATABASE_URL_WORKER (for Celery): {settings.ASYNC_SQLALCHEMY_DATABASE_URL_WORKER}"
+        "ASYNC_SQLALCHEMY_DATABASE_URL_WORKER (for Celery): "
+        f"{settings.ASYNC_SQLALCHEMY_DATABASE_URL_WORKER}"
     )
     print(f"SYNC_SQLALCHEMY_DATABASE_URL (for Alembic): {settings.SYNC_SQLALCHEMY_DATABASE_URL}")
 

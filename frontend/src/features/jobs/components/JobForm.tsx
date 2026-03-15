@@ -43,7 +43,6 @@ const LOG_LEVELS = [
 ] as const;
 
 export function JobForm() {
-
   const jobErrorMessages: Record<string, string> = {
     PATH_NOT_FOUND: "Folder not found on server. Check the path and try again.",
     PATH_INVALID: "Folder path is invalid or cannot be resolved.",
@@ -114,10 +113,7 @@ export function JobForm() {
                 <StorageManagerDialog />
               </div>
               <FormControl>
-                <FolderBrowser
-                  value={field.value}
-                  onChange={field.onChange}
-                />
+                <FolderBrowser value={field.value} onChange={field.onChange} />
               </FormControl>
               <FormMessage />
             </FormItem>

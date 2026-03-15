@@ -53,10 +53,7 @@ const getPersistStorage = (): StateStorage => {
   }
 
   try {
-    if (
-      typeof window !== "undefined" &&
-      hasStorageApi(window.localStorage)
-    ) {
+    if (typeof window !== "undefined" && hasStorageApi(window.localStorage)) {
       return window.localStorage;
     }
   } catch {

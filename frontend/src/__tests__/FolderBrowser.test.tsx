@@ -29,8 +29,9 @@ vi.mock("../features/jobs/api/jobs", () => ({
 }));
 
 vi.mock("@/store/authStore", () => ({
-  useAuthStore: (selector: (state: { accessToken: string | null }) => unknown) =>
-    selector({ accessToken: "mock-token" }),
+  useAuthStore: (
+    selector: (state: { accessToken: string | null }) => unknown,
+  ) => selector({ accessToken: "mock-token" }),
 }));
 
 const queryClient = new QueryClient({
@@ -75,11 +76,15 @@ describe("FolderBrowser", () => {
     cleanup();
     vi.clearAllMocks();
     queryClient.clear();
-    (jobsApi.getRecentTorrents as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (
+      jobsApi.getRecentTorrents as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([]);
   });
 
   it("loads root folders when opened and selects a folder", async () => {
-    (storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+    (
+      storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([
       {
         name: "movies",
         path: "/media/movies",
@@ -109,27 +114,27 @@ describe("FolderBrowser", () => {
   });
 
   it("renders Windows-style path labels in the trigger and leaf names in the breadcrumb", async () => {
-    (storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>).mockImplementation(
-      async (path?: string) => {
-        if (!path) {
-          return [
-            {
-              name: "Movies",
-              path: "C:\\Media\\Movies",
-              has_children: true,
-            },
-          ];
-        }
-
+    (
+      storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>
+    ).mockImplementation(async (path?: string) => {
+      if (!path) {
         return [
           {
-            name: "SomeMovie",
-            path: "C:\\Media\\Movies\\SomeMovie",
-            has_children: false,
+            name: "Movies",
+            path: "C:\\Media\\Movies",
+            has_children: true,
           },
         ];
-      },
-    );
+      }
+
+      return [
+        {
+          name: "SomeMovie",
+          path: "C:\\Media\\Movies\\SomeMovie",
+          has_children: false,
+        },
+      ];
+    });
 
     render(<ControlledFolderBrowser />, { wrapper });
 
@@ -165,27 +170,27 @@ describe("FolderBrowser", () => {
   });
 
   it("drills into subfolders and can select the current folder", async () => {
-    (storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>).mockImplementation(
-      async (path?: string) => {
-        if (!path) {
-          return [
-            {
-              name: "movies",
-              path: "/media/movies",
-              has_children: true,
-            },
-          ];
-        }
-
+    (
+      storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>
+    ).mockImplementation(async (path?: string) => {
+      if (!path) {
         return [
           {
-            name: "SomeMovie",
-            path: "/media/movies/SomeMovie",
-            has_children: false,
+            name: "movies",
+            path: "/media/movies",
+            has_children: true,
           },
         ];
-      },
-    );
+      }
+
+      return [
+        {
+          name: "SomeMovie",
+          path: "/media/movies/SomeMovie",
+          has_children: false,
+        },
+      ];
+    });
 
     render(<ControlledFolderBrowser />, { wrapper });
 
@@ -217,8 +222,12 @@ describe("FolderBrowser", () => {
   });
 
   it("shows recent torrents at the root and selects them", async () => {
-    (storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-    (jobsApi.getRecentTorrents as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+    (
+      storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([]);
+    (
+      jobsApi.getRecentTorrents as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([
       {
         name: "Movie 1",
         save_path: "/downloads",
@@ -249,7 +258,9 @@ describe("FolderBrowser", () => {
   });
 
   it("refetches roots every time the browser is opened", async () => {
-    (storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+    (
+      storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([
       {
         name: "movies",
         path: "/media/movies",
@@ -275,7 +286,9 @@ describe("FolderBrowser", () => {
 
   it("does not submit a parent form when opening the browser", async () => {
     const onSubmit = vi.fn();
-    (storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (
+      storagePathsApi.browseFolders as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([]);
 
     const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();

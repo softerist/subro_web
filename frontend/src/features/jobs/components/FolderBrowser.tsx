@@ -47,7 +47,8 @@ export function FolderBrowser({ value, onChange }: FolderBrowserProps) {
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   // Stack of parent paths for breadcrumb navigation
   const [pathStack, setPathStack] = useState<string[]>([]);
-  const [selectedDisplay, setSelectedDisplay] = useState<SelectedDisplay | null>(null);
+  const [selectedDisplay, setSelectedDisplay] =
+    useState<SelectedDisplay | null>(null);
 
   useEffect(() => {
     if (!value) {
@@ -152,9 +153,7 @@ export function FolderBrowser({ value, onChange }: FolderBrowserProps) {
         : null;
 
   const displayTitle =
-    selectedDisplay?.path === value
-      ? selectedDisplay.label
-      : value;
+    selectedDisplay?.path === value ? selectedDisplay.label : value;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -266,7 +265,9 @@ export function FolderBrowser({ value, onChange }: FolderBrowserProps) {
                         <button
                           type="button"
                           key={`torrent-${torrentPath}`}
-                          onClick={() => handleSelectFolder(torrentPath, torrent.name)}
+                          onClick={() =>
+                            handleSelectFolder(torrentPath, torrent.name)
+                          }
                           className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm
                             hover:bg-accent transition-colors"
                         >
@@ -300,12 +301,11 @@ export function FolderBrowser({ value, onChange }: FolderBrowserProps) {
                     </div>
                   )}
 
-                {(folderEntries?.length ?? 0) === 0 &&
-                  currentPath !== null && (
-                    <div className="text-center py-6 text-sm text-muted-foreground">
-                      No subfolders found
-                    </div>
-                  )}
+                {(folderEntries?.length ?? 0) === 0 && currentPath !== null && (
+                  <div className="text-center py-6 text-sm text-muted-foreground">
+                    No subfolders found
+                  </div>
+                )}
 
                 {folderEntries?.map((entry) => (
                   <div
