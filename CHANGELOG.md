@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+# [1.3.0](https://gitlab.com/softerist/subro_web/compare/v1.2.2...v1.3.0) (2026-03-15)
+
+### Features
+
+- Add FolderBrowser component for selecting job target folders with navigation and recent torrents integration. ([3678806](https://gitlab.com/softerist/subro_web/commit/367880652dcdff53f20adff1edf1a1293fe9f855))
+- add system folder browsing functionality to FolderBrowser component ([4691dd7](https://gitlab.com/softerist/subro_web/commit/4691dd76d4f5df8a465e67c5c40b05dd44159e82))
+
 ## [1.2.2](https://gitlab.com/softerist/subro_web/compare/v1.2.1...v1.2.2) (2026-03-15)
 
 ### Bug Fixes
