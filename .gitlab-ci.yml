@@ -1259,6 +1259,17 @@ semantic_release:
     - git remote add github git@github.com:softerist/subro_web.git || git remote set-url github git@github.com:softerist/subro_web.git
   script:
     - |-
+      CURRENT_VERSION=$(grep -m1 '^version = ' backend/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+      CURRENT_TAG="v${CURRENT_VERSION}"
+
+      if git rev-parse -q --verify "refs/tags/${CURRENT_TAG}" >/dev/null; then
+        if ! git merge-base --is-ancestor "${CURRENT_TAG}" HEAD; then
+          echo "ERROR: ${CURRENT_TAG} exists but is not on the current branch history."
+          echo "Refusing to run semantic-release with a stale baseline tag."
+          exit 1
+        fi
+      fi
+    - |-
       echo ""
       echo "┌─────────────────────────────────────────────────────────────┐"
       echo "│  🚀 Running Semantic Release                                │"
@@ -1266,10 +1277,10 @@ semantic_release:
       echo ""
       npx semantic-release
     - |-
-      # Push tags to GitHub mirror
+      # Mirror the release commit and its tag to GitHub so both remotes stay aligned.
       echo ""
-      echo "📤 Syncing tags to GitHub..."
-      git push github --tags --force || echo "⚠️  GitHub tag push failed (non-fatal)"
+      echo "📤 Syncing release commit and tags to GitHub..."
+      git push github HEAD:$CI_COMMIT_BRANCH --follow-tags || echo "⚠️  GitHub release mirror push failed (non-fatal)"
 
 # ============ CLEANUP STAGE ============
 cleanup_registry:
