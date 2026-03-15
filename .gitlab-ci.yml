@@ -1249,15 +1249,46 @@ semantic_release:
         echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/id_rsa
       fi
     - chmod 600 ~/.ssh/id_rsa
+    - |-
+      if [ -n "${GITHUB_SSH_PRIVATE_KEY:-}" ]; then
+        if echo "$GITHUB_SSH_PRIVATE_KEY" | grep -q "BEGIN.*PRIVATE KEY"; then
+          echo "$GITHUB_SSH_PRIVATE_KEY" > ~/.ssh/id_github
+        else
+          echo "$GITHUB_SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/id_github
+        fi
+        chmod 600 ~/.ssh/id_github
+      fi
     # Add both GitLab and GitHub to known hosts
     - ssh-keyscan $CI_SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null
     - ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+    - |-
+      {
+        echo "Host $CI_SERVER_HOST"
+        echo "  IdentityFile ~/.ssh/id_rsa"
+        echo "  IdentitiesOnly yes"
+        echo "Host github.com"
+        if [ -n "${GITHUB_SSH_PRIVATE_KEY:-}" ]; then
+          echo "  IdentityFile ~/.ssh/id_github"
+        fi
+        echo "  IdentityFile ~/.ssh/id_rsa"
+        echo "  IdentitiesOnly yes"
+      } > ~/.ssh/config
+      chmod 600 ~/.ssh/config
     - git config --global user.email "ci-bot@gitlab.com"
     - git config --global user.name "CI Bot"
     - git remote set-url origin git@$CI_SERVER_HOST:$CI_PROJECT_PATH.git
     # Add GitHub as a separate remote for tag mirroring
     - git remote add github git@github.com:softerist/subro_web.git || git remote set-url github git@github.com:softerist/subro_web.git
   script:
+    - |-
+      git fetch origin "$CI_COMMIT_BRANCH"
+      REMOTE_BRANCH_SHA=$(git rev-parse "origin/$CI_COMMIT_BRANCH")
+      if [ "$CI_COMMIT_SHA" != "$REMOTE_BRANCH_SHA" ]; then
+        echo "Skipping semantic-release for stale pipeline commit."
+        echo "Pipeline commit: $CI_COMMIT_SHA"
+        echo "Current $CI_COMMIT_BRANCH tip: $REMOTE_BRANCH_SHA"
+        exit 0
+      fi
     - |-
       CURRENT_VERSION=$(grep -m1 '^version = ' backend/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
       CURRENT_TAG="v${CURRENT_VERSION}"
@@ -1275,12 +1306,25 @@ semantic_release:
       echo "│  🚀 Running Semantic Release                                │"
       echo "└─────────────────────────────────────────────────────────────┘"
       echo ""
+      BEFORE_HEAD=$(git rev-parse HEAD)
+      BEFORE_TAG_COUNT=$(git tag --points-at HEAD | wc -l)
       npx semantic-release
+      AFTER_HEAD=$(git rev-parse HEAD)
+      AFTER_TAG_COUNT=$(git tag --points-at HEAD | wc -l)
+      if [ "$BEFORE_HEAD" = "$AFTER_HEAD" ] && [ "$BEFORE_TAG_COUNT" = "$AFTER_TAG_COUNT" ]; then
+        echo "No release was created. Skipping GitHub mirror push."
+        exit 0
+      fi
     - |-
       # Mirror the release commit and its tag to GitHub so both remotes stay aligned.
       echo ""
       echo "📤 Syncing release commit and tags to GitHub..."
-      git push github HEAD:$CI_COMMIT_BRANCH --follow-tags || echo "⚠️  GitHub release mirror push failed (non-fatal)"
+      if ! git ls-remote --exit-code github HEAD >/dev/null 2>&1; then
+        echo "ERROR: GitHub remote authentication failed."
+        echo "Configure GITHUB_SSH_PRIVATE_KEY with write access to git@github.com:softerist/subro_web.git"
+        exit 1
+      fi
+      git push github HEAD:$CI_COMMIT_BRANCH --follow-tags
 
 # ============ CLEANUP STAGE ============
 cleanup_registry:
