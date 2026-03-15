@@ -67,6 +67,20 @@ section_end() {
     echo -e "\e[0Ksection_end:$(date +%s):${section_id}\r\e[0K"
 }
 
+render_caddyfile() {
+    local template_file=$1
+    local target_file=$2
+    local upstream_api=$3
+    local upstream_frontend=$4
+    local domain_name=$5
+
+    sed \
+        -e "s|{{UPSTREAM_API}}|$upstream_api|g" \
+        -e "s|{{UPSTREAM_FRONTEND}}|$upstream_frontend|g" \
+        -e "s|{\$DOMAIN_NAME}|$domain_name|g" \
+        "$template_file" > "$target_file"
+}
+
 # Retry helper for docker compose pull (handles registry timeouts)
 docker_compose_pull_with_retry() {
     local max_attempts=3
@@ -206,7 +220,7 @@ fi
 # Only regenerate if empty or missing (preserve existing config if valid)
 if [ ! -s "$CADDYFILE_PROD" ]; then
     log "Generating initial Caddyfile.prod (routing to $INIT_COLOR)..."
-    sed "s/{{UPSTREAM_API}}/$INIT_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$INIT_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$TEMPLATE" > "$TMP_CADDYFILE"
+    render_caddyfile "$TEMPLATE" "$TMP_CADDYFILE" "$INIT_COLOR-api-1" "$INIT_COLOR-frontend-1" "$DOMAIN_NAME"
 
     if [ -s "$TMP_CADDYFILE" ]; then
         mv "$TMP_CADDYFILE" "$CADDYFILE_PROD"
@@ -368,7 +382,7 @@ DOMAIN_NAME=$(grep -E "^DOMAIN_NAME=" "$ENV_FILE" | tail -1 | cut -d'=' -f2- | t
 if [ -z "$DOMAIN_NAME" ]; then
     error "DOMAIN_NAME not found in $ENV_FILE"; exit 1
 fi
-sed "s/{{UPSTREAM_API}}/$NEW_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$NEW_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$TEMPLATE" > "$TMP_CADDYFILE"
+render_caddyfile "$TEMPLATE" "$TMP_CADDYFILE" "$NEW_COLOR-api-1" "$NEW_COLOR-frontend-1" "$DOMAIN_NAME"
 
 if [ ! -s "$TMP_CADDYFILE" ]; then
     error "Failed to generate Caddyfile.prod (switch phase): Output is empty"

@@ -13,6 +13,7 @@ stages:
   - e2e
   - deploy
   - verify
+  - rollback
   - release
   - cleanup
 
@@ -128,6 +129,7 @@ variables:
     export LOG_FILE="${LOG_FILE}"
     export BACKUP_PREFIX="${BACKUP_PREFIX:-}"
     export DEPLOY_ENV="${DEPLOY_ENV}"
+    export DEPLOY_SYNC="${DEPLOY_SYNC:-0}"
   REMOTE_DEPLOY_SCRIPT: |
     set -euo pipefail
 
@@ -170,13 +172,21 @@ variables:
     chmod 600 "infra/$${ENV_FILE_NAME}"
     chmod +x ./infra/scripts/*.sh
 
-    # Trigger detached deployment
-    nohup ./infra/scripts/ci_deploy_trigger.sh \
-        "./infra/$${ENV_FILE_NAME}" \
-        "./infra/scripts/$${TRIGGER_SCRIPT}" \
-        "$${LOG_FILE}" > /dev/null 2>&1 &
+    if [ "$${DEPLOY_SYNC:-0}" = "1" ]; then
+      ./infra/scripts/ci_deploy_trigger.sh \
+          "./infra/$${ENV_FILE_NAME}" \
+          "./infra/scripts/$${TRIGGER_SCRIPT}" \
+          "$${LOG_FILE}"
+      echo "✅ Deployment completed successfully. Log: '$${LOG_FILE}'."
+    else
+      # Trigger detached deployment
+      nohup ./infra/scripts/ci_deploy_trigger.sh \
+          "./infra/$${ENV_FILE_NAME}" \
+          "./infra/scripts/$${TRIGGER_SCRIPT}" \
+          "$${LOG_FILE}" > /dev/null 2>&1 &
 
-    echo "✅ Deployment triggered in background. Check '$${LOG_FILE}' on server for details."
+      echo "✅ Deployment triggered in background. Check '$${LOG_FILE}' on server for details."
+    fi
 
 # -------- Docker Helper (Shell + Docker executor compatible) --------
 .default-docker:
@@ -1096,6 +1106,7 @@ deploy_prod:
     LOG_FILE: last_deploy_prod.log
     BACKUP_PREFIX: ""
     DEPLOY_ENV: production
+    DEPLOY_SYNC: "1"
   script:
     - |
       ssh $SSH_OPTS \
@@ -1110,6 +1121,7 @@ verify_prod:
   timeout: 30m
   stage: verify
   image: alpine:3.20
+  resource_group: production
   needs:
     - job: deploy_prod
   environment:
@@ -1456,11 +1468,9 @@ cleanup_registry:
 rollback_prod:
   retry: 1
   timeout: 10m
-  stage: verify
+  stage: rollback
   image: alpine:3.20
-  needs:
-    - job: verify_prod
-      optional: true
+  resource_group: production
   rules:
     # Only available on release commits (same as deploy_prod)
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /^chore\(release\):/ && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'

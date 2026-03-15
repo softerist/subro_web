@@ -13,6 +13,20 @@ export PROJECT_ENV_FILE="$ENV_FILE"
 export NETWORK_NAME="infra_internal_net"
 export NETWORK_EXTERNAL="true"
 
+render_caddyfile() {
+    local template_file=$1
+    local target_file=$2
+    local upstream_api=$3
+    local upstream_frontend=$4
+    local domain_name=$5
+
+    sed \
+        -e "s|{{UPSTREAM_API}}|$upstream_api|g" \
+        -e "s|{{UPSTREAM_FRONTEND}}|$upstream_frontend|g" \
+        -e "s|{\$DOMAIN_NAME}|$domain_name|g" \
+        "$template_file" > "$target_file"
+}
+
 echo "--- Rollback Initiated ---"
 
 # 1. Determine Current Active Color (Bad)
@@ -73,8 +87,7 @@ if [ -z "$DOMAIN_NAME" ]; then
     echo "Error: DOMAIN_NAME not found in $ENV_FILE"
     # Don't exit here to allow manual intervention, but warn loudly
 fi
-# Update Caddyfile
-sed "s/{{UPSTREAM_API}}/$OLD_WORKING_COLOR-api-1/g; s/{{UPSTREAM_FRONTEND}}/$OLD_WORKING_COLOR-frontend-1/g; s/{\\\$DOMAIN_NAME}/$DOMAIN_NAME/g" "$TEMPLATE" > "$CADDYFILE_PROD"
+render_caddyfile "$TEMPLATE" "$CADDYFILE_PROD" "$OLD_WORKING_COLOR-api-1" "$OLD_WORKING_COLOR-frontend-1" "$DOMAIN_NAME"
 
 # Reload Caddy
 COMPOSE_GATEWAY="$DOCK_DIR/compose.gateway.yml"
